@@ -211,9 +211,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
       }
 
       // Set last_price to be different from trigger price
-      // Use the first trigger value and add 1% to ensure they're different
+      // Add a fixed offset to ensure they're definitely different (Zerodha requires last_price != trigger_price)
       const firstTriggerValue = gttData['condition[trigger_values][0]'];
-      const lastPrice = selectedInstrument.last_price || (firstTriggerValue * 1.01);
+      let lastPrice = selectedInstrument.last_price;
+      if (!lastPrice) {
+        // Add 5 rupees to trigger price to ensure it's different
+        // Round to 2 decimal places to avoid floating point precision issues
+        lastPrice = Math.round((firstTriggerValue + 5) * 100) / 100;
+      }
       gttData['condition[last_price]'] = lastPrice;
 
       console.log('GTT Data being sent:', gttData);
