@@ -242,24 +242,23 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
       if (ltp) {
         const trigger1 = parseFloat(triggerPrice1);
 
+        // For BUY orders: trigger should be above current price (buy when price goes up)
         if (transactionType === 'BUY' && trigger1 <= ltp) {
-          throw new Error(`Trigger already met! Current price (${ltp}) is above trigger (${trigger1}). For BUY orders, trigger must be above current price.`);
+          throw new Error(`Trigger already met! Current price (${ltp.toFixed(2)}) is above trigger (${trigger1}). For BUY orders, trigger must be above current price.`);
         }
 
-        if (transactionType === 'SELL' && trigger1 >= ltp) {
-          throw new Error(`Trigger already met! Current price (${ltp}) is below trigger (${trigger1}). For SELL orders, trigger must be below current price.`);
-        }
+        // For SELL orders: No validation needed as both scenarios are valid:
+        // - Trigger below LTP = Stop loss (sell when price drops)
+        // - Trigger above LTP = Take profit (sell when price rises)
 
         if (gttType === 'two-leg') {
           const trigger2 = parseFloat(triggerPrice2);
 
           if (transactionType === 'BUY' && trigger2 <= ltp) {
-            throw new Error(`Second trigger already met! Current price (${ltp}) is above trigger (${trigger2}).`);
+            throw new Error(`Second trigger already met! Current price (${ltp.toFixed(2)}) is above trigger (${trigger2}).`);
           }
 
-          if (transactionType === 'SELL' && trigger2 >= ltp) {
-            throw new Error(`Second trigger already met! Current price (${ltp}) is below trigger (${trigger2}).`);
-          }
+          // No validation for SELL second trigger for same reason
         }
       }
 
@@ -287,14 +286,20 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
         gttData['orders[1][order_type]'] = orderType2;
         gttData['orders[1][product]'] = product2;
 
-        if (orderType2 === 'LIMIT' && price2) {
+        if (orderType2 === 'LIMIT') {
+          if (!price2) {
+            throw new Error('Please enter limit price for order 2');
+          }
           gttData['orders[1][price]'] = parseFloat(price2);
         }
       } else {
         gttData['condition[trigger_values][0]'] = parseFloat(triggerPrice1);
       }
 
-      if (orderType1 === 'LIMIT' && price1) {
+      if (orderType1 === 'LIMIT') {
+        if (!price1) {
+          throw new Error('Please enter limit price for order 1');
+        }
         gttData['orders[0][price]'] = parseFloat(price1);
       }
 
