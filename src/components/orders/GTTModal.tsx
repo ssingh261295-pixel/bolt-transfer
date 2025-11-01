@@ -11,12 +11,14 @@ interface GTTModalProps {
   orderId?: string;
   symbol?: string;
   quantity?: number;
+  initialSymbol?: string;
+  initialExchange?: string;
 }
 
-export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GTTModalProps) {
+export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, initialSymbol, initialExchange }: GTTModalProps) {
   const { session } = useAuth();
-  const [symbol, setSymbol] = useState('');
-  const [exchange, setExchange] = useState('NFO');
+  const [symbol, setSymbol] = useState(initialSymbol || '');
+  const [exchange, setExchange] = useState(initialExchange || 'NFO');
   const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>('BUY');
   const [gttType, setGttType] = useState<'single' | 'two-leg'>('single');
 
@@ -96,19 +98,27 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
           setProduct2(editingGTT.orders?.[1]?.product || 'NRML');
         }
       } else if (isOpen) {
-        setSymbol('');
-        setExchange('NFO');
+        setSymbol(initialSymbol || '');
+        setExchange(initialExchange || 'NFO');
         setTransactionType('BUY');
         setGttType('single');
         setTriggerPrice1('');
+        setTriggerPercent1('');
+        setUseTriggerPercent1(false);
         setQuantity1(200);
         setOrderType1('LIMIT');
         setPrice1('');
+        setPricePercent1('');
+        setUsePricePercent1(false);
         setProduct1('NRML');
         setTriggerPrice2('');
+        setTriggerPercent2('');
+        setUseTriggerPercent2(false);
         setQuantity2(200);
         setOrderType2('LIMIT');
         setPrice2('');
+        setPricePercent2('');
+        setUsePricePercent2(false);
         setProduct2('NRML');
         setError('');
         setSuccess(false);
@@ -118,7 +128,25 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
     };
 
     setupGTT();
-  }, [editingGTT, isOpen]);
+  }, [editingGTT, isOpen, initialSymbol, initialExchange]);
+
+  // Fetch LTP when symbol is pre-filled from position
+  useEffect(() => {
+    const fetchInitialLTP = async () => {
+      if (isOpen && initialSymbol && !editingGTT && instruments.length > 0) {
+        const instrument = instruments.find(
+          (i) => i.tradingsymbol === initialSymbol
+        );
+        if (instrument) {
+          setSelectedInstrument(instrument);
+          if (instrument.instrument_token) {
+            await fetchLTP(instrument.instrument_token, instrument.tradingsymbol, initialExchange || exchange);
+          }
+        }
+      }
+    };
+    fetchInitialLTP();
+  }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT]);
 
   const loadInstruments = async () => {
     try {

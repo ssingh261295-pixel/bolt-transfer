@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { LineChart, X, RefreshCw } from 'lucide-react';
+import { LineChart, X, RefreshCw, Bell } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodha } from '../hooks/useZerodha';
+import { GTTModal } from '../components/orders/GTTModal';
 
 export function Positions() {
   const { user } = useAuth();
@@ -16,6 +17,8 @@ export function Positions() {
     totalPnL: 0,
     totalInvested: 0,
   });
+  const [gttModalOpen, setGttModalOpen] = useState(false);
+  const [selectedPosition, setSelectedPosition] = useState<any>(null);
 
   useEffect(() => {
     if (user) {
@@ -133,6 +136,16 @@ export function Positions() {
     if (!error) {
       loadPositions();
     }
+  };
+
+  const handleOpenGTT = (position: any) => {
+    setSelectedPosition(position);
+    setGttModalOpen(true);
+  };
+
+  const handleCloseGTTModal = () => {
+    setGttModalOpen(false);
+    setSelectedPosition(null);
   };
 
   return (
@@ -266,13 +279,22 @@ export function Positions() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={() => handleClosePosition(position.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                        title="Close position"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleOpenGTT(position)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                          title="Create GTT"
+                        >
+                          <Bell className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleClosePosition(position.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="Close position"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -281,6 +303,16 @@ export function Positions() {
           </div>
         )}
       </div>
+
+      {selectedPosition && (
+        <GTTModal
+          isOpen={gttModalOpen}
+          onClose={handleCloseGTTModal}
+          brokerConnectionId={selectedPosition.broker_connection_id}
+          initialSymbol={selectedPosition.symbol}
+          initialExchange={selectedPosition.exchange}
+        />
+      )}
     </div>
   );
 }
