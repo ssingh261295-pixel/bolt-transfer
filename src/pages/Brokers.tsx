@@ -47,6 +47,33 @@ export function Brokers() {
     }
   }, [user, session]);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const checkTokenExpiry = () => {
+      const now = new Date();
+      brokers.forEach(broker => {
+        if (broker.token_expires_at && broker.broker_name === 'zerodha' && broker.is_active) {
+          const expiryDate = new Date(broker.token_expires_at);
+          if (now >= expiryDate) {
+            supabase
+              .from('broker_connections')
+              .update({ is_active: false })
+              .eq('id', broker.id)
+              .then(() => {
+                console.log(`Auto-marked broker ${broker.id} as inactive due to token expiry`);
+                loadBrokers();
+              });
+          }
+        }
+      });
+    };
+
+    const interval = setInterval(checkTokenExpiry, 60000);
+
+    return () => clearInterval(interval);
+  }, [user, brokers]);
+
   const loadBrokers = async () => {
     const { data } = await supabase
       .from('broker_connections')
@@ -55,7 +82,28 @@ export function Brokers() {
       .order('created_at', { ascending: false });
 
     if (data) {
-      setBrokers(data);
+      // Check for expired tokens and update is_active status
+      const now = new Date();
+      const brokersWithExpiry = data.map(broker => {
+        if (broker.token_expires_at && broker.broker_name === 'zerodha') {
+          const expiryDate = new Date(broker.token_expires_at);
+          const isExpired = now >= expiryDate;
+
+          // If token is expired but is_active is true, update it
+          if (isExpired && broker.is_active) {
+            supabase
+              .from('broker_connections')
+              .update({ is_active: false })
+              .eq('id', broker.id)
+              .then(() => console.log(`Marked broker ${broker.id} as inactive due to token expiry`));
+
+            return { ...broker, is_active: false };
+          }
+        }
+        return broker;
+      });
+
+      setBrokers(brokersWithExpiry);
     }
   };
 
@@ -519,6 +567,10 @@ export function Brokers() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {brokers.map((broker) => {
           const brokerInfo = brokerOptions.find((b) => b.value === broker.broker_name);
+          const now = new Date();
+          const tokenExpiresAt = broker.token_expires_at ? new Date(broker.token_expires_at) : null;
+          const isTokenExpired = tokenExpiresAt ? now >= tokenExpiresAt : false;
+
           return (
             <div key={broker.id} className="bg-white rounded-xl border border-gray-200 p-6">
               <div className="flex items-start justify-between mb-4">
@@ -535,7 +587,7 @@ export function Brokers() {
                       <p className="text-xs text-gray-500">{broker.account_name}</p>
                     )}
                     <p className="text-sm">
-                      {broker.is_active ? (
+                      {broker.is_active && !isTokenExpired ? (
                         <span className="flex items-center gap-1 text-green-600 font-medium">
                           <CheckCircle className="w-4 h-4" />
                           Connected
@@ -582,7 +634,7 @@ export function Brokers() {
                 </div>
               </div>
 
-              {broker.broker_name === 'zerodha' && broker.is_active && (
+              {broker.broker_name === 'zerodha' && broker.is_active && !isTokenExpired && (
                 <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                   <p className="text-xs text-yellow-800 mb-2">
                     Zerodha tokens expire daily. Reconnect if you experience authentication issues.
@@ -597,17 +649,19 @@ export function Brokers() {
                 </div>
               )}
 
-              {!broker.is_active && broker.broker_name === 'zerodha' && (
+              {broker.broker_name === 'zerodha' && (isTokenExpired || !broker.is_active) && (
                 <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-xs text-red-800 mb-2 font-medium">
-                    Session expired. Please reconnect to continue trading.
+                    {isTokenExpired
+                      ? 'Zerodha tokens expire daily. Reconnect if you experience authentication issues.'
+                      : 'Session expired. Please reconnect to continue trading.'}
                   </p>
                   <button
                     onClick={() => handleReconnect(broker.id, broker.broker_name)}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
                   >
                     <ExternalLink className="w-4 h-4" />
-                    Reconnect Now
+                    Reconnect
                   </button>
                 </div>
               )}

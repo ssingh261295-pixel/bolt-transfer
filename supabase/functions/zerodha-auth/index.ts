@@ -97,12 +97,23 @@ Deno.serve(async (req: Request) => {
       console.log('Zerodha API parsed response:', JSON.stringify(data));
 
       if (data.status === 'success' && data.data?.access_token) {
+        // Calculate next midnight IST (5:30 AM UTC)
+        const now = new Date();
+        const nextMidnightIST = new Date(now);
+        nextMidnightIST.setUTCHours(19, 30, 0, 0); // 12:00 AM IST = 7:30 PM UTC previous day
+
+        // If we're past 7:30 PM UTC today, set to tomorrow's 7:30 PM UTC
+        if (now.getUTCHours() >= 19 && now.getUTCMinutes() >= 30) {
+          nextMidnightIST.setUTCDate(nextMidnightIST.getUTCDate() + 1);
+        }
+
         await supabase
           .from('broker_connections')
           .update({
             access_token: data.data.access_token,
             is_active: true,
             last_connected_at: new Date().toISOString(),
+            token_expires_at: nextMidnightIST.toISOString(),
           })
           .eq('id', broker_connection_id);
 
