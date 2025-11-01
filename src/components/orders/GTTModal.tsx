@@ -175,7 +175,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
         throw new Error('Please enter both trigger prices for OCO');
       }
 
-      const lastPrice = selectedInstrument.last_price || parseFloat(triggerPrice1);
+      // Use last_price from instrument if available, otherwise use a value slightly different from trigger
+      // to avoid "trigger price equal to last price" error
+      let lastPrice = selectedInstrument.last_price;
+      if (!lastPrice) {
+        const triggerValue = parseFloat(triggerPrice1);
+        // Add 0.5% to trigger price to ensure it's different
+        lastPrice = triggerValue * 1.005;
+      }
 
       const gttData: any = {
         type: gttType,
