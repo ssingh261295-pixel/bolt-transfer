@@ -88,7 +88,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
 
   const loadInstruments = async () => {
     try {
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=${exchange}&broker_id=${brokerConnectionId}`;
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=${exchange}`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -111,7 +111,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
   const handleSymbolSearch = (value: string) => {
     setSymbol(value);
 
-    if (!value || value.length < 2) {
+    if (!value || value.length < 1) {
       setFilteredInstruments([]);
       setShowSuggestions(false);
       return;
@@ -122,15 +122,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
       (inst) =>
         inst.tradingsymbol?.toLowerCase().includes(searchLower) ||
         inst.name?.toLowerCase().includes(searchLower)
-    ).slice(0, 20);
+    ).slice(0, 30);
 
     setFilteredInstruments(filtered);
-    setShowSuggestions(true);
+    setShowSuggestions(filtered.length > 0);
   };
 
   const selectInstrument = (instrument: any) => {
     setSymbol(instrument.tradingsymbol);
     setSelectedInstrument(instrument);
+    const lotSize = parseInt(instrument.lot_size) || 1;
+    setQuantity1(lotSize);
+    setQuantity2(lotSize);
     setShowSuggestions(false);
     setFilteredInstruments([]);
   };
@@ -374,15 +377,25 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Lot Size</label>
                 <input
                   type="number"
                   value={quantity1}
-                  onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 1;
+                    const lotSize = selectedInstrument?.lot_size ? parseInt(selectedInstrument.lot_size) : 1;
+                    setQuantity1(val * lotSize);
+                  }}
                   className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   min="1"
+                  placeholder={selectedInstrument ? `Lot: ${selectedInstrument.lot_size}` : 'Select symbol first'}
                   required
                 />
+                {selectedInstrument && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    Lot Size: {selectedInstrument.lot_size}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -448,15 +461,25 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Lot Size</label>
                   <input
                     type="number"
                     value={quantity2}
-                    onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1;
+                      const lotSize = selectedInstrument?.lot_size ? parseInt(selectedInstrument.lot_size) : 1;
+                      setQuantity2(val * lotSize);
+                    }}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     min="1"
+                    placeholder={selectedInstrument ? `Lot: ${selectedInstrument.lot_size}` : 'Select symbol first'}
                     required
                   />
+                  {selectedInstrument && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Lot Size: {selectedInstrument.lot_size}
+                    </div>
+                  )}
                 </div>
               </div>
 
