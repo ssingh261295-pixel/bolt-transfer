@@ -515,22 +515,33 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Trigger price</label>
-                <input
-                  type="number"
-                  step="0.05"
-                  value={triggerPrice1}
-                  onChange={(e) => {
-                    setTriggerPrice1(e.target.value);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="0.00"
-                  required
-                />
-                {currentLTP && triggerPrice1 && (
-                  <div className="text-xs text-gray-500 mt-1">
-                    {calculatePercentFromLTP(triggerPrice1)}% of LTP
-                  </div>
-                )}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={triggerPrice1}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.includes('%')) {
+                        // If user types percentage, calculate price from LTP
+                        const percent = parseFloat(value.replace('%', ''));
+                        if (currentLTP && !isNaN(percent)) {
+                          const calculatedPrice = currentLTP * (1 + percent / 100);
+                          setTriggerPrice1(calculatedPrice.toFixed(2));
+                        }
+                      } else {
+                        setTriggerPrice1(value);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="0.00 or 2%"
+                    required
+                  />
+                  {currentLTP && triggerPrice1 && !triggerPrice1.includes('%') && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {calculatePercentFromLTP(triggerPrice1)}% of LTP
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -570,14 +581,30 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
               <input
-                type="number"
-                step="0.05"
+                type="text"
                 value={price1}
-                onChange={(e) => setPrice1(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value.includes('%')) {
+                    // If user types percentage, calculate price from LTP
+                    const percent = parseFloat(value.replace('%', ''));
+                    if (currentLTP && !isNaN(percent)) {
+                      const calculatedPrice = currentLTP * (1 + percent / 100);
+                      setPrice1(calculatedPrice.toFixed(2));
+                    }
+                  } else {
+                    setPrice1(value);
+                  }
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder="0.00"
+                placeholder="0.00 or 2%"
                 required
               />
+              {currentLTP && price1 && !price1.includes('%') && (
+                <div className="text-xs text-gray-500 mt-1">
+                  {calculatePercentFromLTP(price1)}% of LTP
+                </div>
+              )}
             </div>
           </div>
 
@@ -593,22 +620,33 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Trigger price</label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    value={triggerPrice2}
-                    onChange={(e) => {
-                      setTriggerPrice2(e.target.value);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="0.00"
-                    required
-                  />
-                  {currentLTP && triggerPrice2 && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      {calculatePercentFromLTP(triggerPrice2)}% of LTP
-                    </div>
-                  )}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={triggerPrice2}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value.includes('%')) {
+                          // If user types percentage, calculate price from LTP
+                          const percent = parseFloat(value.replace('%', ''));
+                          if (currentLTP && !isNaN(percent)) {
+                            const calculatedPrice = currentLTP * (1 + percent / 100);
+                            setTriggerPrice2(calculatedPrice.toFixed(2));
+                          }
+                        } else {
+                          setTriggerPrice2(value);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder="0.00 or 2%"
+                      required
+                    />
+                    {currentLTP && triggerPrice2 && !triggerPrice2.includes('%') && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        {calculatePercentFromLTP(triggerPrice2)}% of LTP
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -648,14 +686,30 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
                 <input
-                  type="number"
-                  step="0.05"
+                  type="text"
                   value={price2}
-                  onChange={(e) => setPrice2(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.includes('%')) {
+                      // If user types percentage, calculate price from LTP
+                      const percent = parseFloat(value.replace('%', ''));
+                      if (currentLTP && !isNaN(percent)) {
+                        const calculatedPrice = currentLTP * (1 + percent / 100);
+                        setPrice2(calculatedPrice.toFixed(2));
+                      }
+                    } else {
+                      setPrice2(value);
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="0.00"
+                  placeholder="0.00 or 2%"
                   required
                 />
+                {currentLTP && price2 && !price2.includes('%') && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {calculatePercentFromLTP(price2)}% of LTP
+                  </div>
+                )}
               </div>
             </div>
           )}
