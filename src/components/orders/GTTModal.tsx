@@ -100,7 +100,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       } else if (isOpen) {
         setSymbol(initialSymbol || '');
         setExchange(initialExchange || 'NFO');
-        setTransactionType(initialSymbol ? 'SELL' : 'BUY');
+        setTransactionType('BUY');
         setGttType('single');
         setTriggerPrice1('');
         setTriggerPercent1('');
