@@ -180,6 +180,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
         'condition[exchange]': exchange,
         'condition[tradingsymbol]': symbol,
         'condition[instrument_token]': selectedInstrument.instrument_token,
+        'orders[0][exchange]': exchange,
+        'orders[0][tradingsymbol]': symbol,
         'orders[0][transaction_type]': transactionType,
         'orders[0][quantity]': quantity1,
         'orders[0][order_type]': orderType1,
@@ -190,6 +192,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
         gttData['condition[trigger_values][0]'] = parseFloat(triggerPrice1);
         gttData['condition[trigger_values][1]'] = parseFloat(triggerPrice2);
 
+        gttData['orders[1][exchange]'] = exchange;
+        gttData['orders[1][tradingsymbol]'] = symbol;
         gttData['orders[1][transaction_type]'] = transactionType;
         gttData['orders[1][quantity]'] = quantity2;
         gttData['orders[1][order_type]'] = orderType2;
