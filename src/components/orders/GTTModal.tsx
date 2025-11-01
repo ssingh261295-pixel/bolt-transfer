@@ -51,52 +51,65 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
   }, [isOpen, exchange]);
 
   useEffect(() => {
-    if (editingGTT) {
-      setSymbol(editingGTT.condition?.tradingsymbol || '');
-      setExchange(editingGTT.condition?.exchange || 'NFO');
-      setTransactionType(editingGTT.orders?.[0]?.transaction_type || 'BUY');
-      setGttType(editingGTT.type || 'single');
-      setTriggerPrice1(editingGTT.condition?.trigger_values?.[0]?.toString() || '');
-      setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
-      setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
-      setPrice1(editingGTT.orders?.[0]?.price?.toString() || '');
-      setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
+    const setupGTT = async () => {
+      if (editingGTT) {
+        const tradingsymbol = editingGTT.condition?.tradingsymbol || '';
+        const exchangeValue = editingGTT.condition?.exchange || 'NFO';
 
-      if (editingGTT.condition?.instrument_token) {
-        setSelectedInstrument({
-          instrument_token: editingGTT.condition.instrument_token,
-          tradingsymbol: editingGTT.condition.tradingsymbol,
-          exchange: editingGTT.condition.exchange,
-        });
-      }
+        setSymbol(tradingsymbol);
+        setExchange(exchangeValue);
+        setTransactionType(editingGTT.orders?.[0]?.transaction_type || 'BUY');
+        setGttType(editingGTT.type || 'single');
+        setTriggerPrice1(editingGTT.condition?.trigger_values?.[0]?.toString() || '');
+        setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
+        setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
+        setPrice1(editingGTT.orders?.[0]?.price?.toString() || '');
+        setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
 
-      if (editingGTT.type === 'two-leg') {
-        setTriggerPrice2(editingGTT.condition?.trigger_values?.[1]?.toString() || '');
-        setQuantity2(editingGTT.orders?.[1]?.quantity || 200);
-        setOrderType2(editingGTT.orders?.[1]?.order_type || 'LIMIT');
-        setPrice2(editingGTT.orders?.[1]?.price?.toString() || '');
-        setProduct2(editingGTT.orders?.[1]?.product || 'NRML');
+        if (editingGTT.condition?.instrument_token) {
+          const instrument = {
+            instrument_token: editingGTT.condition.instrument_token,
+            tradingsymbol: editingGTT.condition.tradingsymbol,
+            exchange: editingGTT.condition.exchange,
+          };
+          setSelectedInstrument(instrument);
+
+          // Fetch LTP for the instrument
+          if (instrument.instrument_token) {
+            await fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange);
+          }
+        }
+
+        if (editingGTT.type === 'two-leg') {
+          setTriggerPrice2(editingGTT.condition?.trigger_values?.[1]?.toString() || '');
+          setQuantity2(editingGTT.orders?.[1]?.quantity || 200);
+          setOrderType2(editingGTT.orders?.[1]?.order_type || 'LIMIT');
+          setPrice2(editingGTT.orders?.[1]?.price?.toString() || '');
+          setProduct2(editingGTT.orders?.[1]?.product || 'NRML');
+        }
+      } else if (isOpen) {
+        setSymbol('');
+        setExchange('NFO');
+        setTransactionType('BUY');
+        setGttType('single');
+        setTriggerPrice1('');
+        setQuantity1(200);
+        setOrderType1('LIMIT');
+        setPrice1('');
+        setProduct1('NRML');
+        setTriggerPrice2('');
+        setQuantity2(200);
+        setOrderType2('LIMIT');
+        setPrice2('');
+        setProduct2('NRML');
+        setError('');
+        setSuccess(false);
+        setSelectedInstrument(null);
+        setCurrentLTP(null);
       }
-    } else if (isOpen) {
-      setSymbol('');
-      setExchange('NFO');
-      setTransactionType('BUY');
-      setGttType('single');
-      setTriggerPrice1('');
-      setQuantity1(200);
-      setOrderType1('LIMIT');
-      setPrice1('');
-      setProduct1('NRML');
-      setTriggerPrice2('');
-      setQuantity2(200);
-      setOrderType2('LIMIT');
-      setPrice2('');
-      setProduct2('NRML');
-      setError('');
-      setSuccess(false);
-      setSelectedInstrument(null);
-      setCurrentLTP(null);
-    }
+    };
+
+    setupGTT();
   }, [editingGTT, isOpen]);
 
   const loadInstruments = async () => {
@@ -143,10 +156,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
     setShowSuggestions(filtered.length > 0);
   };
 
-  const fetchLTP = async (instrumentToken: string) => {
+  const fetchLTP = async (instrumentToken: string, tradingsymbol?: string, exchangeValue?: string) => {
     try {
       setFetchingLTP(true);
-      const instrumentKey = `${exchange}:${symbol}`;
+      const symbolToUse = tradingsymbol || symbol;
+      const exchangeToUse = exchangeValue || exchange;
+      const instrumentKey = `${exchangeToUse}:${symbolToUse}`;
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${brokerConnectionId}&instruments=${instrumentKey}`;
 
       const response = await fetch(apiUrl, {
