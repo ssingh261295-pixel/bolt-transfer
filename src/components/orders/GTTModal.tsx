@@ -59,6 +59,15 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
       setPrice1(editingGTT.orders?.[0]?.price?.toString() || '');
       setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
 
+      // Set selectedInstrument from existing GTT data
+      if (editingGTT.condition?.instrument_token) {
+        setSelectedInstrument({
+          instrument_token: editingGTT.condition.instrument_token,
+          tradingsymbol: editingGTT.condition.tradingsymbol,
+          exchange: editingGTT.condition.exchange,
+        });
+      }
+
       if (editingGTT.type === 'two-leg') {
         setTriggerPrice2(editingGTT.condition?.trigger_values?.[1]?.toString() || '');
         setQuantity2(editingGTT.orders?.[1]?.quantity || 1);
@@ -83,6 +92,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
       setProduct2('NRML');
       setError('');
       setSuccess(false);
+      setSelectedInstrument(null);
     }
   }, [editingGTT, isOpen]);
 
@@ -110,6 +120,11 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
 
   const handleSymbolSearch = (value: string) => {
     setSymbol(value);
+
+    // Clear selected instrument if user is typing (unless editing existing GTT)
+    if (!editingGTT && value !== selectedInstrument?.tradingsymbol) {
+      setSelectedInstrument(null);
+    }
 
     if (!value || value.length < 1) {
       setFilteredInstruments([]);
@@ -149,7 +164,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
       }
 
       if (!selectedInstrument || !selectedInstrument.instrument_token) {
-        throw new Error('Please select a valid instrument from the list');
+        throw new Error('Please select a valid instrument from the dropdown list');
       }
 
       if (!triggerPrice1) {
@@ -273,7 +288,9 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
             </div>
 
             <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Symbol</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Symbol {selectedInstrument && <span className="text-green-600 text-xs">✓ Selected</span>}
+              </label>
               <div className="relative">
                 <input
                   type="text"
@@ -284,8 +301,10 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
                       setShowSuggestions(true);
                     }
                   }}
-                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="Search symbol"
+                  className={`w-full px-3 py-2 pr-8 border rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none ${
+                    selectedInstrument ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                  }`}
+                  placeholder="Search and select symbol"
                   required
                   disabled={!!editingGTT}
                 />
