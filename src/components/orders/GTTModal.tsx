@@ -117,6 +117,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
   };
 
   const [selectedInstrument, setSelectedInstrument] = useState<any>(null);
+  const [currentLTP, setCurrentLTP] = useState<number | null>(null);
+  const [fetchingLTP, setFetchingLTP] = useState(false);
 
   const handleSymbolSearch = (value: string) => {
     setSymbol(value);
@@ -143,7 +145,34 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
     setShowSuggestions(filtered.length > 0);
   };
 
-  const selectInstrument = (instrument: any) => {
+  const fetchLTP = async (instrumentToken: string) => {
+    try {
+      setFetchingLTP(true);
+      const instrumentKey = `${exchange}:${symbol}`;
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${brokerConnectionId}&instruments=${instrumentKey}`;
+
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+      if (data.success && data.data && data.data[instrumentKey]) {
+        const ltp = data.data[instrumentKey].last_price;
+        setCurrentLTP(ltp);
+        return ltp;
+      }
+    } catch (err) {
+      console.error('Failed to fetch LTP:', err);
+    } finally {
+      setFetchingLTP(false);
+    }
+    return null;
+  };
+
+  const selectInstrument = async (instrument: any) => {
     setSymbol(instrument.tradingsymbol);
     setSelectedInstrument(instrument);
     const lotSize = parseInt(instrument.lot_size) || 1;
@@ -151,6 +180,11 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
     setQuantity2(lotSize);
     setShowSuggestions(false);
     setFilteredInstruments([]);
+
+    // Fetch current LTP
+    if (instrument.instrument_token) {
+      await fetchLTP(instrument.instrument_token);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -173,6 +207,37 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
 
       if (gttType === 'two-leg' && !triggerPrice2) {
         throw new Error('Please enter both trigger prices for OCO');
+      }
+
+      // Fetch latest LTP before submitting
+      const ltp = await fetchLTP(selectedInstrument.instrument_token);
+
+      // Validate trigger prices against LTP
+      if (ltp) {
+        const trigger1 = parseFloat(triggerPrice1);
+
+        // For BUY orders, trigger should be above LTP (buy when price goes up)
+        // For SELL orders, trigger should be below LTP (sell when price goes down)
+        if (transactionType === 'BUY' && trigger1 <= ltp) {
+          throw new Error(`Trigger already met! Current price (${ltp}) is above trigger (${trigger1}). For BUY orders, trigger must be above current price.`);
+        }
+
+        if (transactionType === 'SELL' && trigger1 >= ltp) {
+          throw new Error(`Trigger already met! Current price (${ltp}) is below trigger (${trigger1}). For SELL orders, trigger must be below current price.`);
+        }
+
+        // Validate second trigger for two-leg
+        if (gttType === 'two-leg') {
+          const trigger2 = parseFloat(triggerPrice2);
+
+          if (transactionType === 'BUY' && trigger2 <= ltp) {
+            throw new Error(`Second trigger already met! Current price (${ltp}) is above trigger (${trigger2}).`);
+          }
+
+          if (transactionType === 'SELL' && trigger2 >= ltp) {
+            throw new Error(`Second trigger already met! Current price (${ltp}) is below trigger (${trigger2}).`);
+          }
+        }
       }
 
       const gttData: any = {
@@ -210,13 +275,11 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
         gttData['orders[0][price]'] = parseFloat(price1);
       }
 
-      // Set last_price to be different from trigger price
-      // Add a fixed offset to ensure they're definitely different (Zerodha requires last_price != trigger_price)
+      // Set last_price to current LTP (required by Zerodha)
+      // If LTP is not available or equals trigger, add 5 rupees offset
       const firstTriggerValue = gttData['condition[trigger_values][0]'];
-      let lastPrice = selectedInstrument.last_price;
-      if (!lastPrice) {
-        // Add 5 rupees to trigger price to ensure it's different
-        // Round to 2 decimal places to avoid floating point precision issues
+      let lastPrice = ltp || selectedInstrument.last_price;
+      if (!lastPrice || lastPrice === firstTriggerValue) {
         lastPrice = Math.round((firstTriggerValue + 5) * 100) / 100;
       }
       gttData['condition[last_price]'] = lastPrice;
@@ -345,6 +408,16 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
               )}
             </div>
           </div>
+
+          {currentLTP && (
+            <div className="bg-blue-50 border border-blue-200 px-3 py-2 rounded">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-blue-900">Current Market Price (LTP):</span>
+                <span className="text-lg font-bold text-blue-700">₹{currentLTP.toFixed(2)}</span>
+              </div>
+              {fetchingLTP && <span className="text-xs text-blue-600">Updating...</span>}
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Transaction</label>
