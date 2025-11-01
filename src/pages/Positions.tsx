@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LineChart, X, RefreshCw, Bell } from 'lucide-react';
+import { LineChart, RefreshCw, MoreVertical } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodha } from '../hooks/useZerodha';
@@ -19,6 +19,7 @@ export function Positions() {
   });
   const [gttModalOpen, setGttModalOpen] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<any>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -30,6 +31,17 @@ export function Positions() {
   useEffect(() => {
     filterPositions();
   }, [selectedBroker, allPositions]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openMenuId) {
+        setOpenMenuId(null);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openMenuId]);
 
   const loadPositions = async () => {
     const { data } = await supabase
@@ -127,25 +139,19 @@ export function Positions() {
     setTimeout(() => setSyncMessage(''), 6000);
   };
 
-  const handleClosePosition = async (id: string) => {
-    const { error } = await supabase
-      .from('positions')
-      .delete()
-      .eq('id', id);
-
-    if (!error) {
-      loadPositions();
-    }
-  };
-
   const handleOpenGTT = (position: any) => {
     setSelectedPosition(position);
     setGttModalOpen(true);
+    setOpenMenuId(null);
   };
 
   const handleCloseGTTModal = () => {
     setGttModalOpen(false);
     setSelectedPosition(null);
+  };
+
+  const toggleMenu = (id: string) => {
+    setOpenMenuId(openMenuId === id ? null : id);
   };
 
   return (
@@ -279,21 +285,31 @@ export function Positions() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
+                      <div className="relative">
                         <button
-                          onClick={() => handleOpenGTT(position)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                          title="Create GTT"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleMenu(position.id);
+                          }}
+                          className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
                         >
-                          <Bell className="w-4 h-4" />
+                          <MoreVertical className="w-5 h-5" />
                         </button>
-                        <button
-                          onClick={() => handleClosePosition(position.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                          title="Close position"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+
+                        {openMenuId === position.id && (
+                          <div
+                            className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => handleOpenGTT(position)}
+                              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 rounded-lg"
+                            >
+                              <span className="text-blue-600">→</span>
+                              Exit GTT
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
