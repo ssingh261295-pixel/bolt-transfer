@@ -140,8 +140,10 @@ Deno.serve(async (req: Request) => {
 
       conditionData.trigger_values = conditionData.trigger_values.filter((v: any) => v !== undefined && v !== null);
 
-      if (!conditionData.last_price) {
-        conditionData.last_price = conditionData.trigger_values[0];
+      // Ensure last_price is set and different from trigger price
+      if (!conditionData.last_price || conditionData.last_price === conditionData.trigger_values[0]) {
+        // Add 5 to first trigger value to ensure they're different
+        conditionData.last_price = conditionData.trigger_values[0] + 5;
       }
 
       const validOrders = ordersData.filter((order: any) => order && Object.keys(order).length > 0);
@@ -261,8 +263,10 @@ Deno.serve(async (req: Request) => {
 
       conditionData.trigger_values = conditionData.trigger_values.filter((v: any) => v !== undefined && v !== null);
 
-      if (!conditionData.last_price) {
-        conditionData.last_price = conditionData.trigger_values[0];
+      // Ensure last_price is set and different from trigger price
+      if (!conditionData.last_price || conditionData.last_price === conditionData.trigger_values[0]) {
+        // Add 5 to first trigger value to ensure they're different
+        conditionData.last_price = conditionData.trigger_values[0] + 5;
       }
 
       const validOrders = ordersData.filter((order: any) => order && Object.keys(order).length > 0);
