@@ -146,19 +146,29 @@ Deno.serve(async (req: Request) => {
         formData.append('condition[last_price]', conditionData.trigger_values[0].toString());
       }
 
+      console.log('Condition data:', JSON.stringify(conditionData, null, 2));
+      console.log('Orders data:', JSON.stringify(ordersData, null, 2));
+
       ordersData.forEach((order: any, index: number) => {
         if (Object.keys(order).length > 0) {
+          console.log(`Processing order ${index}:`, order);
           Object.keys(order).forEach(key => {
             const value = order[key];
             if (value !== undefined && value !== null && value !== '') {
-              formData.append(`orders[${index}][${key}]`, value.toString());
+              const formKey = `orders[${index}][${key}]`;
+              const formValue = value.toString();
+              console.log(`  Adding: ${formKey} = ${formValue}`);
+              formData.append(formKey, formValue);
             }
           });
         }
       });
 
       const formDataString = formData.toString();
-      console.log('Form data being sent to Zerodha:', formDataString);
+      console.log('Complete form data being sent to Zerodha:', formDataString);
+
+      const formDataArray = Array.from(formData.entries());
+      console.log('Form data as array:', JSON.stringify(formDataArray, null, 2));
 
       const response = await fetch(kiteUrl, {
         method: 'POST',

@@ -377,23 +377,19 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Lot Size</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
                 <input
                   type="number"
                   value={quantity1}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value) || 1;
-                    const lotSize = selectedInstrument?.lot_size ? parseInt(selectedInstrument.lot_size) : 1;
-                    setQuantity1(val * lotSize);
-                  }}
+                  onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
                   className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   min="1"
-                  placeholder={selectedInstrument ? `Lot: ${selectedInstrument.lot_size}` : 'Select symbol first'}
+                  placeholder="Quantity"
                   required
                 />
-                {selectedInstrument && (
+                {selectedInstrument && selectedInstrument.lot_size && (
                   <div className="text-xs text-gray-500 mt-1">
-                    Lot Size: {selectedInstrument.lot_size}
+                    Lot Size: {selectedInstrument.lot_size} (Total: {quantity1})
                   </div>
                 )}
               </div>
@@ -461,23 +457,19 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Lot Size</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
                   <input
                     type="number"
                     value={quantity2}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 1;
-                      const lotSize = selectedInstrument?.lot_size ? parseInt(selectedInstrument.lot_size) : 1;
-                      setQuantity2(val * lotSize);
-                    }}
+                    onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     min="1"
-                    placeholder={selectedInstrument ? `Lot: ${selectedInstrument.lot_size}` : 'Select symbol first'}
+                    placeholder="Quantity"
                     required
                   />
-                  {selectedInstrument && (
+                  {selectedInstrument && selectedInstrument.lot_size && (
                     <div className="text-xs text-gray-500 mt-1">
-                      Lot Size: {selectedInstrument.lot_size}
+                      Lot Size: {selectedInstrument.lot_size} (Total: {quantity2})
                     </div>
                   )}
                 </div>
