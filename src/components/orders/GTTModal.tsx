@@ -164,6 +164,9 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
       const instrumentKey = `${exchangeToUse}:${symbolToUse}`;
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${brokerConnectionId}&instruments=${instrumentKey}`;
 
+      console.log('Fetching LTP for:', instrumentKey);
+      console.log('API URL:', apiUrl);
+
       const response = await fetch(apiUrl, {
         headers: {
           'Authorization': `Bearer ${session?.access_token}`,
@@ -172,10 +175,16 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
       });
 
       const data = await response.json();
+      console.log('LTP Response:', data);
+
       if (data.success && data.data && data.data[instrumentKey]) {
         const ltp = data.data[instrumentKey].last_price;
+        console.log('LTP found:', ltp);
         setCurrentLTP(ltp);
         return ltp;
+      } else {
+        console.log('No LTP data found for instrument key:', instrumentKey);
+        console.log('Available keys:', data.data ? Object.keys(data.data) : 'none');
       }
     } catch (err) {
       console.error('Failed to fetch LTP:', err);
@@ -195,7 +204,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
     setFilteredInstruments([]);
 
     if (instrument.instrument_token) {
-      await fetchLTP(instrument.instrument_token);
+      await fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange);
     }
   };
 
