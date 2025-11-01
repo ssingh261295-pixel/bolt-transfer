@@ -175,11 +175,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
         throw new Error('Please enter both trigger prices for OCO');
       }
 
+      const lastPrice = selectedInstrument.last_price || parseFloat(triggerPrice1);
+
       const gttData: any = {
         type: gttType,
         'condition[exchange]': exchange,
         'condition[tradingsymbol]': symbol,
         'condition[instrument_token]': selectedInstrument.instrument_token,
+        'condition[last_price]': lastPrice,
         'orders[0][exchange]': exchange,
         'orders[0][tradingsymbol]': symbol,
         'orders[0][transaction_type]': transactionType,

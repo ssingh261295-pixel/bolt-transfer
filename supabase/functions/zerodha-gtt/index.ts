@@ -139,8 +139,10 @@ Deno.serve(async (req: Request) => {
       });
 
       conditionData.trigger_values = conditionData.trigger_values.filter((v: any) => v !== undefined && v !== null);
-      const lastPrice = conditionData.last_price || conditionData.trigger_values[0];
-      conditionData.last_price = lastPrice;
+
+      if (!conditionData.last_price) {
+        conditionData.last_price = conditionData.trigger_values[0];
+      }
 
       const validOrders = ordersData.filter((order: any) => order && Object.keys(order).length > 0);
 
@@ -258,8 +260,10 @@ Deno.serve(async (req: Request) => {
       });
 
       conditionData.trigger_values = conditionData.trigger_values.filter((v: any) => v !== undefined && v !== null);
-      const lastPrice = conditionData.last_price || conditionData.trigger_values[0];
-      conditionData.last_price = lastPrice;
+
+      if (!conditionData.last_price) {
+        conditionData.last_price = conditionData.trigger_values[0];
+      }
 
       const validOrders = ordersData.filter((order: any) => order && Object.keys(order).length > 0);
 
