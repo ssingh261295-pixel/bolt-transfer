@@ -97,7 +97,7 @@ Deno.serve(async (req: Request) => {
       const conditionData: any = {
         trigger_values: []
       };
-      const ordersData: any = [{}, {}];
+      const ordersData: any = [];
 
       Object.keys(body).forEach(key => {
         const value = body[key];
@@ -120,6 +120,9 @@ Deno.serve(async (req: Request) => {
             if (match) {
               const orderIndex = parseInt(match[1]);
               const fieldName = match[2];
+              if (!ordersData[orderIndex]) {
+                ordersData[orderIndex] = {};
+              }
               ordersData[orderIndex][fieldName] = value;
             }
           } else if (key === 'type') {
@@ -150,7 +153,7 @@ Deno.serve(async (req: Request) => {
       console.log('Orders data:', JSON.stringify(ordersData, null, 2));
 
       ordersData.forEach((order: any, index: number) => {
-        if (Object.keys(order).length > 0) {
+        if (order && Object.keys(order).length > 0) {
           console.log(`Processing order ${index}:`, order);
           Object.keys(order).forEach(key => {
             const value = order[key];
@@ -229,7 +232,7 @@ Deno.serve(async (req: Request) => {
       const conditionData: any = {
         trigger_values: []
       };
-      const ordersData: any = [{}, {}];
+      const ordersData: any = [];
 
       Object.keys(body).forEach(key => {
         const value = body[key];
@@ -252,6 +255,9 @@ Deno.serve(async (req: Request) => {
             if (match) {
               const orderIndex = parseInt(match[1]);
               const fieldName = match[2];
+              if (!ordersData[orderIndex]) {
+                ordersData[orderIndex] = {};
+              }
               ordersData[orderIndex][fieldName] = value;
             }
           } else if (key === 'type') {
@@ -279,7 +285,7 @@ Deno.serve(async (req: Request) => {
       formData.append('condition[last_price]', lastPrice.toString());
 
       ordersData.forEach((order: any, index: number) => {
-        if (Object.keys(order).length > 0) {
+        if (order && Object.keys(order).length > 0) {
           Object.keys(order).forEach(key => {
             const value = order[key];
             if (value !== undefined && value !== null && value !== '') {
