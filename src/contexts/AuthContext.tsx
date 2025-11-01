@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               .insert({
                 id: session.user.id,
                 full_name: userName,
-                plan_type: 'free',
+                plan_type: 'pro',
               });
 
             if (!insertError) {
@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .insert({
             id: data.user.id,
             full_name: fullName || null,
-            plan_type: 'free',
+            plan_type: 'pro',
           });
 
         if (profileError) {

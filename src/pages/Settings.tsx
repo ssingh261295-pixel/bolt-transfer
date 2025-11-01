@@ -41,7 +41,6 @@ export function Settings() {
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
-    { id: 'billing', label: 'Billing', icon: CreditCard },
   ];
 
   return (
@@ -109,13 +108,6 @@ export function Settings() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Current Plan</label>
-                    <div className="px-4 py-2 bg-gray-50 rounded-lg capitalize">
-                      {profile?.plan_type || 'free'}
-                    </div>
-                  </div>
-
                   <button
                     type="submit"
                     disabled={saving}
@@ -178,34 +170,6 @@ export function Settings() {
               </div>
             )}
 
-            {activeTab === 'billing' && (
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Billing & Subscription</h3>
-                <div className="p-6 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg mb-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Current Plan</p>
-                      <p className="text-2xl font-bold text-gray-900 capitalize">{profile?.plan_type || 'free'}</p>
-                    </div>
-                    <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
-                      Upgrade Plan
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">Trial Ends</p>
-                      <p className="text-sm text-gray-600">
-                        {profile?.trial_ends_at
-                          ? new Date(profile.trial_ends_at).toLocaleDateString()
-                          : 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

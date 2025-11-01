@@ -69,12 +69,9 @@ export function SignUpForm({ onToggleForm }: SignUpFormProps) {
             <UserPlus className="w-6 h-6 text-white" />
           </div>
         </div>
-        <h2 className="text-2xl font-bold text-center text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-center text-gray-900 mb-6">
           Create Account
         </h2>
-        <p className="text-center text-gray-600 mb-6">
-          Start your 7-day free trial today
-        </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (

@@ -18,7 +18,7 @@ export type Profile = {
   id: string;
   full_name: string | null;
   phone: string | null;
-  plan_type: 'free' | 'basic' | 'premium' | 'enterprise';
+  plan_type: 'pro';
   trial_ends_at: string;
   created_at: string;
   updated_at: string;

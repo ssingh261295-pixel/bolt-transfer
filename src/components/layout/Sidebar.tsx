@@ -39,7 +39,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Helpme Trade</h1>
-            <p className="text-xs text-gray-500 capitalize">{profile?.plan_type || 'Free'} Plan</p>
           </div>
         </div>
       </div>
