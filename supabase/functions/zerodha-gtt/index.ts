@@ -92,8 +92,6 @@ Deno.serve(async (req: Request) => {
 
       console.log('Creating GTT order - raw body:', JSON.stringify(body, null, 2));
 
-      const formData = new URLSearchParams();
-
       const conditionData: any = {
         trigger_values: []
       };
@@ -111,6 +109,10 @@ Deno.serve(async (req: Request) => {
               if (fieldName === 'trigger_values' && arrayIndex !== undefined) {
                 const idx = parseInt(arrayIndex);
                 conditionData.trigger_values[idx] = parseFloat(value);
+              } else if (fieldName === 'instrument_token') {
+                conditionData[fieldName] = parseInt(value);
+              } else if (fieldName === 'last_price') {
+                conditionData[fieldName] = parseFloat(value);
               } else {
                 conditionData[fieldName] = value;
               }
@@ -123,55 +125,37 @@ Deno.serve(async (req: Request) => {
               if (!ordersData[orderIndex]) {
                 ordersData[orderIndex] = {};
               }
-              ordersData[orderIndex][fieldName] = value;
+
+              if (fieldName === 'quantity') {
+                ordersData[orderIndex][fieldName] = parseInt(value);
+              } else if (fieldName === 'price') {
+                ordersData[orderIndex][fieldName] = parseFloat(value);
+              } else {
+                ordersData[orderIndex][fieldName] = value;
+              }
             }
-          } else if (key === 'type') {
-            formData.append('type', value.toString());
           }
         }
       });
 
-      if (!body.type) {
-        formData.append('type', 'single');
-      }
-
-      formData.append('condition[exchange]', conditionData.exchange);
-      formData.append('condition[tradingsymbol]', conditionData.tradingsymbol);
-      formData.append('condition[instrument_token]', conditionData.instrument_token.toString());
-
       conditionData.trigger_values = conditionData.trigger_values.filter((v: any) => v !== undefined && v !== null);
-
-      conditionData.trigger_values.forEach((val: number) => {
-        formData.append('condition[trigger_values]', val.toString());
-      });
-
-      // last_price is required - use the first trigger value as a reference
       const lastPrice = conditionData.last_price || conditionData.trigger_values[0];
-      formData.append('condition[last_price]', lastPrice.toString());
+      conditionData.last_price = lastPrice;
+
+      const validOrders = ordersData.filter((order: any) => order && Object.keys(order).length > 0);
 
       console.log('Condition data:', JSON.stringify(conditionData, null, 2));
-      console.log('Orders data:', JSON.stringify(ordersData, null, 2));
+      console.log('Orders data:', JSON.stringify(validOrders, null, 2));
 
-      ordersData.forEach((order: any, index: number) => {
-        if (order && Object.keys(order).length > 0) {
-          console.log(`Processing order ${index}:`, order);
-          Object.keys(order).forEach(key => {
-            const value = order[key];
-            if (value !== undefined && value !== null && value !== '') {
-              const formKey = `orders[${index}][${key}]`;
-              const formValue = value.toString();
-              console.log(`  Adding: ${formKey} = ${formValue}`);
-              formData.append(formKey, formValue);
-            }
-          });
-        }
-      });
+      const gttType = body.type || 'single';
+
+      const formData = new URLSearchParams();
+      formData.append('type', gttType);
+      formData.append('condition', JSON.stringify(conditionData));
+      formData.append('orders', JSON.stringify(validOrders));
 
       const formDataString = formData.toString();
       console.log('Complete form data being sent to Zerodha:', formDataString);
-
-      const formDataArray = Array.from(formData.entries());
-      console.log('Form data as array:', JSON.stringify(formDataArray, null, 2));
 
       const response = await fetch(kiteUrl, {
         method: 'POST',
@@ -227,8 +211,6 @@ Deno.serve(async (req: Request) => {
 
       console.log('Modifying GTT order - raw body:', JSON.stringify(body, null, 2));
 
-      const formData = new URLSearchParams();
-
       const conditionData: any = {
         trigger_values: []
       };
@@ -246,6 +228,10 @@ Deno.serve(async (req: Request) => {
               if (fieldName === 'trigger_values' && arrayIndex !== undefined) {
                 const idx = parseInt(arrayIndex);
                 conditionData.trigger_values[idx] = parseFloat(value);
+              } else if (fieldName === 'instrument_token') {
+                conditionData[fieldName] = parseInt(value);
+              } else if (fieldName === 'last_price') {
+                conditionData[fieldName] = parseFloat(value);
               } else {
                 conditionData[fieldName] = value;
               }
@@ -258,44 +244,34 @@ Deno.serve(async (req: Request) => {
               if (!ordersData[orderIndex]) {
                 ordersData[orderIndex] = {};
               }
-              ordersData[orderIndex][fieldName] = value;
+
+              if (fieldName === 'quantity') {
+                ordersData[orderIndex][fieldName] = parseInt(value);
+              } else if (fieldName === 'price') {
+                ordersData[orderIndex][fieldName] = parseFloat(value);
+              } else {
+                ordersData[orderIndex][fieldName] = value;
+              }
             }
-          } else if (key === 'type') {
-            formData.append('type', value.toString());
           }
         }
       });
 
-      if (!body.type) {
-        formData.append('type', 'single');
-      }
-
-      formData.append('condition[exchange]', conditionData.exchange);
-      formData.append('condition[tradingsymbol]', conditionData.tradingsymbol);
-      formData.append('condition[instrument_token]', conditionData.instrument_token.toString());
-
       conditionData.trigger_values = conditionData.trigger_values.filter((v: any) => v !== undefined && v !== null);
-
-      conditionData.trigger_values.forEach((val: number) => {
-        formData.append('condition[trigger_values]', val.toString());
-      });
-
-      // last_price is required
       const lastPrice = conditionData.last_price || conditionData.trigger_values[0];
-      formData.append('condition[last_price]', lastPrice.toString());
+      conditionData.last_price = lastPrice;
 
-      ordersData.forEach((order: any, index: number) => {
-        if (order && Object.keys(order).length > 0) {
-          Object.keys(order).forEach(key => {
-            const value = order[key];
-            if (value !== undefined && value !== null && value !== '') {
-              const formKey = `orders[${index}][${key}]`;
-              const formValue = value.toString();
-              formData.append(formKey, formValue);
-            }
-          });
-        }
-      });
+      const validOrders = ordersData.filter((order: any) => order && Object.keys(order).length > 0);
+
+      console.log('Condition data:', JSON.stringify(conditionData, null, 2));
+      console.log('Orders data:', JSON.stringify(validOrders, null, 2));
+
+      const gttType = body.type || 'single';
+
+      const formData = new URLSearchParams();
+      formData.append('type', gttType);
+      formData.append('condition', JSON.stringify(conditionData));
+      formData.append('orders', JSON.stringify(validOrders));
 
       const formDataString = formData.toString();
       console.log('Complete form data being sent to Zerodha for modify:', formDataString);
