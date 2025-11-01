@@ -286,22 +286,20 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
         gttData['orders[1][order_type]'] = orderType2;
         gttData['orders[1][product]'] = product2;
 
-        if (orderType2 === 'LIMIT') {
-          if (!price2) {
-            throw new Error('Please enter limit price for order 2');
-          }
-          gttData['orders[1][price]'] = parseFloat(price2);
+        // GTT only supports LIMIT orders
+        if (!price2) {
+          throw new Error('Please enter limit price for order 2');
         }
+        gttData['orders[1][price]'] = parseFloat(price2);
       } else {
         gttData['condition[trigger_values][0]'] = parseFloat(triggerPrice1);
       }
 
-      if (orderType1 === 'LIMIT') {
-        if (!price1) {
-          throw new Error('Please enter limit price for order 1');
-        }
-        gttData['orders[0][price]'] = parseFloat(price1);
+      // GTT only supports LIMIT orders
+      if (!price1) {
+        throw new Error('Please enter limit price for order 1');
       }
+      gttData['orders[0][price]'] = parseFloat(price1);
 
       const firstTriggerValue = gttData['condition[trigger_values][0]'];
       let lastPrice = ltp || selectedInstrument.last_price;
@@ -567,40 +565,20 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
                 />
                 <span className="ml-2 text-sm text-gray-900">MIS</span>
               </label>
-              <label className="flex items-center cursor-pointer ml-auto">
-                <input
-                  type="radio"
-                  checked={orderType1 === 'LIMIT'}
-                  onChange={() => setOrderType1('LIMIT')}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <span className="ml-2 text-sm text-gray-900">LIMIT</span>
-              </label>
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  checked={orderType1 === 'MARKET'}
-                  onChange={() => setOrderType1('MARKET')}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <span className="ml-2 text-sm text-gray-900">MARKET</span>
-              </label>
             </div>
 
-            {orderType1 === 'LIMIT' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
-                <input
-                  type="number"
-                  step="0.05"
-                  value={price1}
-                  onChange={(e) => setPrice1(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="0.00"
-                  required
-                />
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
+              <input
+                type="number"
+                step="0.05"
+                value={price1}
+                onChange={(e) => setPrice1(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="0.00"
+                required
+              />
+            </div>
           </div>
 
           {/* Target Leg (Only for OCO) */}
@@ -665,40 +643,20 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
                 />
                   <span className="ml-2 text-sm text-gray-900">MIS</span>
                 </label>
-                <label className="flex items-center cursor-pointer ml-auto">
-                  <input
-                    type="radio"
-                    checked={orderType2 === 'LIMIT'}
-                    onChange={() => setOrderType2('LIMIT')}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="ml-2 text-sm text-gray-900">LIMIT</span>
-                </label>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={orderType2 === 'MARKET'}
-                    onChange={() => setOrderType2('MARKET')}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="ml-2 text-sm text-gray-900">MARKET</span>
-                </label>
               </div>
 
-              {orderType2 === 'LIMIT' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    value={price2}
-                    onChange={(e) => setPrice2(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={price2}
+                  onChange={(e) => setPrice2(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
             </div>
           )}
 
