@@ -365,7 +365,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
                   type="number"
                   step="0.05"
                   value={triggerPrice1}
-                  onChange={(e) => setTriggerPrice1(e.target.value)}
+                  onChange={(e) => {
+                    setTriggerPrice1(e.target.value);
+                    if (orderType1 === 'LIMIT' && !price1) {
+                      setPrice1(e.target.value);
+                    }
+                  }}
                   className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="Trigger"
                   required
@@ -445,7 +450,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
                     type="number"
                     step="0.05"
                     value={triggerPrice2}
-                    onChange={(e) => setTriggerPrice2(e.target.value)}
+                    onChange={(e) => {
+                      setTriggerPrice2(e.target.value);
+                      if (orderType2 === 'LIMIT' && !price2) {
+                        setPrice2(e.target.value);
+                      }
+                    }}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     placeholder="Trigger"
                     required
