@@ -142,10 +142,6 @@ Deno.serve(async (req: Request) => {
         formData.append('condition[trigger_values]', val.toString());
       });
 
-      if (conditionData.trigger_values.length > 0) {
-        formData.append('condition[last_price]', conditionData.trigger_values[0].toString());
-      }
-
       console.log('Condition data:', JSON.stringify(conditionData, null, 2));
       console.log('Orders data:', JSON.stringify(ordersData, null, 2));
 
