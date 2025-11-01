@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Search } from 'lucide-react';
+import { X, Search, Info } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -22,14 +22,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
 
   // Leg 1 (Stoploss for OCO, single order for Single)
   const [triggerPrice1, setTriggerPrice1] = useState('');
-  const [quantity1, setQuantity1] = useState(1);
+  const [quantity1, setQuantity1] = useState(200);
   const [orderType1, setOrderType1] = useState('LIMIT');
   const [price1, setPrice1] = useState('');
   const [product1, setProduct1] = useState('NRML');
 
   // Leg 2 (Target for OCO)
   const [triggerPrice2, setTriggerPrice2] = useState('');
-  const [quantity2, setQuantity2] = useState(1);
+  const [quantity2, setQuantity2] = useState(200);
   const [orderType2, setOrderType2] = useState('LIMIT');
   const [price2, setPrice2] = useState('');
   const [product2, setProduct2] = useState('NRML');
@@ -40,6 +40,9 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
   const [instruments, setInstruments] = useState<any[]>([]);
   const [filteredInstruments, setFilteredInstruments] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedInstrument, setSelectedInstrument] = useState<any>(null);
+  const [currentLTP, setCurrentLTP] = useState<number | null>(null);
+  const [fetchingLTP, setFetchingLTP] = useState(false);
 
   useEffect(() => {
     if (isOpen && exchange) {
@@ -54,12 +57,11 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
       setTransactionType(editingGTT.orders?.[0]?.transaction_type || 'BUY');
       setGttType(editingGTT.type || 'single');
       setTriggerPrice1(editingGTT.condition?.trigger_values?.[0]?.toString() || '');
-      setQuantity1(editingGTT.orders?.[0]?.quantity || 1);
+      setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
       setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
       setPrice1(editingGTT.orders?.[0]?.price?.toString() || '');
       setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
 
-      // Set selectedInstrument from existing GTT data
       if (editingGTT.condition?.instrument_token) {
         setSelectedInstrument({
           instrument_token: editingGTT.condition.instrument_token,
@@ -70,7 +72,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
 
       if (editingGTT.type === 'two-leg') {
         setTriggerPrice2(editingGTT.condition?.trigger_values?.[1]?.toString() || '');
-        setQuantity2(editingGTT.orders?.[1]?.quantity || 1);
+        setQuantity2(editingGTT.orders?.[1]?.quantity || 200);
         setOrderType2(editingGTT.orders?.[1]?.order_type || 'LIMIT');
         setPrice2(editingGTT.orders?.[1]?.price?.toString() || '');
         setProduct2(editingGTT.orders?.[1]?.product || 'NRML');
@@ -81,18 +83,19 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
       setTransactionType('BUY');
       setGttType('single');
       setTriggerPrice1('');
-      setQuantity1(1);
+      setQuantity1(200);
       setOrderType1('LIMIT');
       setPrice1('');
       setProduct1('NRML');
       setTriggerPrice2('');
-      setQuantity2(1);
+      setQuantity2(200);
       setOrderType2('LIMIT');
       setPrice2('');
       setProduct2('NRML');
       setError('');
       setSuccess(false);
       setSelectedInstrument(null);
+      setCurrentLTP(null);
     }
   }, [editingGTT, isOpen]);
 
@@ -116,14 +119,9 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
     }
   };
 
-  const [selectedInstrument, setSelectedInstrument] = useState<any>(null);
-  const [currentLTP, setCurrentLTP] = useState<number | null>(null);
-  const [fetchingLTP, setFetchingLTP] = useState(false);
-
   const handleSymbolSearch = (value: string) => {
     setSymbol(value);
 
-    // Clear selected instrument if user is typing (unless editing existing GTT)
     if (!editingGTT && value !== selectedInstrument?.tradingsymbol) {
       setSelectedInstrument(null);
     }
@@ -181,10 +179,16 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
     setShowSuggestions(false);
     setFilteredInstruments([]);
 
-    // Fetch current LTP
     if (instrument.instrument_token) {
       await fetchLTP(instrument.instrument_token);
     }
+  };
+
+  const calculatePercentFromLTP = (price: string) => {
+    if (!currentLTP || !price) return '';
+    const priceNum = parseFloat(price);
+    const percentDiff = ((priceNum - currentLTP) / currentLTP) * 100;
+    return percentDiff.toFixed(2);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -209,15 +213,11 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
         throw new Error('Please enter both trigger prices for OCO');
       }
 
-      // Fetch latest LTP before submitting
       const ltp = await fetchLTP(selectedInstrument.instrument_token);
 
-      // Validate trigger prices against LTP
       if (ltp) {
         const trigger1 = parseFloat(triggerPrice1);
 
-        // For BUY orders, trigger should be above LTP (buy when price goes up)
-        // For SELL orders, trigger should be below LTP (sell when price goes down)
         if (transactionType === 'BUY' && trigger1 <= ltp) {
           throw new Error(`Trigger already met! Current price (${ltp}) is above trigger (${trigger1}). For BUY orders, trigger must be above current price.`);
         }
@@ -226,7 +226,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
           throw new Error(`Trigger already met! Current price (${ltp}) is below trigger (${trigger1}). For SELL orders, trigger must be below current price.`);
         }
 
-        // Validate second trigger for two-leg
         if (gttType === 'two-leg') {
           const trigger2 = parseFloat(triggerPrice2);
 
@@ -275,8 +274,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
         gttData['orders[0][price]'] = parseFloat(price1);
       }
 
-      // Set last_price to current LTP (required by Zerodha)
-      // If LTP is not available or equals trigger, add 5 rupees offset
       const firstTriggerValue = gttData['condition[trigger_values][0]'];
       let lastPrice = ltp || selectedInstrument.last_price;
       if (!lastPrice || lastPrice === firstTriggerValue) {
@@ -300,20 +297,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
       });
 
       const result = await response.json();
-      console.log('GTT API Response:', result);
 
-      if (result.success) {
-        setSuccess(true);
-        setTimeout(() => {
-          onClose();
-        }, 1500);
-      } else {
-        const errorMsg = result.error || result.details || 'Failed to create GTT order';
-        console.error('GTT Error:', errorMsg);
-        throw new Error(errorMsg);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create GTT order');
       }
+
+      setSuccess(true);
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+
     } catch (err: any) {
-      setError(err.message || 'Failed to create GTT');
+      setError(err.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -323,51 +318,48 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
-            {editingGTT ? 'Edit GTT Order' : 'New GTT Order'}
-          </h2>
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">
+              {editingGTT ? 'Edit GTT Order' : 'New GTT Order'}
+            </h2>
+            {selectedInstrument && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm font-medium text-gray-900">{symbol}</span>
+                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{exchange}</span>
+                {currentLTP && (
+                  <span className="text-sm font-semibold text-gray-700">{currentLTP.toFixed(2)}</span>
+                )}
+              </div>
+            )}
+          </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded transition"
+            className="text-gray-400 hover:text-gray-600 transition p-1"
           >
-            <X className="w-5 h-5 text-gray-600" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
               {error}
             </div>
           )}
 
           {success && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded text-sm">
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded text-sm">
               GTT order {editingGTT ? 'updated' : 'created'} successfully!
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Exchange</label>
-              <select
-                value={exchange}
-                onChange={(e) => setExchange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                disabled={!!editingGTT}
-              >
-                <option value="NFO">NFO</option>
-                <option value="NSE">NSE</option>
-                <option value="BSE">BSE</option>
-                <option value="MCX">MCX</option>
-              </select>
-            </div>
-
+          {/* Symbol Search */}
+          {!editingGTT && (
             <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Symbol {selectedInstrument && <span className="text-green-600 text-xs">✓ Selected</span>}
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Symbol
               </label>
               <div className="relative">
                 <input
@@ -379,26 +371,23 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
                       setShowSuggestions(true);
                     }
                   }}
-                  className={`w-full px-3 py-2 pr-8 border rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none ${
-                    selectedInstrument ? 'border-green-500 bg-green-50' : 'border-gray-300'
-                  }`}
-                  placeholder="Search and select symbol"
+                  className="w-full px-4 py-2.5 pr-10 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="Search symbol (e.g., NIFTY, BANKNIFTY)"
                   required
-                  disabled={!!editingGTT}
                 />
-                <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               </div>
 
               {showSuggestions && filteredInstruments.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                   {filteredInstruments.map((instrument, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => selectInstrument(instrument)}
-                      className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition text-sm"
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition"
                     >
-                      <div className="font-medium text-gray-900">{instrument.tradingsymbol}</div>
+                      <div className="font-medium text-gray-900 text-sm">{instrument.tradingsymbol}</div>
                       {instrument.name && (
                         <div className="text-xs text-gray-600 mt-0.5">{instrument.name}</div>
                       )}
@@ -407,67 +396,79 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
                 </div>
               )}
             </div>
-          </div>
-
-          {currentLTP && (
-            <div className="bg-blue-50 border border-blue-200 px-3 py-2 rounded">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-blue-900">Current Market Price (LTP):</span>
-                <span className="text-lg font-bold text-blue-700">₹{currentLTP.toFixed(2)}</span>
-              </div>
-              {fetchingLTP && <span className="text-xs text-blue-600">Updating...</span>}
-            </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Transaction</label>
-            <select
-              value={transactionType}
-              onChange={(e) => setTransactionType(e.target.value as 'BUY' | 'SELL')}
-              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            >
-              <option value="BUY">BUY</option>
-              <option value="SELL">SELL</option>
-            </select>
-          </div>
+          {/* Transaction and Trigger Type */}
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Transaction type</label>
+              <div className="flex gap-4">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    value="BUY"
+                    checked={transactionType === 'BUY'}
+                    onChange={(e) => setTransactionType(e.target.value as 'BUY')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-900">Buy</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    value="SELL"
+                    checked={transactionType === 'SELL'}
+                    onChange={(e) => setTransactionType(e.target.value as 'SELL')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-900">Sell</span>
+                </label>
+              </div>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">GTT Type</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setGttType('single')}
-                className={`px-3 py-2 rounded border text-sm transition ${
-                  gttType === 'single'
-                    ? 'border-blue-500 bg-blue-50 text-blue-900'
-                    : 'border-gray-300 hover:border-gray-400'
-                }`}
-              >
-                Single
-              </button>
-              <button
-                type="button"
-                onClick={() => setGttType('two-leg')}
-                className={`px-3 py-2 rounded border text-sm transition ${
-                  gttType === 'two-leg'
-                    ? 'border-blue-500 bg-blue-50 text-blue-900'
-                    : 'border-gray-300 hover:border-gray-400'
-                }`}
-              >
-                OCO (Two-leg)
-              </button>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Trigger type</label>
+              <div className="flex gap-4">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    value="single"
+                    checked={gttType === 'single'}
+                    onChange={(e) => setGttType(e.target.value as 'single')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-900">Single</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    value="two-leg"
+                    checked={gttType === 'two-leg'}
+                    onChange={(e) => setGttType(e.target.value as 'two-leg')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-900">OCO</span>
+                </label>
+              </div>
+              {gttType === 'two-leg' && (
+                <div className="mt-2 text-xs text-gray-600 leading-relaxed">
+                  One Cancels Other: Either the stoploss or the target order is placed when the Last Traded Price (LTP) crosses the respective trigger. Can be used to set target and stoploss for a position/holding.
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Single leg or first leg (Stoploss) */}
-          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-            <div className="text-xs font-semibold text-purple-600 mb-2">
-              {gttType === 'two-leg' ? 'STOPLOSS' : 'ORDER'}
+          {/* Stoploss Leg */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <div className="mb-4">
+              <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
+                {gttType === 'two-leg' ? 'Stoploss' : 'Order'}
+              </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Trigger Price</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Trigger price</label>
                 <input
                   type="number"
                   step="0.05"
@@ -478,81 +479,97 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
                       setPrice1(e.target.value);
                     }
                   }}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="Trigger"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="0.00"
                   required
                 />
+                {currentLTP && triggerPrice1 && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {calculatePercentFromLTP(triggerPrice1)}% of LTP
+                  </div>
+                )}
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Qty.</label>
                 <input
                   type="number"
                   value={quantity1}
                   onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   min="1"
-                  placeholder="Quantity"
                   required
                 />
-                {selectedInstrument && selectedInstrument.lot_size && (
-                  <div className="text-xs text-gray-500 mt-1">
-                    Lot Size: {selectedInstrument.lot_size} (Total: {quantity1})
-                  </div>
-                )}
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 mt-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
-                <select
-                  value={product1}
-                  onChange={(e) => setProduct1(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                >
-                  <option value="NRML">NRML</option>
-                  <option value="MIS">MIS</option>
-                  <option value="CNC">CNC</option>
-                </select>
-              </div>
+            <div className="flex gap-4 mb-3">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  checked={product1 === 'NRML'}
+                  onChange={() => setProduct1('NRML')}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="ml-2 text-sm text-gray-900">NRML</span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  checked={product1 === 'MIS'}
+                  onChange={() => setProduct1('MIS')}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="ml-2 text-sm text-gray-900">MIS</span>
+              </label>
+              <label className="flex items-center cursor-pointer ml-auto">
+                <input
+                  type="radio"
+                  checked={orderType1 === 'LIMIT'}
+                  onChange={() => setOrderType1('LIMIT')}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="ml-2 text-sm text-gray-900">LIMIT</span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  checked={orderType1 === 'MARKET'}
+                  onChange={() => setOrderType1('MARKET')}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="ml-2 text-sm text-gray-900">MARKET</span>
+              </label>
+            </div>
 
+            {orderType1 === 'LIMIT' && (
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Order Type</label>
-                <select
-                  value={orderType1}
-                  onChange={(e) => setOrderType1(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                >
-                  <option value="LIMIT">LIMIT</option>
-                  <option value="MARKET">MARKET</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Price</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
                 <input
                   type="number"
                   step="0.05"
                   value={price1}
                   onChange={(e) => setPrice1(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="Price"
-                  required={orderType1 === 'LIMIT'}
-                  disabled={orderType1 === 'MARKET'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="0.00"
+                  required
                 />
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Second leg (Target) - Only for OCO */}
+          {/* Target Leg (Only for OCO) */}
           {gttType === 'two-leg' && (
-            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-              <div className="text-xs font-semibold text-blue-600 mb-2">TARGET</div>
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="mb-4">
+                <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
+                  Target
+                </span>
+              </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Trigger Price</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Trigger price</label>
                   <input
                     type="number"
                     step="0.05"
@@ -563,90 +580,107 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
                         setPrice2(e.target.value);
                       }
                     }}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="Trigger"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="0.00"
                     required
                   />
+                  {currentLTP && triggerPrice2 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {calculatePercentFromLTP(triggerPrice2)}% of LTP
+                    </div>
+                  )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Qty.</label>
                   <input
                     type="number"
                     value={quantity2}
                     onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     min="1"
-                    placeholder="Quantity"
                     required
                   />
-                  {selectedInstrument && selectedInstrument.lot_size && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      Lot Size: {selectedInstrument.lot_size} (Total: {quantity2})
-                    </div>
-                  )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 mt-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
-                  <select
-                    value={product2}
-                    onChange={(e) => setProduct2(e.target.value)}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  >
-                    <option value="NRML">NRML</option>
-                    <option value="MIS">MIS</option>
-                    <option value="CNC">CNC</option>
-                  </select>
-                </div>
+              <div className="flex gap-4 mb-3">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={product2 === 'NRML'}
+                    onChange={() => setProduct2('NRML')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-900">NRML</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={product2 === 'MIS'}
+                    onChange={() => setProduct2('MIS')}
+                    className="w-4 h-4 text-blue-600"
+                />
+                  <span className="ml-2 text-sm text-gray-900">MIS</span>
+                </label>
+                <label className="flex items-center cursor-pointer ml-auto">
+                  <input
+                    type="radio"
+                    checked={orderType2 === 'LIMIT'}
+                    onChange={() => setOrderType2('LIMIT')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-900">LIMIT</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={orderType2 === 'MARKET'}
+                    onChange={() => setOrderType2('MARKET')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-900">MARKET</span>
+                </label>
+              </div>
 
+              {orderType2 === 'LIMIT' && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Order Type</label>
-                  <select
-                    value={orderType2}
-                    onChange={(e) => setOrderType2(e.target.value)}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  >
-                    <option value="LIMIT">LIMIT</option>
-                    <option value="MARKET">MARKET</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Price</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
                   <input
                     type="number"
                     step="0.05"
                     value={price2}
                     onChange={(e) => setPrice2(e.target.value)}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="Price"
-                    required={orderType2 === 'LIMIT'}
-                    disabled={orderType2 === 'MARKET'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="0.00"
+                    required
                   />
                 </div>
-              </div>
+              )}
             </div>
           )}
 
-          <div className="flex gap-2 pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-blue-600 text-white py-2 rounded font-medium hover:bg-blue-700 transition disabled:opacity-50 text-sm"
-            >
-              {loading ? 'Processing...' : editingGTT ? 'Update GTT' : 'Create GTT'}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1 bg-gray-100 text-gray-700 py-2 rounded font-medium hover:bg-gray-200 transition text-sm"
-            >
-              Cancel
-            </button>
+          {/* Footer */}
+          <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+            <div className="text-xs text-gray-600">
+              By {editingGTT ? 'modifying' : 'creating'}, I agree that trigger executions are not guaranteed.
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !selectedInstrument}
+                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Processing...' : editingGTT ? 'Modify' : 'Create'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
