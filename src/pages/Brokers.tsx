@@ -47,33 +47,6 @@ export function Brokers() {
     }
   }, [user, session]);
 
-  useEffect(() => {
-    if (!user) return;
-
-    const checkTokenExpiry = () => {
-      const now = new Date();
-      brokers.forEach(broker => {
-        if (broker.token_expires_at && broker.broker_name === 'zerodha' && broker.is_active) {
-          const expiryDate = new Date(broker.token_expires_at);
-          if (now >= expiryDate) {
-            supabase
-              .from('broker_connections')
-              .update({ is_active: false })
-              .eq('id', broker.id)
-              .then(() => {
-                console.log(`Auto-marked broker ${broker.id} as inactive due to token expiry`);
-                loadBrokers();
-              });
-          }
-        }
-      });
-    };
-
-    const interval = setInterval(checkTokenExpiry, 60000);
-
-    return () => clearInterval(interval);
-  }, [user, brokers]);
-
   const loadBrokers = async () => {
     const { data } = await supabase
       .from('broker_connections')
