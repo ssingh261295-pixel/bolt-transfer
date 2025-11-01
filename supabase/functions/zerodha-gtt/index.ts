@@ -94,51 +94,65 @@ Deno.serve(async (req: Request) => {
 
       const formData = new URLSearchParams();
 
-      const conditionData: any = {};
-      const ordersData: any = [[], []];
+      const conditionData: any = {
+        trigger_values: []
+      };
+      const ordersData: any = [{}, {}];
 
       Object.keys(body).forEach(key => {
         const value = body[key];
         if (value !== undefined && value !== null && value !== '') {
           if (key.startsWith('condition[') && key.endsWith(']')) {
-            const fieldName = key.slice(10, -1);
-            conditionData[fieldName] = value;
+            const fullMatch = key.match(/condition\[(.+?)\](?:\[(\d+)\])?/);
+            if (fullMatch) {
+              const fieldName = fullMatch[1];
+              const arrayIndex = fullMatch[2];
+
+              if (fieldName === 'trigger_values' && arrayIndex !== undefined) {
+                const idx = parseInt(arrayIndex);
+                conditionData.trigger_values[idx] = parseFloat(value);
+              } else {
+                conditionData[fieldName] = value;
+              }
+            }
           } else if (key.startsWith('orders[')) {
             const match = key.match(/orders\[(\d+)\]\[(.+?)\]/);
             if (match) {
               const orderIndex = parseInt(match[1]);
               const fieldName = match[2];
-              if (!ordersData[orderIndex]) ordersData[orderIndex] = {};
               ordersData[orderIndex][fieldName] = value;
             }
-          } else {
-            formData.append(key, value.toString());
+          } else if (key === 'type') {
+            formData.append('type', value.toString());
           }
         }
       });
 
-      formData.append('type', body.type || 'single');
+      if (!body.type) {
+        formData.append('type', 'single');
+      }
 
-      Object.keys(conditionData).forEach(key => {
-        if (key === 'trigger_values' && Array.isArray(conditionData[key])) {
-          conditionData[key].forEach((val: any, idx: number) => {
-            formData.append(`condition[trigger_values][]`, val.toString());
-          });
-        } else if (key.includes('[')) {
-          formData.append(`condition[${key}]`, conditionData[key].toString());
-        } else {
-          formData.append(`condition[${key}]`, conditionData[key].toString());
-        }
+      formData.append('condition[exchange]', conditionData.exchange);
+      formData.append('condition[tradingsymbol]', conditionData.tradingsymbol);
+      formData.append('condition[instrument_token]', conditionData.instrument_token.toString());
+
+      conditionData.trigger_values = conditionData.trigger_values.filter((v: any) => v !== undefined && v !== null);
+
+      conditionData.trigger_values.forEach((val: number) => {
+        formData.append('condition[trigger_values]', val.toString());
       });
 
-      if (!conditionData.last_price && conditionData.trigger_values?.[0]) {
+      if (conditionData.trigger_values.length > 0) {
         formData.append('condition[last_price]', conditionData.trigger_values[0].toString());
       }
 
       ordersData.forEach((order: any, index: number) => {
         if (Object.keys(order).length > 0) {
           Object.keys(order).forEach(key => {
-            formData.append(`orders[${index}][${key}]`, order[key].toString());
+            const value = order[key];
+            if (value !== undefined && value !== null && value !== '') {
+              formData.append(`orders[${index}][${key}]`, value.toString());
+            }
           });
         }
       });
