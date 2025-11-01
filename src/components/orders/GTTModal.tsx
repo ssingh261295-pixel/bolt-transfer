@@ -22,16 +22,24 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
 
   // Leg 1 (Stoploss for OCO, single order for Single)
   const [triggerPrice1, setTriggerPrice1] = useState('');
+  const [triggerPercent1, setTriggerPercent1] = useState('');
+  const [useTriggerPercent1, setUseTriggerPercent1] = useState(false);
   const [quantity1, setQuantity1] = useState(200);
   const [orderType1, setOrderType1] = useState('LIMIT');
   const [price1, setPrice1] = useState('');
+  const [pricePercent1, setPricePercent1] = useState('');
+  const [usePricePercent1, setUsePricePercent1] = useState(false);
   const [product1, setProduct1] = useState('NRML');
 
   // Leg 2 (Target for OCO)
   const [triggerPrice2, setTriggerPrice2] = useState('');
+  const [triggerPercent2, setTriggerPercent2] = useState('');
+  const [useTriggerPercent2, setUseTriggerPercent2] = useState(false);
   const [quantity2, setQuantity2] = useState(200);
   const [orderType2, setOrderType2] = useState('LIMIT');
   const [price2, setPrice2] = useState('');
+  const [pricePercent2, setPricePercent2] = useState('');
+  const [usePricePercent2, setUsePricePercent2] = useState(false);
   const [product2, setProduct2] = useState('NRML');
 
   const [loading, setLoading] = useState(false);
@@ -515,33 +523,67 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Trigger price</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={triggerPrice1}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (value.includes('%')) {
-                        // If user types percentage, calculate price from LTP
-                        const percent = parseFloat(value.replace('%', ''));
-                        if (currentLTP && !isNaN(percent)) {
-                          const calculatedPrice = currentLTP * (1 + percent / 100);
+                <div className="flex gap-2 mb-2">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={!useTriggerPercent1}
+                      onChange={() => setUseTriggerPercent1(false)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="ml-1 text-xs text-gray-700">Price</span>
+                  </label>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={useTriggerPercent1}
+                      onChange={() => setUseTriggerPercent1(true)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="ml-1 text-xs text-gray-700">%</span>
+                  </label>
+                </div>
+                {!useTriggerPercent1 ? (
+                  <div>
+                    <input
+                      type="number"
+                      step="0.05"
+                      value={triggerPrice1}
+                      onChange={(e) => setTriggerPrice1(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder="0.00"
+                      required
+                    />
+                    {currentLTP && triggerPrice1 && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        {calculatePercentFromLTP(triggerPrice1)}% of LTP
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={triggerPercent1}
+                      onChange={(e) => {
+                        setTriggerPercent1(e.target.value);
+                        if (currentLTP && e.target.value) {
+                          const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
                           setTriggerPrice1(calculatedPrice.toFixed(2));
                         }
-                      } else {
-                        setTriggerPrice1(value);
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="0.00 or 2%"
-                    required
-                  />
-                  {currentLTP && triggerPrice1 && !triggerPrice1.includes('%') && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      {calculatePercentFromLTP(triggerPrice1)}% of LTP
-                    </div>
-                  )}
-                </div>
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder="2.5"
+                      required
+                    />
+                    {triggerPercent1 && currentLTP && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        = ₹{(currentLTP * (1 + parseFloat(triggerPercent1) / 100)).toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -580,29 +622,65 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
-              <input
-                type="text"
-                value={price1}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value.includes('%')) {
-                    // If user types percentage, calculate price from LTP
-                    const percent = parseFloat(value.replace('%', ''));
-                    if (currentLTP && !isNaN(percent)) {
-                      const calculatedPrice = currentLTP * (1 + percent / 100);
-                      setPrice1(calculatedPrice.toFixed(2));
-                    }
-                  } else {
-                    setPrice1(value);
-                  }
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder="0.00 or 2%"
-                required
-              />
-              {currentLTP && price1 && !price1.includes('%') && (
-                <div className="text-xs text-gray-500 mt-1">
-                  {calculatePercentFromLTP(price1)}% of LTP
+              <div className="flex gap-2 mb-2">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={!usePricePercent1}
+                    onChange={() => setUsePricePercent1(false)}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-1 text-xs text-gray-700">Price</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={usePricePercent1}
+                    onChange={() => setUsePricePercent1(true)}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-1 text-xs text-gray-700">%</span>
+                </label>
+              </div>
+              {!usePricePercent1 ? (
+                <div>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={price1}
+                    onChange={(e) => setPrice1(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="0.00"
+                    required
+                  />
+                  {currentLTP && price1 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {calculatePercentFromLTP(price1)}% of LTP
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={pricePercent1}
+                    onChange={(e) => {
+                      setPricePercent1(e.target.value);
+                      if (currentLTP && e.target.value) {
+                        const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
+                        setPrice1(calculatedPrice.toFixed(2));
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="2.5"
+                    required
+                  />
+                  {pricePercent1 && currentLTP && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      = ₹{(currentLTP * (1 + parseFloat(pricePercent1) / 100)).toFixed(2)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -620,33 +698,67 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Trigger price</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={triggerPrice2}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        if (value.includes('%')) {
-                          // If user types percentage, calculate price from LTP
-                          const percent = parseFloat(value.replace('%', ''));
-                          if (currentLTP && !isNaN(percent)) {
-                            const calculatedPrice = currentLTP * (1 + percent / 100);
+                  <div className="flex gap-2 mb-2">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={!useTriggerPercent2}
+                        onChange={() => setUseTriggerPercent2(false)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="ml-1 text-xs text-gray-700">Price</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={useTriggerPercent2}
+                        onChange={() => setUseTriggerPercent2(true)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="ml-1 text-xs text-gray-700">%</span>
+                    </label>
+                  </div>
+                  {!useTriggerPercent2 ? (
+                    <div>
+                      <input
+                        type="number"
+                        step="0.05"
+                        value={triggerPrice2}
+                        onChange={(e) => setTriggerPrice2(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="0.00"
+                        required
+                      />
+                      {currentLTP && triggerPrice2 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {calculatePercentFromLTP(triggerPrice2)}% of LTP
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={triggerPercent2}
+                        onChange={(e) => {
+                          setTriggerPercent2(e.target.value);
+                          if (currentLTP && e.target.value) {
+                            const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
                             setTriggerPrice2(calculatedPrice.toFixed(2));
                           }
-                        } else {
-                          setTriggerPrice2(value);
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      placeholder="0.00 or 2%"
-                      required
-                    />
-                    {currentLTP && triggerPrice2 && !triggerPrice2.includes('%') && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {calculatePercentFromLTP(triggerPrice2)}% of LTP
-                      </div>
-                    )}
-                  </div>
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="2.5"
+                        required
+                      />
+                      {triggerPercent2 && currentLTP && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          = ₹{(currentLTP * (1 + parseFloat(triggerPercent2) / 100)).toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -685,29 +797,65 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT }: GT
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
-                <input
-                  type="text"
-                  value={price2}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value.includes('%')) {
-                      // If user types percentage, calculate price from LTP
-                      const percent = parseFloat(value.replace('%', ''));
-                      if (currentLTP && !isNaN(percent)) {
-                        const calculatedPrice = currentLTP * (1 + percent / 100);
-                        setPrice2(calculatedPrice.toFixed(2));
-                      }
-                    } else {
-                      setPrice2(value);
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="0.00 or 2%"
-                  required
-                />
-                {currentLTP && price2 && !price2.includes('%') && (
-                  <div className="text-xs text-gray-500 mt-1">
-                    {calculatePercentFromLTP(price2)}% of LTP
+                <div className="flex gap-2 mb-2">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={!usePricePercent2}
+                      onChange={() => setUsePricePercent2(false)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="ml-1 text-xs text-gray-700">Price</span>
+                  </label>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={usePricePercent2}
+                      onChange={() => setUsePricePercent2(true)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="ml-1 text-xs text-gray-700">%</span>
+                  </label>
+                </div>
+                {!usePricePercent2 ? (
+                  <div>
+                    <input
+                      type="number"
+                      step="0.05"
+                      value={price2}
+                      onChange={(e) => setPrice2(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder="0.00"
+                      required
+                    />
+                    {currentLTP && price2 && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        {calculatePercentFromLTP(price2)}% of LTP
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={pricePercent2}
+                      onChange={(e) => {
+                        setPricePercent2(e.target.value);
+                        if (currentLTP && e.target.value) {
+                          const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
+                          setPrice2(calculatedPrice.toFixed(2));
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder="2.5"
+                      required
+                    />
+                    {pricePercent2 && currentLTP && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        = ₹{(currentLTP * (1 + parseFloat(pricePercent2) / 100)).toFixed(2)}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
