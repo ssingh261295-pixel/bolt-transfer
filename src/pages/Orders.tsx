@@ -81,38 +81,37 @@ export function Orders() {
     }
 
     setSyncMessage(`Syncing orders from ${brokers.length} account(s)...`);
-    let totalSynced = 0;
-    let successCount = 0;
-    let errors: string[] = [];
-    let hasTokenExpired = false;
 
-    for (const broker of brokers) {
+    // Sync all brokers in parallel for faster performance
+    const syncPromises = brokers.map(async (broker) => {
       try {
         const accountName = broker.account_name || broker.account_holder_name || `Account (${broker.api_key.substring(0, 8)}...)`;
         const result = await syncOrders(broker.id);
 
         if (result.success) {
-          totalSynced += result.synced || 0;
-          successCount++;
           console.log(`Successfully synced ${result.synced} orders from ${accountName}`);
+          return { success: true, synced: result.synced || 0, accountName, tokenExpired: false };
         } else {
           const errorMsg = result.error || 'Unknown error';
-          if (errorMsg.includes('Token expired') || errorMsg.includes('403')) {
-            hasTokenExpired = true;
-          }
-          errors.push(`${accountName}: ${errorMsg}`);
+          const tokenExpired = errorMsg.includes('Token expired') || errorMsg.includes('403');
           console.error(`Failed to sync ${accountName}:`, errorMsg);
+          return { success: false, error: errorMsg, accountName, tokenExpired };
         }
       } catch (err: any) {
         const accountName = broker.account_name || broker.account_holder_name || `Account (${broker.api_key.substring(0, 8)}...)`;
         const errorMsg = err.message || 'Unknown error';
-        if (errorMsg.includes('Token expired') || errorMsg.includes('403')) {
-          hasTokenExpired = true;
-        }
-        errors.push(`${accountName}: ${errorMsg}`);
+        const tokenExpired = errorMsg.includes('Token expired') || errorMsg.includes('403');
         console.error(`Error syncing ${accountName}:`, err);
+        return { success: false, error: errorMsg, accountName, tokenExpired };
       }
-    }
+    });
+
+    const results = await Promise.all(syncPromises);
+
+    const successCount = results.filter(r => r.success).length;
+    const totalSynced = results.reduce((sum, r) => sum + (r.synced || 0), 0);
+    const errors = results.filter(r => !r.success);
+    const hasTokenExpired = results.some(r => r.tokenExpired);
 
     if (hasTokenExpired) {
       await loadBrokers();
