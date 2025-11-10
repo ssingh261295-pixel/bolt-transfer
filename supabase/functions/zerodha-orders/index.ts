@@ -163,42 +163,29 @@ Deno.serve(async (req: Request) => {
       const result = await response.json();
 
       if (result.status === 'success' && result.data) {
+        await supabase
+          .from('orders')
+          .delete()
+          .eq('broker_connection_id', brokerId);
+
         const orders = result.data;
 
         for (const order of orders) {
-          const { data: existingOrder } = await supabase
-            .from('orders')
-            .select('id')
-            .eq('order_id', order.order_id)
-            .maybeSingle();
-
-          if (existingOrder) {
-            await supabase
-              .from('orders')
-              .update({
-                status: order.status,
-                executed_quantity: order.filled_quantity || 0,
-                executed_price: order.average_price || null,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', existingOrder.id);
-          } else {
-            await supabase.from('orders').insert({
-              user_id: user.id,
-              broker_connection_id: brokerId,
-              symbol: order.tradingsymbol,
-              exchange: order.exchange,
-              order_type: order.order_type,
-              transaction_type: order.transaction_type,
-              quantity: order.quantity,
-              price: order.price || null,
-              trigger_price: order.trigger_price || null,
-              status: order.status,
-              order_id: order.order_id,
-              executed_quantity: order.filled_quantity || 0,
-              executed_price: order.average_price || null,
-            });
-          }
+          await supabase.from('orders').insert({
+            user_id: user.id,
+            broker_connection_id: brokerId,
+            symbol: order.tradingsymbol,
+            exchange: order.exchange,
+            order_type: order.order_type,
+            transaction_type: order.transaction_type,
+            quantity: order.quantity,
+            price: order.price || null,
+            trigger_price: order.trigger_price || null,
+            status: order.status,
+            order_id: order.order_id,
+            executed_quantity: order.filled_quantity || 0,
+            executed_price: order.average_price || null,
+          });
         }
 
         return new Response(
