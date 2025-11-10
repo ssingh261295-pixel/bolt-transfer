@@ -72,12 +72,14 @@ Deno.serve(async (req: Request) => {
 
         const positions = result.data.net || [];
 
-        for (const position of positions) {
-          if (position.quantity !== 0) {
+        // Bulk insert all positions at once
+        const positionRecords = positions
+          .filter((position: any) => position.quantity !== 0)
+          .map((position: any) => {
             const pnl = (position.last_price - position.average_price) * position.quantity;
             const pnlPercentage = ((position.last_price - position.average_price) / position.average_price) * 100;
 
-            await supabase.from('positions').insert({
+            return {
               user_id: user.id,
               broker_connection_id: brokerId,
               symbol: position.tradingsymbol,
@@ -88,8 +90,11 @@ Deno.serve(async (req: Request) => {
               current_price: position.last_price,
               pnl: pnl,
               pnl_percentage: pnlPercentage,
-            });
-          }
+            };
+          });
+
+        if (positionRecords.length > 0) {
+          await supabase.from('positions').insert(positionRecords);
         }
 
         return new Response(

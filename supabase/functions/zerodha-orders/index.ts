@@ -170,8 +170,9 @@ Deno.serve(async (req: Request) => {
 
         const orders = result.data;
 
-        for (const order of orders) {
-          await supabase.from('orders').insert({
+        // Bulk insert all orders at once instead of one-by-one
+        if (orders.length > 0) {
+          const orderRecords = orders.map((order: any) => ({
             user_id: user.id,
             broker_connection_id: brokerId,
             symbol: order.tradingsymbol,
@@ -185,7 +186,9 @@ Deno.serve(async (req: Request) => {
             order_id: order.order_id,
             executed_quantity: order.filled_quantity || 0,
             executed_price: order.average_price || null,
-          });
+          }));
+
+          await supabase.from('orders').insert(orderRecords);
         }
 
         return new Response(

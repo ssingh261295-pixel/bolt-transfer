@@ -6,6 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
+// Simple in-memory cache with expiry
+const cache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -34,6 +38,24 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
     const exchange = url.searchParams.get('exchange') || 'NFO';
     const search = url.searchParams.get('search') || '';
+
+    const cacheKey = `${exchange}:${search}`;
+
+    // Check cache first
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log('Returning cached instruments for', cacheKey);
+      return new Response(
+        JSON.stringify(cached.data),
+        {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            'X-Cache': 'HIT',
+          },
+        }
+      );
+    }
 
     // Zerodha instruments CSV is public - no auth needed
     const instrumentsUrl = `https://api.kite.trade/instruments/${exchange}`;
@@ -137,17 +159,23 @@ Deno.serve(async (req: Request) => {
 
     console.log('Parsed instruments count:', instruments.length);
 
+    const responseData = {
+      success: true,
+      instruments: instruments,
+      total: instruments.length,
+      exchange: exchange
+    };
+
+    // Cache the response
+    cache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+
     return new Response(
-      JSON.stringify({
-        success: true,
-        instruments: instruments,
-        total: instruments.length,
-        exchange: exchange
-      }),
+      JSON.stringify(responseData),
       {
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json',
+          'X-Cache': 'MISS',
         },
       }
     );
