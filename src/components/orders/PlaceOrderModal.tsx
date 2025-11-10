@@ -179,35 +179,59 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
       baseOrderParams.trigger_price = parseFloat(formData.trigger_price);
     }
 
-    let successCount = 0;
-    let errorMessages = [];
-    let firstSuccessfulOrder = null;
-
-    for (const brokerId of selectedBrokerIds) {
+    // Place orders in parallel for faster execution
+    const orderPromises = selectedBrokerIds.map(async (brokerId) => {
       const orderParams = {
         ...baseOrderParams,
         broker_connection_id: brokerId,
       };
 
-      const result = await placeOrder(orderParams);
-      if (result.success) {
-        successCount++;
-        if (!firstSuccessfulOrder) {
-          firstSuccessfulOrder = {
-            orderId: result.orderId,
-            brokerId,
-            symbol: formData.symbol.toUpperCase(),
-            quantity: formData.quantity,
-          };
-        }
-      } else {
+      try {
+        const result = await placeOrder(orderParams);
         const broker = brokers.find(b => b.id === brokerId);
         const accountName = broker?.account_holder_name
           ? `${broker.account_holder_name} (${broker.client_id || 'No Client ID'})`
           : broker?.account_name || 'Account';
-        errorMessages.push(`${accountName}: ${result.error}`);
+
+        if (result.success) {
+          return {
+            success: true,
+            orderId: result.orderId,
+            brokerId,
+            accountName,
+          };
+        } else {
+          return {
+            success: false,
+            error: result.error,
+            accountName,
+          };
+        }
+      } catch (err: any) {
+        const broker = brokers.find(b => b.id === brokerId);
+        const accountName = broker?.account_holder_name
+          ? `${broker.account_holder_name} (${broker.client_id || 'No Client ID'})`
+          : broker?.account_name || 'Account';
+
+        return {
+          success: false,
+          error: err.message || 'Unknown error',
+          accountName,
+        };
       }
-    }
+    });
+
+    const results = await Promise.all(orderPromises);
+
+    const successfulOrders = results.filter(r => r.success);
+    const successCount = successfulOrders.length;
+    const errorMessages = results.filter(r => !r.success).map(r => `${r.accountName}: ${r.error}`);
+    const firstSuccessfulOrder = successfulOrders.length > 0 ? {
+      orderId: successfulOrders[0].orderId,
+      brokerId: successfulOrders[0].brokerId,
+      symbol: formData.symbol.toUpperCase(),
+      quantity: formData.quantity,
+    } : null;
 
     if (successCount > 0) {
       onSuccess();
