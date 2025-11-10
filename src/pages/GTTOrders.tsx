@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Plus, RefreshCw, Edit2, Trash2 } from 'lucide-react';
+import { Plus, RefreshCw, Edit2, Trash2, ArrowUpDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
+
+type SortField = 'symbol' | 'trigger_price' | 'created_at' | 'status';
+type SortDirection = 'asc' | 'desc';
 
 export function GTTOrders() {
   const { user, session } = useAuth();
@@ -13,6 +16,9 @@ export function GTTOrders() {
   const [syncing, setSyncing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingGTT, setEditingGTT] = useState<any>(null);
+  const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+  const [sortField, setSortField] = useState<SortField>('created_at');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   useEffect(() => {
     if (user) {
@@ -81,7 +87,7 @@ export function GTTOrders() {
 
         const results = await Promise.all(fetchPromises);
         const allOrders = results.flat();
-        setGttOrders(allOrders);
+        setGttOrders(sortGTTOrders(allOrders));
       } else {
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${selectedBrokerId}`;
         const response = await fetch(apiUrl, {
@@ -102,7 +108,7 @@ export function GTTOrders() {
               client_id: broker?.client_id
             }
           }));
-          setGttOrders(ordersWithBroker);
+          setGttOrders(sortGTTOrders(ordersWithBroker));
         } else {
           setGttOrders([]);
         }
@@ -115,10 +121,118 @@ export function GTTOrders() {
     }
   };
 
+  const sortGTTOrders = (data: any[]) => {
+    return [...data].sort((a, b) => {
+      let aVal, bVal;
+
+      switch (sortField) {
+        case 'symbol':
+          aVal = a.condition?.tradingsymbol || '';
+          bVal = b.condition?.tradingsymbol || '';
+          break;
+        case 'trigger_price':
+          aVal = a.condition?.trigger_values?.[0] || 0;
+          bVal = b.condition?.trigger_values?.[0] || 0;
+          break;
+        case 'status':
+          aVal = a.status || '';
+          bVal = b.status || '';
+          break;
+        case 'created_at':
+        default:
+          aVal = new Date(a.created_at).getTime();
+          bVal = new Date(b.created_at).getTime();
+          break;
+      }
+
+      if (sortDirection === 'asc') {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
+      }
+    });
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  useEffect(() => {
+    if (gttOrders.length > 0) {
+      setGttOrders(sortGTTOrders(gttOrders));
+    }
+  }, [sortField, sortDirection]);
+
   const handleSync = async () => {
     setSyncing(true);
     await loadGTTOrders();
     setSyncing(false);
+  };
+
+  const toggleOrderSelection = (orderId: string) => {
+    setSelectedOrders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(orderId)) {
+        newSet.delete(orderId);
+      } else {
+        newSet.add(orderId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedOrders.size === gttOrders.length) {
+      setSelectedOrders(new Set());
+    } else {
+      setSelectedOrders(new Set(gttOrders.map(order => order.id.toString())));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedOrders.size === 0) return;
+
+    if (!confirm(`Are you sure you want to delete ${selectedOrders.size} GTT order(s)?`)) return;
+
+    const deletePromises = Array.from(selectedOrders).map(async (orderId) => {
+      const order = gttOrders.find(o => o.id.toString() === orderId);
+      if (!order) return { success: false };
+
+      try {
+        const brokerId = order.broker_info?.id || selectedBrokerId;
+        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerId}&gtt_id=${order.id}`;
+
+        const response = await fetch(apiUrl, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const result = await response.json();
+        return { success: result.success, orderId };
+      } catch (err) {
+        return { success: false, orderId };
+      }
+    });
+
+    const results = await Promise.all(deletePromises);
+    const successCount = results.filter(r => r.success).length;
+    const failedCount = results.filter(r => !r.success).length;
+
+    if (successCount > 0) {
+      alert(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
+      setSelectedOrders(new Set());
+      await loadGTTOrders();
+    } else {
+      alert('Failed to delete GTT orders.');
+    }
   };
 
   const handleDelete = async (gttId: number, brokerId?: string) => {
@@ -199,6 +313,21 @@ export function GTTOrders() {
         </div>
       </div>
 
+      {selectedOrders.size > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+          <span className="text-sm text-blue-800 font-medium">
+            {selectedOrders.size} order(s) selected
+          </span>
+          <button
+            onClick={handleBulkDelete}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Selected
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
           <div className="text-gray-600">Loading GTT orders...</div>
@@ -218,11 +347,31 @@ export function GTTOrders() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Created on
+                <th className="px-4 py-3 text-center w-12">
+                  <input
+                    type="checkbox"
+                    checked={selectedOrders.size === gttOrders.length && gttOrders.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Instrument
+                <th
+                  onClick={() => handleSort('created_at')}
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                >
+                  <div className="flex items-center gap-1">
+                    Created on
+                    <ArrowUpDown className={`w-3 h-3 ${sortField === 'created_at' ? 'text-blue-600' : 'text-gray-400'}`} />
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('symbol')}
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                >
+                  <div className="flex items-center gap-1">
+                    Instrument
+                    <ArrowUpDown className={`w-3 h-3 ${sortField === 'symbol' ? 'text-blue-600' : 'text-gray-400'}`} />
+                  </div>
                 </th>
                 {selectedBrokerId === 'all' && (
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
@@ -232,8 +381,14 @@ export function GTTOrders() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Type
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Trigger
+                <th
+                  onClick={() => handleSort('trigger_price')}
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                >
+                  <div className="flex items-center gap-1">
+                    Trigger
+                    <ArrowUpDown className={`w-3 h-3 ${sortField === 'trigger_price' ? 'text-blue-600' : 'text-gray-400'}`} />
+                  </div>
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   LTP
@@ -241,8 +396,14 @@ export function GTTOrders() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Qty.
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  Status
+                <th
+                  onClick={() => handleSort('status')}
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                >
+                  <div className="flex items-center gap-1">
+                    Status
+                    <ArrowUpDown className={`w-3 h-3 ${sortField === 'status' ? 'text-blue-600' : 'text-gray-400'}`} />
+                  </div>
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Actions
@@ -257,6 +418,14 @@ export function GTTOrders() {
 
                 return (
                   <tr key={gtt.id} className="hover:bg-gray-50 transition">
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedOrders.has(gtt.id.toString())}
+                        onChange={() => toggleOrderSelection(gtt.id.toString())}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                      />
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {new Date(gtt.created_at).toLocaleDateString('en-IN', {
                         year: 'numeric',

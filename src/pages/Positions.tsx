@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import { LineChart, X, RefreshCw, Bell } from 'lucide-react';
+import { LineChart, X, RefreshCw, Bell, ArrowUpDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodha } from '../hooks/useZerodha';
 import { GTTModal } from '../components/orders/GTTModal';
+
+type SortField = 'symbol' | 'quantity' | 'average_price' | 'current_price' | 'pnl' | 'pnl_percentage';
+type SortDirection = 'asc' | 'desc';
 
 export function Positions() {
   const { user } = useAuth();
@@ -19,6 +22,8 @@ export function Positions() {
   });
   const [gttModalOpen, setGttModalOpen] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<any>(null);
+  const [sortField, setSortField] = useState<SortField>('pnl');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   useEffect(() => {
     if (user) {
@@ -52,6 +57,55 @@ export function Positions() {
     }
   };
 
+  const sortPositions = (data: any[]) => {
+    return [...data].sort((a, b) => {
+      let aVal, bVal;
+
+      switch (sortField) {
+        case 'symbol':
+          aVal = a.symbol || '';
+          bVal = b.symbol || '';
+          break;
+        case 'quantity':
+          aVal = a.quantity || 0;
+          bVal = b.quantity || 0;
+          break;
+        case 'average_price':
+          aVal = a.average_price || 0;
+          bVal = b.average_price || 0;
+          break;
+        case 'current_price':
+          aVal = a.current_price || 0;
+          bVal = b.current_price || 0;
+          break;
+        case 'pnl':
+          aVal = a.pnl || 0;
+          bVal = b.pnl || 0;
+          break;
+        case 'pnl_percentage':
+        default:
+          aVal = a.pnl_percentage || 0;
+          bVal = b.pnl_percentage || 0;
+          break;
+      }
+
+      if (sortDirection === 'asc') {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
+      }
+    });
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
   const filterPositions = () => {
     let filtered = allPositions;
 
@@ -59,13 +113,20 @@ export function Positions() {
       filtered = allPositions.filter(pos => pos.broker_connection_id === selectedBroker);
     }
 
-    setPositions(filtered);
+    setPositions(sortPositions(filtered));
 
     const totalPnL = filtered.reduce((sum, pos) => sum + (pos.pnl || 0), 0);
     const totalInvested = filtered.reduce((sum, pos) => sum + (pos.quantity * pos.average_price), 0);
 
     setSummary({ totalPnL, totalInvested });
   };
+
+  useEffect(() => {
+    if (positions.length > 0) {
+      const filtered = selectedBroker === 'all' ? allPositions : allPositions.filter(pos => pos.broker_connection_id === selectedBroker);
+      setPositions(sortPositions(filtered));
+    }
+  }, [sortField, sortDirection]);
 
   const loadBrokers = async () => {
     const { data } = await supabase
@@ -221,26 +282,62 @@ export function Positions() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                    Symbol
+                  <th
+                    onClick={() => handleSort('symbol')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  >
+                    <div className="flex items-center gap-1">
+                      Symbol
+                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'symbol' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                     Account
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                    Quantity
+                  <th
+                    onClick={() => handleSort('quantity')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  >
+                    <div className="flex items-center gap-1">
+                      Quantity
+                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'quantity' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                    Avg. Price
+                  <th
+                    onClick={() => handleSort('average_price')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  >
+                    <div className="flex items-center gap-1">
+                      Avg. Price
+                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'average_price' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                    Current Price
+                  <th
+                    onClick={() => handleSort('current_price')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  >
+                    <div className="flex items-center gap-1">
+                      Current Price
+                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'current_price' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                    P&L
+                  <th
+                    onClick={() => handleSort('pnl')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  >
+                    <div className="flex items-center gap-1">
+                      P&L
+                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'pnl' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                    P&L %
+                  <th
+                    onClick={() => handleSort('pnl_percentage')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  >
+                    <div className="flex items-center gap-1">
+                      P&L %
+                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'pnl_percentage' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                     Actions

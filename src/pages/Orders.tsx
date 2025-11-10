@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ShoppingCart, Filter, Plus, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Filter, Plus, RefreshCw, ArrowUpDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodha } from '../hooks/useZerodha';
 import { PlaceOrderModal } from '../components/orders/PlaceOrderModal';
+
+type SortField = 'created_at' | 'symbol' | 'quantity' | 'price' | 'status';
+type SortDirection = 'asc' | 'desc';
 
 export function Orders() {
   const { user } = useAuth();
@@ -14,6 +17,8 @@ export function Orders() {
   const [filter, setFilter] = useState('all');
   const [showPlaceOrder, setShowPlaceOrder] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  const [sortField, setSortField] = useState<SortField>('created_at');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   useEffect(() => {
     if (user) {
@@ -39,8 +44,7 @@ export function Orders() {
           client_id
         )
       `)
-      .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
+      .eq('user_id', user?.id);
 
     if (filter === 'all') {
       // Show only active orders (exclude completed, rejected, cancelled)
@@ -56,9 +60,60 @@ export function Orders() {
     const { data } = await query;
 
     if (data) {
-      setOrders(data);
+      setOrders(sortOrders(data));
     }
   };
+
+  const sortOrders = (data: any[]) => {
+    return [...data].sort((a, b) => {
+      let aVal, bVal;
+
+      switch (sortField) {
+        case 'symbol':
+          aVal = a.symbol || '';
+          bVal = b.symbol || '';
+          break;
+        case 'quantity':
+          aVal = a.quantity || 0;
+          bVal = b.quantity || 0;
+          break;
+        case 'price':
+          aVal = a.price || 0;
+          bVal = b.price || 0;
+          break;
+        case 'status':
+          aVal = a.status || '';
+          bVal = b.status || '';
+          break;
+        case 'created_at':
+        default:
+          aVal = new Date(a.created_at).getTime();
+          bVal = new Date(b.created_at).getTime();
+          break;
+      }
+
+      if (sortDirection === 'asc') {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
+      }
+    });
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  useEffect(() => {
+    if (orders.length > 0) {
+      setOrders(sortOrders(orders));
+    }
+  }, [sortField, sortDirection]);
 
   const loadBrokers = async () => {
     const { data } = await supabase
@@ -229,8 +284,14 @@ export function Orders() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                    Symbol
+                  <th
+                    onClick={() => handleSort('symbol')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  >
+                    <div className="flex items-center gap-1">
+                      Symbol
+                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'symbol' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                     Account
@@ -241,17 +302,41 @@ export function Orders() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                     Side
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                    Qty.
+                  <th
+                    onClick={() => handleSort('quantity')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  >
+                    <div className="flex items-center gap-1">
+                      Qty.
+                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'quantity' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                    Price
+                  <th
+                    onClick={() => handleSort('price')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  >
+                    <div className="flex items-center gap-1">
+                      Price
+                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'price' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                    Status
+                  <th
+                    onClick={() => handleSort('status')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  >
+                    <div className="flex items-center gap-1">
+                      Status
+                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'status' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                    Date
+                  <th
+                    onClick={() => handleSort('created_at')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  >
+                    <div className="flex items-center gap-1">
+                      Date
+                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'created_at' ? 'text-blue-600' : 'text-gray-400'}`} />
+                    </div>
                   </th>
                 </tr>
               </thead>
