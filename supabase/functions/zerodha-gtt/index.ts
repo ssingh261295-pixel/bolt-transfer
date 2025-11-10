@@ -38,15 +38,25 @@ Deno.serve(async (req: Request) => {
       throw new Error('Missing broker_id parameter');
     }
 
-    const { data: brokerConnection } = await supabase
+    const { data: brokerConnection, error: brokerError } = await supabase
       .from('broker_connections')
-      .select('api_key, access_token')
+      .select('api_key, access_token, client_id, account_holder_name')
       .eq('id', brokerId)
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (!brokerConnection || !brokerConnection.access_token) {
-      throw new Error('Broker not connected or access token missing');
+    if (brokerError) {
+      console.error('Database error fetching broker:', brokerError);
+      throw new Error(`Database error: ${brokerError.message}`);
+    }
+
+    if (!brokerConnection) {
+      throw new Error(`Broker connection not found for ID: ${brokerId}`);
+    }
+
+    if (!brokerConnection.access_token) {
+      const accountInfo = brokerConnection.account_holder_name || brokerConnection.client_id || brokerId;
+      throw new Error(`Access token missing for account: ${accountInfo}. Please reconnect this broker.`);
     }
 
     const authToken = `token ${brokerConnection.api_key}:${brokerConnection.access_token}`;
@@ -140,9 +150,7 @@ Deno.serve(async (req: Request) => {
 
       conditionData.trigger_values = conditionData.trigger_values.filter((v: any) => v !== undefined && v !== null);
 
-      // Ensure last_price is set and different from trigger price
       if (!conditionData.last_price || conditionData.last_price === conditionData.trigger_values[0]) {
-        // Add 5 to first trigger value to ensure they're different
         conditionData.last_price = conditionData.trigger_values[0] + 5;
       }
 
@@ -263,9 +271,7 @@ Deno.serve(async (req: Request) => {
 
       conditionData.trigger_values = conditionData.trigger_values.filter((v: any) => v !== undefined && v !== null);
 
-      // Ensure last_price is set and different from trigger price
       if (!conditionData.last_price || conditionData.last_price === conditionData.trigger_values[0]) {
-        // Add 5 to first trigger value to ensure they're different
         conditionData.last_price = conditionData.trigger_values[0] + 5;
       }
 

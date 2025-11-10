@@ -432,24 +432,31 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           });
 
           const result = await response.json();
+          console.log(`GTT creation result for broker ${brokerId}:`, result);
 
           if (result.success) {
             results.push({ brokerId, success: true });
           } else {
-            results.push({ brokerId, success: false, error: result.error });
+            console.error(`Failed for broker ${brokerId}:`, result.error);
+            results.push({ brokerId, success: false, error: result.error || 'Unknown error' });
           }
         } catch (err: any) {
+          console.error(`Exception for broker ${brokerId}:`, err);
           results.push({ brokerId, success: false, error: err.message });
         }
       }
 
+      console.log('All GTT creation results:', results);
+
       const failedCount = results.filter(r => !r.success).length;
       if (failedCount === results.length) {
-        throw new Error('Failed to create GTT orders for all accounts');
+        const errorDetails = results.map(r => r.error).filter(Boolean).join('; ');
+        throw new Error(`Failed to create GTT orders for all accounts. Errors: ${errorDetails}`);
       }
 
       if (failedCount > 0) {
-        setError(`Created GTT for ${results.length - failedCount} accounts. Failed for ${failedCount} accounts.`);
+        const failedErrors = results.filter(r => !r.success).map(r => r.error).join('; ');
+        setError(`Created GTT for ${results.length - failedCount} of ${results.length} accounts. Failed accounts: ${failedErrors}`);
       }
 
       setSuccess(true);
