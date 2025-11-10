@@ -8,7 +8,7 @@ export function GTTOrders() {
   const { user, session } = useAuth();
   const [gttOrders, setGttOrders] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
-  const [selectedBrokerId, setSelectedBrokerId] = useState<string>('');
+  const [selectedBrokerId, setSelectedBrokerId] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -36,31 +36,70 @@ export function GTTOrders() {
 
     if (data && data.length > 0) {
       setBrokers(data);
-      setSelectedBrokerId(data[0].id);
+      if (!selectedBrokerId || selectedBrokerId === '') {
+        setSelectedBrokerId('all');
+      }
     }
   };
 
   const loadGTTOrders = async () => {
-    if (!selectedBrokerId) return;
+    if (!selectedBrokerId || brokers.length === 0) return;
 
     setLoading(true);
     try {
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${selectedBrokerId}`;
-
-      const response = await fetch(apiUrl, {
-        headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const result = await response.json();
-
-      if (result.success && result.data) {
-        setGttOrders(result.data);
+      if (selectedBrokerId === 'all') {
+        const allOrders: any[] = [];
+        for (const broker of brokers) {
+          try {
+            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${broker.id}`;
+            const response = await fetch(apiUrl, {
+              headers: {
+                'Authorization': `Bearer ${session?.access_token}`,
+                'Content-Type': 'application/json',
+              },
+            });
+            const result = await response.json();
+            if (result.success && result.data) {
+              const ordersWithBroker = result.data.map((order: any) => ({
+                ...order,
+                broker_info: {
+                  id: broker.id,
+                  account_name: broker.account_name,
+                  account_holder_name: broker.account_holder_name,
+                  client_id: broker.client_id
+                }
+              }));
+              allOrders.push(...ordersWithBroker);
+            }
+          } catch (err) {
+            console.error(`Failed to fetch GTT orders for broker ${broker.id}:`, err);
+          }
+        }
+        setGttOrders(allOrders);
       } else {
-        console.error('Failed to fetch GTT orders:', result.error);
-        setGttOrders([]);
+        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${selectedBrokerId}`;
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        const result = await response.json();
+        if (result.success && result.data) {
+          const broker = brokers.find(b => b.id === selectedBrokerId);
+          const ordersWithBroker = result.data.map((order: any) => ({
+            ...order,
+            broker_info: {
+              id: broker?.id,
+              account_name: broker?.account_name,
+              account_holder_name: broker?.account_holder_name,
+              client_id: broker?.client_id
+            }
+          }));
+          setGttOrders(ordersWithBroker);
+        } else {
+          setGttOrders([]);
+        }
       }
     } catch (err) {
       console.error('Failed to load GTT orders:', err);
@@ -76,11 +115,12 @@ export function GTTOrders() {
     setSyncing(false);
   };
 
-  const handleDelete = async (gttId: number) => {
+  const handleDelete = async (gttId: number, brokerId?: string) => {
     if (!confirm('Are you sure you want to delete this GTT order?')) return;
 
     try {
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${selectedBrokerId}&gtt_id=${gttId}`;
+      const brokerIdToUse = brokerId || selectedBrokerId;
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerIdToUse}&gtt_id=${gttId}`;
 
       const response = await fetch(apiUrl, {
         method: 'DELETE',
@@ -117,12 +157,13 @@ export function GTTOrders() {
           <h2 className="text-2xl font-bold text-gray-900">GTT ({gttOrders.length})</h2>
         </div>
         <div className="flex gap-3">
-          {brokers.length > 1 && (
+          {brokers.length > 0 && (
             <select
               value={selectedBrokerId}
               onChange={(e) => setSelectedBrokerId(e.target.value)}
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
             >
+              <option value="all">All Accounts</option>
               {brokers.map((broker) => (
                 <option key={broker.id} value={broker.id}>
                   {broker.account_holder_name || broker.account_name || 'Account'}
@@ -177,6 +218,11 @@ export function GTTOrders() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Instrument
                 </th>
+                {selectedBrokerId === 'all' && (
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                    Account
+                  </th>
+                )}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Type
                 </th>
@@ -220,6 +266,18 @@ export function GTTOrders() {
                         </span>
                       </div>
                     </td>
+                    {selectedBrokerId === 'all' && (
+                      <td className="px-4 py-3">
+                        <div className="text-sm text-gray-900">
+                          {gtt.broker_info?.account_holder_name || gtt.broker_info?.account_name || 'Account'}
+                        </div>
+                        {gtt.broker_info?.client_id && (
+                          <div className="text-xs text-gray-500">
+                            ID: {gtt.broker_info.client_id}
+                          </div>
+                        )}
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
                         <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium w-fit ${
@@ -279,6 +337,9 @@ export function GTTOrders() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => {
+                            if (gtt.broker_info?.id) {
+                              setSelectedBrokerId(gtt.broker_info.id);
+                            }
                             setEditingGTT(gtt);
                             setShowCreateModal(true);
                           }}
@@ -288,7 +349,7 @@ export function GTTOrders() {
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(gtt.id)}
+                          onClick={() => handleDelete(gtt.id, gtt.broker_info?.id)}
                           className="p-1.5 text-red-600 hover:bg-red-50 rounded transition"
                           title="Delete GTT"
                         >
