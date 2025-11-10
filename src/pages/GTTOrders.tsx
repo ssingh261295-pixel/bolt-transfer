@@ -21,6 +21,9 @@ export function GTTOrders() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [deleteMessage, setDeleteMessage] = useState('');
   const [deleteError, setDeleteError] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteType, setDeleteType] = useState<'bulk' | 'single'>('bulk');
+  const [deleteTarget, setDeleteTarget] = useState<{ gttId?: number; brokerId?: string } | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -200,8 +203,12 @@ export function GTTOrders() {
 
   const handleBulkDelete = async () => {
     if (selectedOrders.size === 0) return;
+    setDeleteType('bulk');
+    setShowDeleteConfirm(true);
+  };
 
-    if (!confirm(`Are you sure you want to delete ${selectedOrders.size} GTT order(s)?`)) return;
+  const confirmBulkDelete = async () => {
+    setShowDeleteConfirm(false);
 
     console.log('Starting bulk delete:', {
       ordersCount: selectedOrders.size,
@@ -278,7 +285,16 @@ export function GTTOrders() {
   };
 
   const handleDelete = async (gttId: number, brokerId?: string) => {
-    if (!confirm('Are you sure you want to delete this GTT order?')) return;
+    setDeleteType('single');
+    setDeleteTarget({ gttId, brokerId });
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmSingleDelete = async () => {
+    if (!deleteTarget?.gttId) return;
+    setShowDeleteConfirm(false);
+
+    const { gttId, brokerId } = deleteTarget;
 
     try {
       const brokerIdToUse = brokerId || selectedBrokerId;
@@ -611,6 +627,44 @@ export function GTTOrders() {
           editingGTT={editingGTT}
           allBrokers={brokers}
         />
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">
+              Confirm Delete
+            </h3>
+            <p className="text-gray-600 mb-6">
+              {deleteType === 'bulk'
+                ? `Are you sure you want to delete ${selectedOrders.size} GTT order(s)? This action cannot be undone.`
+                : 'Are you sure you want to delete this GTT order? This action cannot be undone.'}
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteTarget(null);
+                }}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (deleteType === 'bulk') {
+                    confirmBulkDelete();
+                  } else {
+                    confirmSingleDelete();
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg transition"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
