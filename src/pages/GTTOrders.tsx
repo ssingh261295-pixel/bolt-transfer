@@ -53,7 +53,7 @@ export function GTTOrders() {
     }
   };
 
-  const loadGTTOrders = async () => {
+  const loadGTTOrders = async (throwOnError = false) => {
     if (!selectedBrokerId || brokers.length === 0) return;
 
     setLoading(true);
@@ -83,6 +83,7 @@ export function GTTOrders() {
             return [];
           } catch (err) {
             console.error(`Failed to fetch GTT orders for broker ${broker.id}:`, err);
+            if (throwOnError) throw err;
             return [];
           }
         });
@@ -117,6 +118,7 @@ export function GTTOrders() {
       }
     } catch (err) {
       console.error('Failed to load GTT orders:', err);
+      if (throwOnError) throw err;
       setGttOrders([]);
     } finally {
       setLoading(false);
@@ -241,11 +243,17 @@ export function GTTOrders() {
     const failedCount = results.filter(r => !r.success).length;
 
     if (successCount > 0) {
-      setDeleteMessage(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
-      setDeleteError('');
       setSelectedOrders(new Set());
-      setTimeout(() => setDeleteMessage(''), 5000);
-      await loadGTTOrders();
+      try {
+        await loadGTTOrders(true);
+        setDeleteMessage(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
+        setDeleteError('');
+        setTimeout(() => setDeleteMessage(''), 5000);
+      } catch (err: any) {
+        setDeleteMessage('');
+        setDeleteError(`Deleted ${successCount} order(s) but failed to refresh list. Please reload the page.`);
+        setTimeout(() => setDeleteError(''), 5000);
+      }
     } else {
       const firstError = results.find(r => !r.success)?.error || 'Unknown error';
       setDeleteError(`Failed to delete GTT orders: ${firstError}`);
