@@ -33,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
+    console.log('Fetched profile data:', data);
     return data;
   };
 

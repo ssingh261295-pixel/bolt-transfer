@@ -20,6 +20,9 @@ interface SidebarProps {
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { signOut, profile } = useAuth();
 
+  console.log('Sidebar - Profile:', profile);
+  console.log('Sidebar - Is Admin:', profile?.is_admin);
+
   const baseMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'brokers', label: 'Brokers', icon: LinkIcon },
