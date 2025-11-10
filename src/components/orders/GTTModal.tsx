@@ -498,7 +498,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           )}
 
           {/* Multi-Account Selection */}
-          {!editingGTT && allBrokers && allBrokers.length > 1 && (
+          {!editingGTT && allBrokers && allBrokers.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 Select Accounts ({selectedBrokerIds.length} selected)
@@ -585,24 +585,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
             </div>
           )}
 
-          {/* LTP Display */}
-          {selectedInstrument && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Last Traded Price (LTP)</span>
-                {fetchingLTP ? (
-                  <div className="flex items-center gap-2 text-blue-600">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                    <span className="text-sm">Loading...</span>
-                  </div>
-                ) : currentLTP ? (
-                  <span className="text-lg font-bold text-gray-900">₹{currentLTP.toFixed(2)}</span>
-                ) : (
-                  <span className="text-sm text-gray-500">Not available</span>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Transaction and Trigger Type */}
           <div className="grid grid-cols-2 gap-6">
