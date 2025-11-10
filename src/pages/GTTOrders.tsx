@@ -314,6 +314,7 @@ export function GTTOrders() {
           }}
           brokerConnectionId={selectedBrokerId}
           editingGTT={editingGTT}
+          allBrokers={brokers}
         />
       )}
     </div>

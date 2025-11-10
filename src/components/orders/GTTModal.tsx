@@ -13,14 +13,16 @@ interface GTTModalProps {
   quantity?: number;
   initialSymbol?: string;
   initialExchange?: string;
+  allBrokers?: any[];
 }
 
-export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, initialSymbol, initialExchange }: GTTModalProps) {
+export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, initialSymbol, initialExchange, allBrokers }: GTTModalProps) {
   const { session } = useAuth();
   const [symbol, setSymbol] = useState(initialSymbol || '');
   const [exchange, setExchange] = useState(initialExchange || 'NFO');
   const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>('BUY');
   const [gttType, setGttType] = useState<'single' | 'two-leg'>('single');
+  const [selectedBrokerIds, setSelectedBrokerIds] = useState<string[]>([brokerConnectionId]);
 
   // Leg 1 (Stoploss for OCO, single order for Single)
   const [triggerPrice1, setTriggerPrice1] = useState('');
@@ -53,12 +55,49 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
   const [selectedInstrument, setSelectedInstrument] = useState<any>(null);
   const [currentLTP, setCurrentLTP] = useState<number | null>(null);
   const [fetchingLTP, setFetchingLTP] = useState(false);
+  const [ltpRefreshInterval, setLtpRefreshInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (isOpen && exchange) {
       loadInstruments();
     }
   }, [isOpen, exchange]);
+
+  // Auto-refresh LTP during market hours (9:15 AM to 3:30 PM IST)
+  useEffect(() => {
+    if (!isOpen || !selectedInstrument || !selectedBrokerIds[0]) {
+      if (ltpRefreshInterval) {
+        clearInterval(ltpRefreshInterval);
+        setLtpRefreshInterval(null);
+      }
+      return;
+    }
+
+    const checkAndRefreshLTP = () => {
+      const now = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istTime = new Date(now.getTime() + istOffset);
+      const hours = istTime.getUTCHours();
+      const minutes = istTime.getUTCMinutes();
+      const currentMinutes = hours * 60 + minutes;
+      const marketStart = 9 * 60 + 15;
+      const marketEnd = 15 * 60 + 30;
+
+      if (currentMinutes >= marketStart && currentMinutes <= marketEnd) {
+        if (selectedInstrument.instrument_token) {
+          fetchLTP(selectedInstrument.instrument_token, selectedInstrument.tradingsymbol, selectedInstrument.exchange || exchange);
+        }
+      }
+    };
+
+    checkAndRefreshLTP();
+    const interval = setInterval(checkAndRefreshLTP, 3000);
+    setLtpRefreshInterval(interval);
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isOpen, selectedInstrument, selectedBrokerIds]);
 
   useEffect(() => {
     const setupGTT = async () => {
@@ -198,10 +237,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       const symbolToUse = tradingsymbol || symbol;
       const exchangeToUse = exchangeValue || exchange;
       const instrumentKey = `${exchangeToUse}:${symbolToUse}`;
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${brokerConnectionId}&instruments=${instrumentKey}`;
-
-      console.log('Fetching LTP for:', instrumentKey);
-      console.log('API URL:', apiUrl);
+      const brokerId = selectedBrokerIds[0] || brokerConnectionId;
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${brokerId}&instruments=${instrumentKey}`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -211,16 +248,11 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       });
 
       const data = await response.json();
-      console.log('LTP Response:', data);
 
       if (data.success && data.data && data.data[instrumentKey]) {
         const ltp = data.data[instrumentKey].last_price;
-        console.log('LTP found:', ltp);
         setCurrentLTP(ltp);
         return ltp;
-      } else {
-        console.log('No LTP data found for instrument key:', instrumentKey);
-        console.log('Available keys:', data.data ? Object.keys(data.data) : 'none');
       }
     } catch (err) {
       console.error('Failed to fetch LTP:', err);
@@ -265,6 +297,10 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         throw new Error('Please select a valid instrument from the dropdown list');
       }
 
+      if (selectedBrokerIds.length === 0) {
+        throw new Error('Please select at least one account');
+      }
+
       if (!triggerPrice1) {
         throw new Error('Please enter trigger price');
       }
@@ -274,29 +310,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       }
 
       const ltp = await fetchLTP(selectedInstrument.instrument_token);
-
-      if (ltp) {
-        const trigger1 = parseFloat(triggerPrice1);
-
-        // For BUY orders: trigger should be above current price (buy when price goes up)
-        if (transactionType === 'BUY' && trigger1 <= ltp) {
-          throw new Error(`Trigger already met! Current price (${ltp.toFixed(2)}) is above trigger (${trigger1}). For BUY orders, trigger must be above current price.`);
-        }
-
-        // For SELL orders: No validation needed as both scenarios are valid:
-        // - Trigger below LTP = Stop loss (sell when price drops)
-        // - Trigger above LTP = Take profit (sell when price rises)
-
-        if (gttType === 'two-leg') {
-          const trigger2 = parseFloat(triggerPrice2);
-
-          if (transactionType === 'BUY' && trigger2 <= ltp) {
-            throw new Error(`Second trigger already met! Current price (${ltp.toFixed(2)}) is above trigger (${trigger2}).`);
-          }
-
-          // No validation for SELL second trigger for same reason
-        }
-      }
 
       const gttData: any = {
         type: gttType,
@@ -322,7 +335,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         gttData['orders[1][order_type]'] = orderType2;
         gttData['orders[1][product]'] = product2;
 
-        // GTT only supports LIMIT orders
         if (!price2) {
           throw new Error('Please enter limit price for order 2');
         }
@@ -331,7 +343,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         gttData['condition[trigger_values][0]'] = parseFloat(triggerPrice1);
       }
 
-      // GTT only supports LIMIT orders
       if (!price1) {
         throw new Error('Please enter limit price for order 1');
       }
@@ -344,25 +355,43 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       }
       gttData['condition[last_price]'] = lastPrice;
 
-      console.log('GTT Data being sent:', gttData);
+      const brokersToProcess = editingGTT ? [brokerConnectionId] : selectedBrokerIds;
+      const results = [];
 
-      const method = editingGTT ? 'PUT' : 'POST';
-      const gttIdParam = editingGTT ? `&gtt_id=${editingGTT.id}` : '';
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerConnectionId}${gttIdParam}`;
+      for (const brokerId of brokersToProcess) {
+        try {
+          const method = editingGTT ? 'PUT' : 'POST';
+          const gttIdParam = editingGTT ? `&gtt_id=${editingGTT.id}` : '';
+          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerId}${gttIdParam}`;
 
-      const response = await fetch(apiUrl, {
-        method: method,
-        headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(gttData),
-      });
+          const response = await fetch(apiUrl, {
+            method: method,
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(gttData),
+          });
 
-      const result = await response.json();
+          const result = await response.json();
 
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to create GTT order');
+          if (result.success) {
+            results.push({ brokerId, success: true });
+          } else {
+            results.push({ brokerId, success: false, error: result.error });
+          }
+        } catch (err: any) {
+          results.push({ brokerId, success: false, error: err.message });
+        }
+      }
+
+      const failedCount = results.filter(r => !r.success).length;
+      if (failedCount === results.length) {
+        throw new Error('Failed to create GTT orders for all accounts');
+      }
+
+      if (failedCount > 0) {
+        setError(`Created GTT for ${results.length - failedCount} accounts. Failed for ${failedCount} accounts.`);
       }
 
       setSuccess(true);
@@ -415,6 +444,51 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           {success && (
             <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded text-sm">
               GTT order {editingGTT ? 'updated' : 'created'} successfully!
+            </div>
+          )}
+
+          {/* Multi-Account Selection */}
+          {!editingGTT && allBrokers && allBrokers.length > 1 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Select Accounts ({selectedBrokerIds.length} selected)
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {allBrokers.map((broker) => {
+                  const isSelected = selectedBrokerIds.includes(broker.id);
+                  return (
+                    <label
+                      key={broker.id}
+                      className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition ${
+                        isSelected
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedBrokerIds([...selectedBrokerIds, broker.id]);
+                          } else {
+                            setSelectedBrokerIds(selectedBrokerIds.filter(id => id !== broker.id));
+                          }
+                        }}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">
+                          {broker.account_holder_name || broker.account_name || 'Account'}
+                        </div>
+                        {broker.client_id && (
+                          <div className="text-xs text-gray-600">ID: {broker.client_id}</div>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           )}
 
