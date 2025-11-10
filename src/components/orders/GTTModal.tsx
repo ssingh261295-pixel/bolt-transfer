@@ -91,7 +91,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     };
 
     checkAndRefreshLTP();
-    const interval = setInterval(checkAndRefreshLTP, 3000);
+    const interval = setInterval(checkAndRefreshLTP, 5000);
     setLtpRefreshInterval(interval);
 
     return () => {
@@ -406,9 +406,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       gttData['condition[last_price]'] = lastPrice;
 
       const brokersToProcess = editingGTT ? [brokerConnectionId] : selectedBrokerIds;
-      const results = [];
 
-      for (const brokerId of brokersToProcess) {
+      const gttPromises = brokersToProcess.map(async (brokerId) => {
         try {
           const method = editingGTT ? 'PUT' : 'POST';
           const gttIdParam = editingGTT ? `&gtt_id=${editingGTT.id}` : '';
@@ -426,14 +425,16 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           const result = await response.json();
 
           if (result.success) {
-            results.push({ brokerId, success: true });
+            return { brokerId, success: true };
           } else {
-            results.push({ brokerId, success: false, error: result.error });
+            return { brokerId, success: false, error: result.error };
           }
         } catch (err: any) {
-          results.push({ brokerId, success: false, error: err.message });
+          return { brokerId, success: false, error: err.message };
         }
-      }
+      });
+
+      const results = await Promise.all(gttPromises);
 
       const failedCount = results.filter(r => !r.success).length;
       if (failedCount === results.length) {
