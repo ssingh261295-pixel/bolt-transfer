@@ -203,10 +203,15 @@ export function GTTOrders() {
 
     const deletePromises = Array.from(selectedOrders).map(async (orderId) => {
       const order = gttOrders.find(o => o.id.toString() === orderId);
-      if (!order) return { success: false };
+      if (!order) return { success: false, error: 'Order not found', orderId };
 
       try {
         const brokerId = order.broker_info?.id || selectedBrokerId;
+
+        if (!brokerId) {
+          return { success: false, error: 'No broker ID available', orderId };
+        }
+
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerId}&gtt_id=${order.id}`;
 
         const response = await fetch(apiUrl, {
@@ -217,10 +222,17 @@ export function GTTOrders() {
           },
         });
 
+        if (!response.ok) {
+          const error = await response.text();
+          console.error(`Failed to delete GTT ${order.id}:`, error);
+          return { success: false, error: `HTTP ${response.status}`, orderId };
+        }
+
         const result = await response.json();
-        return { success: result.success, orderId };
-      } catch (err) {
-        return { success: false, orderId };
+        return { success: result.success === true, orderId, error: result.error };
+      } catch (err: any) {
+        console.error(`Error deleting GTT ${order.id}:`, err);
+        return { success: false, orderId, error: err.message || 'Network error' };
       }
     });
 
@@ -235,7 +247,8 @@ export function GTTOrders() {
       setTimeout(() => setDeleteMessage(''), 5000);
       await loadGTTOrders();
     } else {
-      setDeleteError('Failed to delete GTT orders.');
+      const firstError = results.find(r => !r.success)?.error || 'Unknown error';
+      setDeleteError(`Failed to delete GTT orders: ${firstError}`);
       setTimeout(() => setDeleteError(''), 5000);
     }
   };
