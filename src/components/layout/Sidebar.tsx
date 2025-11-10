@@ -42,8 +42,9 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const adminMenuItem = { id: 'admin', label: 'Admin Panel', icon: Shield };
   const settingsMenuItem = { id: 'settings', label: 'Settings', icon: Settings };
 
-  const isAdmin = profile?.is_admin === true;
+  const isAdmin = Boolean(profile?.is_admin);
   console.log('Sidebar - Computed isAdmin:', isAdmin);
+  console.log('Sidebar - Boolean conversion:', profile?.is_admin, '->', isAdmin);
 
   const menuItems = isAdmin
     ? [...baseMenuItems, adminMenuItem, settingsMenuItem]

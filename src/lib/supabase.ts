@@ -19,11 +19,11 @@ export type Profile = {
   full_name: string | null;
   phone: string | null;
   plan_type: 'pro';
-  trial_ends_at: string;
+  trial_ends_at: string | null;
   created_at: string;
   updated_at: string;
-  is_admin: boolean;
-  account_status: 'pending' | 'active' | 'disabled';
+  is_admin: boolean | null;
+  account_status: 'pending' | 'active' | 'disabled' | null;
   approved_at: string | null;
   approved_by: string | null;
 };

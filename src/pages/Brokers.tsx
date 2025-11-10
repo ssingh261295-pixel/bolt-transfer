@@ -548,7 +548,10 @@ export function Brokers() {
             <div key={broker.id} className="bg-white rounded-xl border border-gray-200 p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="text-3xl">{brokerInfo?.logo}</div>
+                  <div className="relative">
+                    <div className="text-3xl">{brokerInfo?.logo}</div>
+                    <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${broker.is_active && !isTokenExpired ? 'bg-green-500' : 'bg-gray-400'}`} />
+                  </div>
                   <div>
                     <h3 className="font-semibold text-gray-900">
                       {broker.account_holder_name || broker.account_name || brokerInfo?.label}
