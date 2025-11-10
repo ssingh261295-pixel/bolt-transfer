@@ -44,6 +44,7 @@ export function Positions() {
         )
       `)
       .eq('user_id', user?.id)
+      .neq('quantity', 0)
       .order('created_at', { ascending: false });
 
     if (data) {
