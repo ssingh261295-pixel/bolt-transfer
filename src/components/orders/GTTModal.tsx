@@ -285,24 +285,49 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       const exchangeToUse = exchangeValue || exchange;
       const instrumentKey = `${exchangeToUse}:${symbolToUse}`;
       const brokerId = selectedBrokerIds[0] || brokerConnectionId;
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${brokerId}&instruments=${instrumentKey}`;
+
+      if (!brokerId) {
+        console.error('No broker ID available for LTP fetch');
+        return null;
+      }
+
+      if (!session?.access_token) {
+        console.error('No session token available for LTP fetch');
+        return null;
+      }
+
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${brokerId}&instruments=${encodeURIComponent(instrumentKey)}`;
+
+      console.log('Fetching LTP for:', instrumentKey, 'Broker:', brokerId);
 
       const response = await fetch(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
       });
 
       const data = await response.json();
 
+      console.log('LTP Response:', data);
+
+      if (!response.ok) {
+        console.error('LTP fetch failed:', response.status, data);
+        setError(data.error || 'Failed to fetch live price');
+        return null;
+      }
+
       if (data.success && data.data && data.data[instrumentKey]) {
         const ltp = data.data[instrumentKey].last_price;
+        console.log('LTP fetched successfully:', ltp);
         setCurrentLTP(ltp);
         return ltp;
+      } else {
+        console.warn('No LTP data in response:', data);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch LTP:', err);
+      setError('Failed to fetch live price. Please try again.');
     } finally {
       setFetchingLTP(false);
     }
