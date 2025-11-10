@@ -203,6 +203,14 @@ export function GTTOrders() {
 
     if (!confirm(`Are you sure you want to delete ${selectedOrders.size} GTT order(s)?`)) return;
 
+    console.log('Starting bulk delete:', {
+      ordersCount: selectedOrders.size,
+      hasSession: !!session,
+      hasToken: !!session?.access_token,
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+      hasAnonKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
+    });
+
     const deletePromises = Array.from(selectedOrders).map(async (orderId) => {
       const order = gttOrders.find(o => o.id.toString() === orderId);
       if (!order) return { success: false, error: 'Order not found', orderId };
@@ -214,16 +222,21 @@ export function GTTOrders() {
           return { success: false, error: 'No broker ID available', orderId };
         }
 
+        if (!session?.access_token) {
+          console.error('No session access token available');
+          return { success: false, error: 'Not authenticated', orderId };
+        }
+
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerId}&gtt_id=${order.id}`;
 
-        console.log(`Deleting GTT ${order.id} with broker ${brokerId}`);
+        console.log(`Deleting GTT ${order.id} with broker ${brokerId}, URL: ${apiUrl}`);
 
         const response = await fetch(apiUrl, {
           method: 'DELETE',
           headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
+            'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
         });
 
