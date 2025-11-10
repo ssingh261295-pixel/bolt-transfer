@@ -54,13 +54,26 @@ export function Brokers() {
       .eq('user_id', user?.id)
       .order('created_at', { ascending: false });
 
+    console.log('=== LOADING BROKERS ===');
+    console.log('Raw broker data from DB:', data);
+
     if (data) {
       // Check for expired tokens and update is_active status
       const now = new Date();
+      console.log('Current time:', now);
+
       const brokersWithExpiry = data.map(broker => {
         if (broker.token_expires_at && broker.broker_name === 'zerodha') {
           const expiryDate = new Date(broker.token_expires_at);
           const isExpired = now >= expiryDate;
+
+          console.log(`Broker ${broker.id.substring(0, 8)}:`, {
+            is_active: broker.is_active,
+            token_expires_at: broker.token_expires_at,
+            expiryDate,
+            isExpired,
+            willUpdate: isExpired && broker.is_active
+          });
 
           // If token is expired but is_active is true, update it
           if (isExpired && broker.is_active) {
@@ -76,6 +89,7 @@ export function Brokers() {
         return broker;
       });
 
+      console.log('Processed brokers:', brokersWithExpiry);
       setBrokers(brokersWithExpiry);
     }
   };
