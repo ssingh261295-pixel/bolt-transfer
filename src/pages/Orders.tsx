@@ -43,8 +43,8 @@ export function Orders() {
       .order('created_at', { ascending: false });
 
     if (filter === 'all') {
-      // Show only active orders (not completed, rejected, or cancelled)
-      query = query.in('status', ['PENDING', 'TRIGGER PENDING', 'OPEN']);
+      // Show only active orders (exclude completed, rejected, cancelled)
+      query = query.not('status', 'in', '("COMPLETE","REJECTED","CANCELLED")');
     } else {
       query = query.eq('status', filter.toUpperCase());
     }
