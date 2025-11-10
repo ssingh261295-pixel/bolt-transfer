@@ -19,6 +19,8 @@ export function GTTOrders() {
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [deleteMessage, setDeleteMessage] = useState('');
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -227,11 +229,14 @@ export function GTTOrders() {
     const failedCount = results.filter(r => !r.success).length;
 
     if (successCount > 0) {
-      alert(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
+      setDeleteMessage(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
+      setDeleteError('');
       setSelectedOrders(new Set());
+      setTimeout(() => setDeleteMessage(''), 5000);
       await loadGTTOrders();
     } else {
-      alert('Failed to delete GTT orders.');
+      setDeleteError('Failed to delete GTT orders.');
+      setTimeout(() => setDeleteError(''), 5000);
     }
   };
 
@@ -253,12 +258,16 @@ export function GTTOrders() {
       const result = await response.json();
 
       if (result.success) {
+        setDeleteMessage('Successfully deleted GTT order');
+        setTimeout(() => setDeleteMessage(''), 5000);
         await loadGTTOrders();
       } else {
-        alert('Failed to delete GTT order: ' + result.error);
+        setDeleteError('Failed to delete GTT order: ' + result.error);
+        setTimeout(() => setDeleteError(''), 5000);
       }
     } catch (err: any) {
-      alert('Failed to delete GTT order: ' + err.message);
+      setDeleteError('Failed to delete GTT order: ' + err.message);
+      setTimeout(() => setDeleteError(''), 5000);
     }
   };
 
@@ -312,6 +321,18 @@ export function GTTOrders() {
           </button>
         </div>
       </div>
+
+      {deleteMessage && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <p className="text-sm text-green-800 font-medium">{deleteMessage}</p>
+        </div>
+      )}
+
+      {deleteError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-sm text-red-800 font-medium">{deleteError}</p>
+        </div>
+      )}
 
       {selectedOrders.size > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
