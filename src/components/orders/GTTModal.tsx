@@ -22,7 +22,9 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
   const [exchange, setExchange] = useState(initialExchange || 'NFO');
   const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>('BUY');
   const [gttType, setGttType] = useState<'single' | 'two-leg'>('single');
-  const [selectedBrokerIds, setSelectedBrokerIds] = useState<string[]>([brokerConnectionId]);
+  const [selectedBrokerIds, setSelectedBrokerIds] = useState<string[]>(
+    brokerConnectionId && brokerConnectionId !== 'all' ? [brokerConnectionId] : []
+  );
 
   // Leg 1 (Stoploss for OCO, single order for Single)
   const [triggerPrice1, setTriggerPrice1] = useState('');
@@ -98,6 +100,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       if (interval) clearInterval(interval);
     };
   }, [isOpen, selectedInstrument, selectedBrokerIds]);
+
+  useEffect(() => {
+    if (!editingGTT && allBrokers && allBrokers.length > 0 && selectedBrokerIds.length === 0) {
+      setSelectedBrokerIds([allBrokers[0].id]);
+    }
+  }, [allBrokers]);
 
   useEffect(() => {
     const setupGTT = async () => {

@@ -21,6 +21,12 @@ export function GTTOrders() {
   }, [user]);
 
   useEffect(() => {
+    if (brokers.length > 0 && (!selectedBrokerId || selectedBrokerId === '')) {
+      setSelectedBrokerId(brokers[0].id);
+    }
+  }, [brokers]);
+
+  useEffect(() => {
     if (selectedBrokerId) {
       loadGTTOrders();
     }
@@ -36,9 +42,6 @@ export function GTTOrders() {
 
     if (data && data.length > 0) {
       setBrokers(data);
-      if (!selectedBrokerId || selectedBrokerId === '') {
-        setSelectedBrokerId('all');
-      }
     }
   };
 
@@ -48,8 +51,7 @@ export function GTTOrders() {
     setLoading(true);
     try {
       if (selectedBrokerId === 'all') {
-        const allOrders: any[] = [];
-        for (const broker of brokers) {
+        const fetchPromises = brokers.map(async (broker) => {
           try {
             const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${broker.id}`;
             const response = await fetch(apiUrl, {
@@ -60,7 +62,7 @@ export function GTTOrders() {
             });
             const result = await response.json();
             if (result.success && result.data) {
-              const ordersWithBroker = result.data.map((order: any) => ({
+              return result.data.map((order: any) => ({
                 ...order,
                 broker_info: {
                   id: broker.id,
@@ -69,12 +71,16 @@ export function GTTOrders() {
                   client_id: broker.client_id
                 }
               }));
-              allOrders.push(...ordersWithBroker);
             }
+            return [];
           } catch (err) {
             console.error(`Failed to fetch GTT orders for broker ${broker.id}:`, err);
+            return [];
           }
-        }
+        });
+
+        const results = await Promise.all(fetchPromises);
+        const allOrders = results.flat();
         setGttOrders(allOrders);
       } else {
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${selectedBrokerId}`;
