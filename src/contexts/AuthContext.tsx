@@ -23,6 +23,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log('=== FETCHING PROFILE FOR USER ===', userId);
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -30,7 +32,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching profile:', error);
+        console.error('!!! Error fetching profile:', error);
+        return null;
+      }
+
+      if (!data) {
+        console.warn('!!! No profile data returned for user:', userId);
         return null;
       }
 
@@ -43,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return data;
     } catch (err) {
-      console.error('Exception fetching profile:', err);
+      console.error('!!! Exception fetching profile:', err);
       return null;
     }
   };
@@ -58,10 +65,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       (async () => {
+        console.log('=== INITIAL SESSION CHECK ===', session ? 'Has session' : 'No session');
+        console.log('User ID:', session?.user?.id);
+        console.log('User Email:', session?.user?.email);
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
           const profileData = await fetchProfile(session.user.id);
+          console.log('Profile set to:', profileData);
           setProfile(profileData);
         }
         setLoading(false);
