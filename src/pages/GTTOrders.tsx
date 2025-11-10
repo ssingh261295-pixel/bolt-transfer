@@ -216,11 +216,14 @@ export function GTTOrders() {
 
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerId}&gtt_id=${order.id}`;
 
+        console.log(`Deleting GTT ${order.id} with broker ${brokerId}`);
+
         const response = await fetch(apiUrl, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${session?.access_token}`,
             'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
           },
         });
 
@@ -273,6 +276,7 @@ export function GTTOrders() {
         headers: {
           'Authorization': `Bearer ${session?.access_token}`,
           'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
         },
       });
 
