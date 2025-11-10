@@ -20,10 +20,14 @@ interface SidebarProps {
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { signOut, profile } = useAuth();
 
-  console.log('Sidebar - Profile:', profile);
-  console.log('Sidebar - Is Admin:', profile?.is_admin);
-  console.log('Sidebar - Is Admin Type:', typeof profile?.is_admin);
-  console.log('Sidebar - Is Admin Strict Check:', profile?.is_admin === true);
+  console.log('=== SIDEBAR DEBUG ===');
+  console.log('Profile:', profile);
+  console.log('Profile keys:', profile ? Object.keys(profile) : 'null');
+  console.log('Is Admin value:', profile?.is_admin);
+  console.log('Is Admin Type:', typeof profile?.is_admin);
+  console.log('Is Admin Strict Check:', profile?.is_admin === true);
+  console.log('Full profile JSON:', JSON.stringify(profile, null, 2));
+  console.log('====================');
 
   const baseMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },

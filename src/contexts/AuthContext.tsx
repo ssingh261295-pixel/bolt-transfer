@@ -22,19 +22,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (error) {
-      console.error('Error fetching profile:', error);
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return null;
+      }
+
+      console.log('=== PROFILE FETCH DEBUG ===');
+      console.log('Fetched profile data:', data);
+      console.log('Is Admin:', data?.is_admin);
+      console.log('Is Admin Type:', typeof data?.is_admin);
+      console.log('Is Admin Strict:', data?.is_admin === true);
+      console.log('==========================');
+
+      return data;
+    } catch (err) {
+      console.error('Exception fetching profile:', err);
       return null;
     }
-
-    console.log('Fetched profile data:', data);
-    return data;
   };
 
   const refreshProfile = async () => {
