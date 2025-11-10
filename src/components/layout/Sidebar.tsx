@@ -22,6 +22,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
   console.log('Sidebar - Profile:', profile);
   console.log('Sidebar - Is Admin:', profile?.is_admin);
+  console.log('Sidebar - Is Admin Type:', typeof profile?.is_admin);
+  console.log('Sidebar - Is Admin Strict Check:', profile?.is_admin === true);
 
   const baseMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -36,7 +38,10 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const adminMenuItem = { id: 'admin', label: 'Admin Panel', icon: Shield };
   const settingsMenuItem = { id: 'settings', label: 'Settings', icon: Settings };
 
-  const menuItems = profile?.is_admin
+  const isAdmin = profile?.is_admin === true;
+  console.log('Sidebar - Computed isAdmin:', isAdmin);
+
+  const menuItems = isAdmin
     ? [...baseMenuItems, adminMenuItem, settingsMenuItem]
     : [...baseMenuItems, settingsMenuItem];
 
@@ -49,6 +54,9 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Helpme Trade</h1>
+            {isAdmin && (
+              <div className="text-xs text-purple-600 font-medium">Admin Mode</div>
+            )}
           </div>
         </div>
       </div>
