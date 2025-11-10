@@ -179,13 +179,60 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         if (instrument) {
           setSelectedInstrument(instrument);
           if (instrument.instrument_token) {
-            await fetchLTP(instrument.instrument_token, instrument.tradingsymbol, initialExchange || exchange);
+            const ltp = await fetchLTP(instrument.instrument_token, instrument.tradingsymbol, initialExchange || exchange);
+            if (ltp) {
+              prefillPricesBasedOnLTP(ltp);
+            }
           }
         }
       }
     };
     fetchInitialLTP();
   }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT]);
+
+  // Re-calculate prefilled values when GTT type or transaction type changes
+  useEffect(() => {
+    if (currentLTP && !editingGTT) {
+      prefillPricesBasedOnLTP(currentLTP);
+    }
+  }, [gttType, transactionType]);
+
+  const prefillPricesBasedOnLTP = (ltp: number) => {
+    if (gttType === 'single') {
+      // Single GTT: Pre-fill with +2% for trigger and price
+      const triggerValue = (ltp * 1.02).toFixed(2);
+      setTriggerPrice1(triggerValue);
+      setPrice1(triggerValue);
+      setTriggerPercent1('2');
+      setPricePercent1('2');
+    } else if (gttType === 'two-leg') {
+      if (transactionType === 'BUY') {
+        // Buy OCO: Stoploss at -2%, Target at +2%
+        const stoploss = (ltp * 0.98).toFixed(2);
+        const target = (ltp * 1.02).toFixed(2);
+        setTriggerPrice1(stoploss);
+        setPrice1(stoploss);
+        setTriggerPercent1('-2');
+        setPricePercent1('-2');
+        setTriggerPrice2(target);
+        setPrice2(target);
+        setTriggerPercent2('2');
+        setPricePercent2('2');
+      } else {
+        // Sell OCO: Stoploss at +2%, Target at -2%
+        const stoploss = (ltp * 1.02).toFixed(2);
+        const target = (ltp * 0.98).toFixed(2);
+        setTriggerPrice1(stoploss);
+        setPrice1(stoploss);
+        setTriggerPercent1('2');
+        setPricePercent1('2');
+        setTriggerPrice2(target);
+        setPrice2(target);
+        setTriggerPercent2('-2');
+        setPricePercent2('-2');
+      }
+    }
+  };
 
   const loadInstruments = async () => {
     try {
@@ -272,7 +319,10 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     setFilteredInstruments([]);
 
     if (instrument.instrument_token) {
-      await fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange);
+      const ltp = await fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange);
+      if (ltp) {
+        prefillPricesBasedOnLTP(ltp);
+      }
     }
   };
 
