@@ -88,33 +88,33 @@ export function Positions() {
     }
 
     setSyncMessage(`Syncing positions from ${brokers.length} account(s)...`);
+    let totalSynced = 0;
+    let successCount = 0;
+    let errors: string[] = [];
 
-    const syncPromises = brokers.map(async (broker) => {
-      const accountName = broker.account_holder_name
-        ? `${broker.account_holder_name} (${broker.client_id || 'No Client ID'})`
-        : broker.account_name || `Account (${broker.api_key.substring(0, 8)}...)`;
-
+    for (const broker of brokers) {
       try {
+        const accountName = broker.account_holder_name
+          ? `${broker.account_holder_name} (${broker.client_id || 'No Client ID'})`
+          : broker.account_name || `Account (${broker.api_key.substring(0, 8)}...)`;
         const result = await syncPositions(broker.id);
 
         if (result.success) {
+          totalSynced += result.synced || 0;
+          successCount++;
           console.log(`Successfully synced ${result.synced} positions from ${accountName}`);
-          return { success: true, synced: result.synced || 0, accountName };
         } else {
+          errors.push(`${accountName}: ${result.error}`);
           console.error(`Failed to sync ${accountName}:`, result.error);
-          return { success: false, error: `${accountName}: ${result.error}` };
         }
       } catch (err: any) {
+        const accountName = broker.account_holder_name
+          ? `${broker.account_holder_name} (${broker.client_id || 'No Client ID'})`
+          : broker.account_name || `Account (${broker.api_key.substring(0, 8)}...)`;
+        errors.push(`${accountName}: ${err.message || 'Unknown error'}`);
         console.error(`Error syncing ${accountName}:`, err);
-        return { success: false, error: `${accountName}: ${err.message || 'Unknown error'}` };
       }
-    });
-
-    const results = await Promise.all(syncPromises);
-
-    const totalSynced = results.reduce((sum, r) => sum + (r.synced || 0), 0);
-    const successCount = results.filter(r => r.success).length;
-    const errors = results.filter(r => !r.success).map(r => r.error!);
+    }
 
     if (errors.length === 0) {
       setSyncMessage(`✓ Synced ${totalSynced} positions from ${successCount} account(s) successfully`);

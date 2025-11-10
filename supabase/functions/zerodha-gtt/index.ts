@@ -6,9 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
-const connectionCache = new Map<string, { api_key: string; access_token: string; timestamp: number }>();
-const CONNECTION_CACHE_DURATION = 300000;
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -18,13 +15,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const url = new URL(req.url);
-    const brokerId = url.searchParams.get('broker_id');
-
-    if (!brokerId) {
-      throw new Error('Missing broker_id parameter');
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -41,34 +31,30 @@ Deno.serve(async (req: Request) => {
       throw new Error('Unauthorized');
     }
 
-    const now = Date.now();
-    const cacheKey = `${user.id}:${brokerId}`;
-    let brokerConnection = connectionCache.get(cacheKey);
+    const url = new URL(req.url);
+    const brokerId = url.searchParams.get('broker_id');
 
-    if (!brokerConnection || (now - brokerConnection.timestamp) > CONNECTION_CACHE_DURATION) {
-      const { data } = await supabase
-        .from('broker_connections')
-        .select('api_key, access_token')
-        .eq('id', brokerId)
-        .eq('user_id', user.id)
-        .maybeSingle();
+    if (!brokerId) {
+      throw new Error('Missing broker_id parameter');
+    }
 
-      if (!data || !data.access_token) {
-        throw new Error('Broker not connected or access token missing');
-      }
+    const { data: brokerConnection } = await supabase
+      .from('broker_connections')
+      .select('api_key, access_token')
+      .eq('id', brokerId)
+      .eq('user_id', user.id)
+      .maybeSingle();
 
-      brokerConnection = {
-        api_key: data.api_key,
-        access_token: data.access_token,
-        timestamp: now
-      };
-      connectionCache.set(cacheKey, brokerConnection);
+    if (!brokerConnection || !brokerConnection.access_token) {
+      throw new Error('Broker not connected or access token missing');
     }
 
     const authToken = `token ${brokerConnection.api_key}:${brokerConnection.access_token}`;
 
     if (req.method === 'GET') {
       const kiteUrl = 'https://api.kite.trade/gtt/triggers';
+
+      console.log('Fetching GTT orders from Zerodha...');
 
       const response = await fetch(kiteUrl, {
         method: 'GET',
@@ -80,6 +66,7 @@ Deno.serve(async (req: Request) => {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('Zerodha API error:', response.status, errorText);
         throw new Error(`Failed to fetch GTT orders: ${response.status}`);
       }
 
@@ -102,6 +89,8 @@ Deno.serve(async (req: Request) => {
     if (req.method === 'POST') {
       const body = await req.json();
       const kiteUrl = 'https://api.kite.trade/gtt/triggers';
+
+      console.log('Creating GTT order - raw body:', JSON.stringify(body, null, 2));
 
       const conditionData: any = {
         trigger_values: []
@@ -151,11 +140,16 @@ Deno.serve(async (req: Request) => {
 
       conditionData.trigger_values = conditionData.trigger_values.filter((v: any) => v !== undefined && v !== null);
 
+      // Ensure last_price is set and different from trigger price
       if (!conditionData.last_price || conditionData.last_price === conditionData.trigger_values[0]) {
+        // Add 5 to first trigger value to ensure they're different
         conditionData.last_price = conditionData.trigger_values[0] + 5;
       }
 
       const validOrders = ordersData.filter((order: any) => order && Object.keys(order).length > 0);
+
+      console.log('Condition data:', JSON.stringify(conditionData, null, 2));
+      console.log('Orders data:', JSON.stringify(validOrders, null, 2));
 
       const gttType = body.type || 'single';
 
@@ -164,6 +158,9 @@ Deno.serve(async (req: Request) => {
       formData.append('condition', JSON.stringify(conditionData));
       formData.append('orders', JSON.stringify(validOrders));
 
+      const formDataString = formData.toString();
+      console.log('Complete form data being sent to Zerodha:', formDataString);
+
       const response = await fetch(kiteUrl, {
         method: 'POST',
         headers: {
@@ -171,18 +168,22 @@ Deno.serve(async (req: Request) => {
           'X-Kite-Version': '3',
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: formData.toString(),
+        body: formDataString,
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('Zerodha API error - Full response:', response.status, errorText);
+
         let errorDetail = errorText;
         try {
           const errorJson = JSON.parse(errorText);
+          console.error('Parsed error JSON:', errorJson);
           errorDetail = errorJson.message || JSON.stringify(errorJson, null, 2);
         } catch (e) {
-          // ignore
+          console.error('Could not parse error as JSON');
         }
+
         throw new Error(`Zerodha API Error (${response.status}): ${errorDetail}`);
       }
 
@@ -212,6 +213,8 @@ Deno.serve(async (req: Request) => {
 
       const kiteUrl = `https://api.kite.trade/gtt/triggers/${gttId}`;
 
+      console.log('Modifying GTT order - raw body:', JSON.stringify(body, null, 2));
+
       const conditionData: any = {
         trigger_values: []
       };
@@ -260,11 +263,16 @@ Deno.serve(async (req: Request) => {
 
       conditionData.trigger_values = conditionData.trigger_values.filter((v: any) => v !== undefined && v !== null);
 
+      // Ensure last_price is set and different from trigger price
       if (!conditionData.last_price || conditionData.last_price === conditionData.trigger_values[0]) {
+        // Add 5 to first trigger value to ensure they're different
         conditionData.last_price = conditionData.trigger_values[0] + 5;
       }
 
       const validOrders = ordersData.filter((order: any) => order && Object.keys(order).length > 0);
+
+      console.log('Condition data:', JSON.stringify(conditionData, null, 2));
+      console.log('Orders data:', JSON.stringify(validOrders, null, 2));
 
       const gttType = body.type || 'single';
 
@@ -273,6 +281,9 @@ Deno.serve(async (req: Request) => {
       formData.append('condition', JSON.stringify(conditionData));
       formData.append('orders', JSON.stringify(validOrders));
 
+      const formDataString = formData.toString();
+      console.log('Complete form data being sent to Zerodha for modify:', formDataString);
+
       const response = await fetch(kiteUrl, {
         method: 'PUT',
         headers: {
@@ -280,18 +291,22 @@ Deno.serve(async (req: Request) => {
           'X-Kite-Version': '3',
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: formData.toString(),
+        body: formDataString,
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('Zerodha API error:', response.status, errorText);
+
         let errorDetail = errorText;
         try {
           const errorJson = JSON.parse(errorText);
+          console.error('Parsed error JSON:', errorJson);
           errorDetail = errorJson.message || JSON.stringify(errorJson, null, 2);
         } catch (e) {
-          // ignore
+          console.error('Could not parse error as JSON');
         }
+
         throw new Error(`Failed to modify GTT: ${errorDetail}`);
       }
 
@@ -319,6 +334,8 @@ Deno.serve(async (req: Request) => {
       }
       const kiteUrl = `https://api.kite.trade/gtt/triggers/${gttId}`;
 
+      console.log('Deleting GTT order:', gttId);
+
       const response = await fetch(kiteUrl, {
         method: 'DELETE',
         headers: {
@@ -329,6 +346,7 @@ Deno.serve(async (req: Request) => {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('Zerodha API error:', response.status, errorText);
         throw new Error(`Failed to delete GTT: ${errorText}`);
       }
 
@@ -351,10 +369,12 @@ Deno.serve(async (req: Request) => {
     throw new Error('Method not allowed');
 
   } catch (error) {
+    console.error('Error in zerodha-gtt function:', error);
     return new Response(
       JSON.stringify({
         success: false,
         error: error.message || 'Unknown error occurred',
+        details: error.toString()
       }),
       {
         status: 400,
