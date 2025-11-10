@@ -7,7 +7,8 @@ import {
   List,
   Settings,
   LogOut,
-  Target
+  Target,
+  Shield
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -19,7 +20,7 @@ interface SidebarProps {
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { signOut, profile } = useAuth();
 
-  const menuItems = [
+  const baseMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'brokers', label: 'Brokers', icon: LinkIcon },
     { id: 'strategies', label: 'Strategies', icon: TrendingUp },
@@ -27,8 +28,14 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     { id: 'gtt', label: 'GTT Orders', icon: Target },
     { id: 'positions', label: 'Positions', icon: LineChart },
     { id: 'watchlist', label: 'Watchlist', icon: List },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ];
+
+  const adminMenuItem = { id: 'admin', label: 'Admin Panel', icon: Shield };
+  const settingsMenuItem = { id: 'settings', label: 'Settings', icon: Settings };
+
+  const menuItems = profile?.is_admin
+    ? [...baseMenuItems, adminMenuItem, settingsMenuItem]
+    : [...baseMenuItems, settingsMenuItem];
 
   return (
     <div className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen">

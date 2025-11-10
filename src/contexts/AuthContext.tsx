@@ -90,11 +90,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      return { error: error as Error | null };
+
+      if (error) {
+        return { error: error as Error };
+      }
+
+      if (data.user) {
+        const profileData = await fetchProfile(data.user.id);
+
+        if (profileData) {
+          if (profileData.account_status === 'pending') {
+            await supabase.auth.signOut();
+            return { error: new Error('Your account is pending approval. Please wait for admin activation.') };
+          }
+
+          if (profileData.account_status === 'disabled') {
+            await supabase.auth.signOut();
+            return { error: new Error('Your account has been disabled. Please contact support.') };
+          }
+        }
+      }
+
+      return { error: null };
     } catch (error) {
       return { error: error as Error };
     }

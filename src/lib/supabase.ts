@@ -22,6 +22,10 @@ export type Profile = {
   trial_ends_at: string;
   created_at: string;
   updated_at: string;
+  is_admin: boolean;
+  account_status: 'pending' | 'active' | 'disabled';
+  approved_at: string | null;
+  approved_by: string | null;
 };
 
 export type BrokerConnection = {

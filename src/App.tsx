@@ -10,6 +10,7 @@ import { Positions } from './pages/Positions';
 import { Watchlist } from './pages/Watchlist';
 import { Settings } from './pages/Settings';
 import { ZerodhaCallback } from './pages/ZerodhaCallback';
+import { AdminPanel } from './pages/AdminPanel';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 
@@ -57,6 +58,8 @@ function AppContent() {
         return <Positions />;
       case 'watchlist':
         return <Watchlist />;
+      case 'admin':
+        return <AdminPanel />;
       case 'settings':
         return <Settings />;
       default:
