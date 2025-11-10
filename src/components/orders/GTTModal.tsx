@@ -383,28 +383,65 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       };
 
       if (gttType === 'two-leg') {
-        gttData['condition[trigger_values][0]'] = parseFloat(triggerPrice1);
-        gttData['condition[trigger_values][1]'] = parseFloat(triggerPrice2);
+        const trigger1 = parseFloat(triggerPrice1);
+        const trigger2 = parseFloat(triggerPrice2);
 
-        gttData['orders[1][exchange]'] = exchange;
-        gttData['orders[1][tradingsymbol]'] = symbol;
-        gttData['orders[1][transaction_type]'] = transactionType;
-        gttData['orders[1][quantity]'] = quantity2;
-        gttData['orders[1][order_type]'] = orderType2;
-        gttData['orders[1][product]'] = product2;
+        // Zerodha requires trigger_values in ascending order (lower price first)
+        const sortedTriggers = [trigger1, trigger2].sort((a, b) => a - b);
 
-        if (!price2) {
-          throw new Error('Please enter limit price for order 2');
+        gttData['condition[trigger_values][0]'] = sortedTriggers[0];
+        gttData['condition[trigger_values][1]'] = sortedTriggers[1];
+
+        // Determine which order corresponds to which trigger
+        // If trigger1 is the lower value, order[0] triggers first, otherwise order[1] triggers first
+        const order1TriggersFirst = trigger1 === sortedTriggers[0];
+
+        if (order1TriggersFirst) {
+          // Order 0: First trigger (lower price)
+          gttData['orders[0][price]'] = parseFloat(price1);
+
+          // Order 1: Second trigger (higher price)
+          gttData['orders[1][exchange]'] = exchange;
+          gttData['orders[1][tradingsymbol]'] = symbol;
+          gttData['orders[1][transaction_type]'] = transactionType;
+          gttData['orders[1][quantity]'] = quantity2;
+          gttData['orders[1][order_type]'] = orderType2;
+          gttData['orders[1][product]'] = product2;
+
+          if (!price2) {
+            throw new Error('Please enter limit price for order 2');
+          }
+          gttData['orders[1][price]'] = parseFloat(price2);
+        } else {
+          // Order 0: Second trigger (higher price - using price2)
+          gttData['orders[0][price]'] = parseFloat(price2);
+
+          // Order 1: First trigger (lower price - using price1)
+          gttData['orders[1][exchange]'] = exchange;
+          gttData['orders[1][tradingsymbol]'] = symbol;
+          gttData['orders[1][transaction_type]'] = transactionType;
+          gttData['orders[1][quantity]'] = quantity1;
+          gttData['orders[1][order_type]'] = orderType1;
+          gttData['orders[1][product]'] = product1;
+
+          if (!price1) {
+            throw new Error('Please enter limit price for order 1');
+          }
+          gttData['orders[1][price]'] = parseFloat(price1);
+
+          // Swap quantities if needed
+          gttData['orders[0][quantity]'] = quantity2;
         }
-        gttData['orders[1][price]'] = parseFloat(price2);
       } else {
         gttData['condition[trigger_values][0]'] = parseFloat(triggerPrice1);
       }
 
-      if (!price1) {
-        throw new Error('Please enter limit price for order 1');
+      if (gttType !== 'two-leg') {
+        if (!price1) {
+          throw new Error('Please enter limit price for order 1');
+        }
+        gttData['orders[0][price]'] = parseFloat(price1);
       }
-      gttData['orders[0][price]'] = parseFloat(price1);
 
       const firstTriggerValue = gttData['condition[trigger_values][0]'];
       let lastPrice = ltp || selectedInstrument.last_price;
