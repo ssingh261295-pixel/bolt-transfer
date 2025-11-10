@@ -543,6 +543,15 @@ export function Brokers() {
           const now = new Date();
           const tokenExpiresAt = broker.token_expires_at ? new Date(broker.token_expires_at) : null;
           const isTokenExpired = tokenExpiresAt ? now >= tokenExpiresAt : false;
+          const isConnected = broker.is_active && !isTokenExpired;
+
+          console.log(`Broker ${broker.id}:`, {
+            is_active: broker.is_active,
+            isTokenExpired,
+            isConnected,
+            tokenExpiresAt,
+            now
+          });
 
           return (
             <div key={broker.id} className="bg-white rounded-xl border border-gray-200 p-6">
@@ -550,7 +559,7 @@ export function Brokers() {
                 <div className="flex items-center gap-3">
                   <div className="relative">
                     <div className="text-3xl">{brokerInfo?.logo}</div>
-                    <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${broker.is_active && !isTokenExpired ? 'bg-green-500' : 'bg-gray-400'}`} />
+                    <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900">
@@ -563,7 +572,7 @@ export function Brokers() {
                       <p className="text-xs text-gray-500">{broker.account_name}</p>
                     )}
                     <p className="text-sm">
-                      {broker.is_active && !isTokenExpired ? (
+                      {isConnected ? (
                         <span className="flex items-center gap-1 text-green-600 font-medium">
                           <CheckCircle className="w-4 h-4" />
                           Connected
@@ -610,7 +619,7 @@ export function Brokers() {
                 </div>
               </div>
 
-              {broker.broker_name === 'zerodha' && broker.is_active && !isTokenExpired && (
+              {broker.broker_name === 'zerodha' && isConnected && (
                 <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                   <p className="text-xs text-yellow-800 mb-2">
                     Zerodha tokens expire daily. Reconnect if you experience authentication issues.
@@ -625,7 +634,7 @@ export function Brokers() {
                 </div>
               )}
 
-              {broker.broker_name === 'zerodha' && (isTokenExpired || !broker.is_active) && (
+              {broker.broker_name === 'zerodha' && !isConnected && (
                 <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-xs text-red-800 mb-2 font-medium">
                     {isTokenExpired

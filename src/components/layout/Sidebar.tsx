@@ -64,6 +64,14 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             )}
           </div>
         </div>
+        {/* Debug Panel - Remove after testing */}
+        <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+          <div className="font-bold text-yellow-900">Debug:</div>
+          <div className="text-yellow-800">Profile: {profile ? 'Yes' : 'No'}</div>
+          <div className="text-yellow-800">is_admin: {String(profile?.is_admin)}</div>
+          <div className="text-yellow-800">isAdmin: {String(isAdmin)}</div>
+          <div className="text-yellow-800">Menu items: {menuItems.length}</div>
+        </div>
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
