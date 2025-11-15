@@ -15,9 +15,10 @@ export function Watchlist() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
-  const [allFOInstruments, setAllFOInstruments] = useState<any[]>([]);
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(brokerId);
 
@@ -44,6 +45,7 @@ export function Watchlist() {
         subscribe(tokens, 'full');
       }
     }
+    setCurrentPage(1);
   }, [isConnected, selectedWatchlist, subscribe]);
 
   const loadBrokerConnection = async () => {
@@ -179,30 +181,6 @@ export function Watchlist() {
     }
   };
 
-  const loadAllFOInstruments = async () => {
-    setSearching(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NFO`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-          },
-        }
-      );
-
-      const result = await response.json();
-      if (result.success) {
-        setAllFOInstruments(result.instruments);
-      }
-    } catch (error) {
-      console.error('Error loading F&O instruments:', error);
-    } finally {
-      setSearching(false);
-    }
-  };
-
   const addInstrumentToWatchlist = async (instrument: any) => {
     if (!selectedWatchlist) return;
 
@@ -248,56 +226,6 @@ export function Watchlist() {
     }
   };
 
-  const createAllFOWatchlist = async () => {
-    if (allFOInstruments.length === 0) {
-      await loadAllFOInstruments();
-    }
-
-    if (allFOInstruments.length === 0) {
-      setError('No F&O instruments available. Please try again.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError('');
-
-      const symbols = allFOInstruments.map(inst => ({
-        symbol: inst.tradingsymbol,
-        exchange: inst.exchange,
-        instrument_token: parseInt(inst.instrument_token),
-        name: inst.name,
-        instrument_type: inst.instrument_type,
-        expiry: inst.expiry,
-        strike: inst.strike,
-        lot_size: inst.lot_size,
-      }));
-
-      console.log(`Creating watchlist with ${symbols.length} instruments`);
-
-      const { error: createError } = await supabase.from('watchlists').insert({
-        user_id: user?.id,
-        name: 'All F&O Instruments',
-        symbols: symbols,
-      });
-
-      if (createError) {
-        console.error('Error creating all F&O watchlist:', createError);
-        setError(`Failed to create watchlist: ${createError.message}`);
-        return;
-      }
-
-      setShowCreateForm(false);
-      setAllFOInstruments([]);
-      await loadWatchlists();
-    } catch (err) {
-      console.error('Unexpected error:', err);
-      setError('Failed to create F&O watchlist');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const removeInstrumentFromWatchlist = async (instrumentToken: number) => {
     if (!selectedWatchlist) return;
 
@@ -338,24 +266,13 @@ export function Watchlist() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            <Plus className="w-5 h-5" />
-            Create Watchlist
-          </button>
-          <button
-            onClick={createAllFOWatchlist}
-            disabled={searching || loading}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Create a watchlist with all available F&O instruments"
-          >
-            <List className="w-5 h-5" />
-            {searching || loading ? 'Loading...' : 'All F&O'}
-          </button>
-        </div>
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >
+          <Plus className="w-5 h-5" />
+          Create Watchlist
+        </button>
       </div>
 
       {showCreateForm && (
@@ -505,22 +422,51 @@ export function Watchlist() {
               )}
 
               {Array.isArray(selectedWatchlist.symbols) && selectedWatchlist.symbols.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="text-left py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Symbol</th>
-                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Last</th>
-                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Chg</th>
-                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Chg%</th>
-                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">High</th>
-                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Low</th>
-                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Volume</th>
-                        <th className="py-2 px-3"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {selectedWatchlist.symbols.map((symbol: any, index: number) => {
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm text-gray-600">
+                      Showing {Math.min((currentPage - 1) * itemsPerPage + 1, selectedWatchlist.symbols.length)} - {Math.min(currentPage * itemsPerPage, selectedWatchlist.symbols.length)} of {selectedWatchlist.symbols.length} instruments
+                    </p>
+                    {selectedWatchlist.symbols.length > itemsPerPage && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <span className="px-3 py-1 text-sm text-gray-600">
+                          Page {currentPage} of {Math.ceil(selectedWatchlist.symbols.length / itemsPerPage)}
+                        </span>
+                        <button
+                          onClick={() => setCurrentPage(p => Math.min(Math.ceil(selectedWatchlist.symbols.length / itemsPerPage), p + 1))}
+                          disabled={currentPage >= Math.ceil(selectedWatchlist.symbols.length / itemsPerPage)}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-left py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Symbol</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Last</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Chg</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Chg%</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">High</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Low</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Volume</th>
+                          <th className="py-2 px-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {selectedWatchlist.symbols
+                          .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                          .map((symbol: any, index: number) => {
                         const ltp = symbol.instrument_token ? getLTP(symbol.instrument_token) : null;
                         const tick = symbol.instrument_token ? ticks.get(symbol.instrument_token) : null;
                         const price = ltp ?? symbol.price ?? 0;
@@ -575,9 +521,10 @@ export function Watchlist() {
                           </tr>
                         );
                       })}
-                    </tbody>
-                  </table>
-                </div>
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <p>No symbols in this watchlist</p>
