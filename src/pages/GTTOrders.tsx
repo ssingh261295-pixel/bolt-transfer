@@ -1,9 +1,8 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, RefreshCw, Edit2, Trash2, ArrowUpDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
-import { useRealtimePrice } from '../hooks/useRealtimePrice';
 
 type SortField = 'symbol' | 'trigger_price' | 'created_at' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -27,20 +26,6 @@ export function GTTOrders() {
   const [deleteTarget, setDeleteTarget] = useState<{ gttId?: number; brokerId?: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const symbolsForPrice = useMemo(() => {
-    return gttOrders.map(gtt => ({
-      symbol: gtt.condition?.tradingsymbol || '',
-      exchange: gtt.condition?.exchange || 'NSE',
-    })).filter(s => s.symbol);
-  }, [gttOrders]);
-
-  const { getPrice } = useRealtimePrice({
-    symbols: symbolsForPrice,
-    brokerId: selectedBrokerId === 'all' ? brokers[0]?.id : selectedBrokerId,
-    enabled: gttOrders.length > 0 && selectedBrokerId !== 'all' && selectedBrokerId !== '',
-    interval: 3000,
-  });
-
   useEffect(() => {
     if (user) {
       loadBrokers();
@@ -54,8 +39,8 @@ export function GTTOrders() {
   }, [brokers]);
 
   useEffect(() => {
-    if (selectedBrokerId && selectedBrokerId !== '' && session?.access_token) {
-      handleSync();
+    if (selectedBrokerId) {
+      loadGTTOrders();
     }
   }, [selectedBrokerId]);
 
@@ -72,110 +57,72 @@ export function GTTOrders() {
     }
   };
 
-  const loadGTTOrdersFromDB = async () => {
+  const loadGTTOrders = async (throwOnError = false) => {
     if (!selectedBrokerId || brokers.length === 0) return;
 
     setLoading(true);
     try {
       if (selectedBrokerId === 'all') {
-        // Load from database for all brokers
-        const { data, error } = await supabase
-          .from('gtt_orders')
-          .select(`
-            *,
-            broker_connections (
-              id,
-              account_name,
-              account_holder_name,
-              client_id
-            )
-          `)
-          .eq('user_id', user?.id)
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error('Failed to load GTT orders from database:', error);
-          setGttOrders([]);
-        } else {
-          // Transform to match Zerodha API structure for display
-          const transformed = (data || []).map((gtt: any) => ({
-            id: parseInt(gtt.trigger_id || '0'),
-            type: gtt.gtt_type === 'oco' ? 'two-leg' : 'single',
-            status: gtt.status,
-            created_at: gtt.created_at,
-            condition: {
-              tradingsymbol: gtt.symbol,
-              exchange: gtt.exchange,
-              trigger_values: gtt.gtt_type === 'oco'
-                ? [gtt.stop_loss, gtt.target].filter(v => v !== null)
-                : [gtt.trigger_price].filter(v => v !== null),
-              last_price: gtt.limit_price || gtt.trigger_price || 0,
-            },
-            orders: [{
-              transaction_type: gtt.transaction_type,
-              quantity: gtt.quantity,
-              price: gtt.limit_price,
-            }],
-            broker_info: {
-              id: gtt.broker_connections?.id,
-              account_name: gtt.broker_connections?.account_name,
-              account_holder_name: gtt.broker_connections?.account_holder_name,
-              client_id: gtt.broker_connections?.client_id,
+        const fetchPromises = brokers.map(async (broker) => {
+          try {
+            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${broker.id}`;
+            const response = await fetch(apiUrl, {
+              headers: {
+                'Authorization': `Bearer ${session?.access_token}`,
+                'Content-Type': 'application/json',
+              },
+            });
+            const result = await response.json();
+            if (result.success && result.data) {
+              return result.data.map((order: any) => ({
+                ...order,
+                broker_info: {
+                  id: broker.id,
+                  account_name: broker.account_name,
+                  account_holder_name: broker.account_holder_name,
+                  client_id: broker.client_id
+                }
+              }));
             }
-          }));
-          setGttOrders(sortGTTOrders(transformed));
-        }
+            return [];
+          } catch (err) {
+            console.error(`Failed to fetch GTT orders for broker ${broker.id}:`, err);
+            if (throwOnError) throw err;
+            return [];
+          }
+        });
+
+        const results = await Promise.all(fetchPromises);
+        const allOrders = results.flat();
+        setGttOrders(sortGTTOrders(allOrders));
       } else {
-        // Load from database for selected broker
-        const { data, error } = await supabase
-          .from('gtt_orders')
-          .select(`
-            *,
-            broker_connections (
-              id,
-              account_name,
-              account_holder_name,
-              client_id
-            )
-          `)
-          .eq('user_id', user?.id)
-          .eq('broker_connection_id', selectedBrokerId)
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error('Failed to load GTT orders from database:', error);
-          setGttOrders([]);
-        } else {
-          const transformed = (data || []).map((gtt: any) => ({
-            id: parseInt(gtt.trigger_id || '0'),
-            type: gtt.gtt_type === 'oco' ? 'two-leg' : 'single',
-            status: gtt.status,
-            created_at: gtt.created_at,
-            condition: {
-              tradingsymbol: gtt.symbol,
-              exchange: gtt.exchange,
-              trigger_values: gtt.gtt_type === 'oco'
-                ? [gtt.stop_loss, gtt.target].filter(v => v !== null)
-                : [gtt.trigger_price].filter(v => v !== null),
-              last_price: gtt.limit_price || gtt.trigger_price || 0,
-            },
-            orders: [{
-              transaction_type: gtt.transaction_type,
-              quantity: gtt.quantity,
-              price: gtt.limit_price,
-            }],
+        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${selectedBrokerId}`;
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        const result = await response.json();
+        if (result.success && result.data) {
+          const broker = brokers.find(b => b.id === selectedBrokerId);
+          const ordersWithBroker = result.data.map((order: any) => ({
+            ...order,
             broker_info: {
-              id: gtt.broker_connections?.id,
-              account_name: gtt.broker_connections?.account_name,
-              account_holder_name: gtt.broker_connections?.account_holder_name,
-              client_id: gtt.broker_connections?.client_id,
+              id: broker?.id,
+              account_name: broker?.account_name,
+              account_holder_name: broker?.account_holder_name,
+              client_id: broker?.client_id
             }
           }));
-          setGttOrders(sortGTTOrders(transformed));
+          setGttOrders(sortGTTOrders(ordersWithBroker));
+        } else {
+          setGttOrders([]);
         }
       }
     } catch (err) {
       console.error('Failed to load GTT orders:', err);
+      if (throwOnError) throw err;
       setGttOrders([]);
     } finally {
       setLoading(false);
@@ -230,47 +177,9 @@ export function GTTOrders() {
   }, [sortField, sortDirection]);
 
   const handleSync = async () => {
-    if (!session?.access_token) {
-      console.error('No session token available for sync');
-      return;
-    }
-
     setSyncing(true);
-    try {
-      console.log('Starting GTT sync for broker:', selectedBrokerId);
-      // Sync from Zerodha API to database
-      if (selectedBrokerId === 'all') {
-        const syncResults = await Promise.all(brokers.map(async (broker) => {
-          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${broker.id}&sync=true`;
-          const response = await fetch(apiUrl, {
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          const result = await response.json();
-          console.log(`Sync result for broker ${broker.id}:`, result);
-          return result;
-        }));
-        console.log('All brokers synced:', syncResults);
-      } else {
-        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${selectedBrokerId}&sync=true`;
-        const response = await fetch(apiUrl, {
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        const result = await response.json();
-        console.log('Sync result:', result);
-      }
-      // Reload from database after sync
-      await loadGTTOrdersFromDB();
-    } catch (err) {
-      console.error('Failed to sync GTT orders:', err);
-    } finally {
-      setSyncing(false);
-    }
+    await loadGTTOrders();
+    setSyncing(false);
   };
 
   const toggleOrderSelection = (orderId: string) => {
@@ -360,10 +269,16 @@ export function GTTOrders() {
 
     if (successCount > 0) {
       setSelectedOrders(new Set());
-      await loadGTTOrdersFromDB();
-      setDeleteMessage(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
-      setDeleteError('');
-      setTimeout(() => setDeleteMessage(''), 5000);
+      try {
+        await loadGTTOrders(true);
+        setDeleteMessage(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
+        setDeleteError('');
+        setTimeout(() => setDeleteMessage(''), 5000);
+      } catch (err: any) {
+        setDeleteMessage('');
+        setDeleteError(`Deleted ${successCount} order(s) but failed to refresh list. Please reload the page.`);
+        setTimeout(() => setDeleteError(''), 5000);
+      }
     } else {
       const firstError = results.find(r => !r.success)?.error || 'Unknown error';
       setDeleteError(`Failed to delete GTT orders: ${firstError}`);
@@ -401,9 +316,9 @@ export function GTTOrders() {
       const result = await response.json();
 
       if (result.success) {
-        await loadGTTOrdersFromDB();
         setDeleteMessage('Successfully deleted GTT order');
         setTimeout(() => setDeleteMessage(''), 5000);
+        await loadGTTOrders();
       } else {
         setDeleteError('Failed to delete GTT order: ' + result.error);
         setTimeout(() => setDeleteError(''), 5000);
@@ -665,15 +580,7 @@ export function GTTOrders() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
-                      {(() => {
-                        const realtimePrice = getPrice(gtt.condition?.tradingsymbol);
-                        const displayPrice = realtimePrice || gtt.condition?.last_price;
-                        return displayPrice ? (
-                          <span className={realtimePrice ? 'text-green-600 font-medium' : ''}>
-                            ₹{displayPrice.toFixed(2)}
-                          </span>
-                        ) : 'N/A';
-                      })()}
+                      ₹{gtt.condition?.last_price?.toFixed(2) || 'N/A'}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {quantity}

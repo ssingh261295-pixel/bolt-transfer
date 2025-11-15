@@ -62,129 +62,38 @@ Deno.serve(async (req: Request) => {
     const authToken = `token ${brokerConnection.api_key}:${brokerConnection.access_token}`;
 
     if (req.method === 'GET') {
-      const syncParam = url.searchParams.get('sync');
+      const kiteUrl = 'https://api.kite.trade/gtt/triggers';
 
-      if (syncParam === 'true') {
-        const kiteUrl = 'https://api.kite.trade/gtt/triggers';
+      console.log('Fetching GTT orders from Zerodha...');
 
-        console.log('Fetching GTT orders from Zerodha...');
+      const response = await fetch(kiteUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': authToken,
+          'X-Kite-Version': '3',
+        },
+      });
 
-        const response = await fetch(kiteUrl, {
-          method: 'GET',
-          headers: {
-            'Authorization': authToken,
-            'X-Kite-Version': '3',
-          },
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Zerodha API error:', response.status, errorText);
-          throw new Error(`Failed to fetch GTT orders: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const gttOrders = data.data || [];
-
-        const { data: existingGTTs } = await supabase
-          .from('gtt_orders')
-          .select('id, trigger_id')
-          .eq('broker_connection_id', brokerId)
-          .eq('user_id', user.id);
-
-        const zerodhaGTTIds = new Set(gttOrders.map((gtt: any) => gtt.id?.toString()));
-
-        if (existingGTTs && existingGTTs.length > 0) {
-          const gttIdsToDelete = existingGTTs
-            .filter(dbGtt => dbGtt.trigger_id && !zerodhaGTTIds.has(dbGtt.trigger_id))
-            .map(dbGtt => dbGtt.id);
-
-          if (gttIdsToDelete.length > 0) {
-            await supabase
-              .from('gtt_orders')
-              .delete()
-              .in('id', gttIdsToDelete);
-          }
-        }
-
-        if (gttOrders.length > 0) {
-          for (const gtt of gttOrders) {
-            const gttData = {
-              user_id: user.id,
-              broker_connection_id: brokerId,
-              symbol: gtt.condition?.tradingsymbol || '',
-              exchange: gtt.condition?.exchange || '',
-              transaction_type: gtt.orders?.[0]?.transaction_type || 'BUY',
-              quantity: gtt.orders?.[0]?.quantity || 0,
-              gtt_type: gtt.type === 'two-leg' ? 'oco' : 'single',
-              trigger_price: gtt.condition?.trigger_values?.[0] || null,
-              limit_price: gtt.orders?.[0]?.price || null,
-              stop_loss: gtt.type === 'two-leg' ? gtt.condition?.trigger_values?.[0] : null,
-              target: gtt.type === 'two-leg' ? gtt.condition?.trigger_values?.[1] : null,
-              status: gtt.status || 'active',
-              trigger_id: gtt.id?.toString() || null,
-              updated_at: new Date().toISOString(),
-            };
-
-            const { data: existingGTT } = await supabase
-              .from('gtt_orders')
-              .select('id')
-              .eq('broker_connection_id', brokerId)
-              .eq('trigger_id', gtt.id?.toString())
-              .maybeSingle();
-
-            if (existingGTT) {
-              await supabase
-                .from('gtt_orders')
-                .update(gttData)
-                .eq('id', existingGTT.id);
-            } else {
-              await supabase
-                .from('gtt_orders')
-                .insert(gttData);
-            }
-          }
-        }
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: gttOrders,
-            synced: true,
-          }),
-          {
-            headers: {
-              ...corsHeaders,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-      } else {
-        const { data: gttOrders, error: dbError } = await supabase
-          .from('gtt_orders')
-          .select('*')
-          .eq('broker_connection_id', brokerId)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        if (dbError) {
-          throw new Error(`Database error: ${dbError.message}`);
-        }
-
-        return new Response(
-          JSON.stringify({
-            success: true,
-            data: gttOrders || [],
-            fromDatabase: true,
-          }),
-          {
-            headers: {
-              ...corsHeaders,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Zerodha API error:', response.status, errorText);
+        throw new Error(`Failed to fetch GTT orders: ${response.status}`);
       }
+
+      const data = await response.json();
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: data.data || [],
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
     }
 
     if (req.method === 'POST') {
@@ -193,7 +102,9 @@ Deno.serve(async (req: Request) => {
 
       console.log('Creating GTT order - raw body:', JSON.stringify(body, null, 2));
 
-      const conditionData: any = { trigger_values: [] };
+      const conditionData: any = {
+        trigger_values: []
+      };
       const ordersData: any = [];
 
       Object.keys(body).forEach(key => {
@@ -221,7 +132,9 @@ Deno.serve(async (req: Request) => {
             if (match) {
               const orderIndex = parseInt(match[1]);
               const fieldName = match[2];
-              if (!ordersData[orderIndex]) ordersData[orderIndex] = {};
+              if (!ordersData[orderIndex]) {
+                ordersData[orderIndex] = {};
+              }
 
               if (fieldName === 'quantity') {
                 ordersData[orderIndex][fieldName] = parseInt(value);
@@ -284,31 +197,17 @@ Deno.serve(async (req: Request) => {
 
       const data = await response.json();
 
-      if (data.data && data.data.trigger_id) {
-        const gttData = {
-          user_id: user.id,
-          broker_connection_id: brokerId,
-          symbol: conditionData.tradingsymbol || '',
-          exchange: conditionData.exchange || '',
-          transaction_type: validOrders[0]?.transaction_type || 'BUY',
-          quantity: validOrders[0]?.quantity || 0,
-          gtt_type: gttType === 'two-leg' ? 'oco' : 'single',
-          trigger_price: conditionData.trigger_values?.[0] || null,
-          limit_price: validOrders[0]?.price || null,
-          stop_loss: gttType === 'two-leg' ? conditionData.trigger_values?.[0] : null,
-          target: gttType === 'two-leg' ? conditionData.trigger_values?.[1] : null,
-          status: 'active',
-          trigger_id: data.data.trigger_id?.toString() || null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        await supabase.from('gtt_orders').insert(gttData);
-      }
-
       return new Response(
-        JSON.stringify({ success: true, data: data.data }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          success: true,
+          data: data.data,
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+        }
       );
     }
 
@@ -316,13 +215,17 @@ Deno.serve(async (req: Request) => {
       const body = await req.json();
       const gttId = url.searchParams.get('gtt_id');
 
-      if (!gttId) throw new Error('Missing gtt_id parameter');
+      if (!gttId) {
+        throw new Error('Missing gtt_id parameter');
+      }
 
       const kiteUrl = `https://api.kite.trade/gtt/triggers/${gttId}`;
 
       console.log('Modifying GTT order - raw body:', JSON.stringify(body, null, 2));
 
-      const conditionData: any = { trigger_values: [] };
+      const conditionData: any = {
+        trigger_values: []
+      };
       const ordersData: any = [];
 
       Object.keys(body).forEach(key => {
@@ -350,7 +253,9 @@ Deno.serve(async (req: Request) => {
             if (match) {
               const orderIndex = parseInt(match[1]);
               const fieldName = match[2];
-              if (!ordersData[orderIndex]) ordersData[orderIndex] = {};
+              if (!ordersData[orderIndex]) {
+                ordersData[orderIndex] = {};
+              }
 
               if (fieldName === 'quantity') {
                 ordersData[orderIndex][fieldName] = parseInt(value);
@@ -413,43 +318,36 @@ Deno.serve(async (req: Request) => {
 
       const data = await response.json();
 
-      const gttUpdateData = {
-        symbol: conditionData.tradingsymbol || '',
-        exchange: conditionData.exchange || '',
-        transaction_type: validOrders[0]?.transaction_type || 'BUY',
-        quantity: validOrders[0]?.quantity || 0,
-        gtt_type: gttType === 'two-leg' ? 'oco' : 'single',
-        trigger_price: conditionData.trigger_values?.[0] || null,
-        limit_price: validOrders[0]?.price || null,
-        stop_loss: gttType === 'two-leg' ? conditionData.trigger_values?.[0] : null,
-        target: gttType === 'two-leg' ? conditionData.trigger_values?.[1] : null,
-        updated_at: new Date().toISOString(),
-      };
-
-      await supabase
-        .from('gtt_orders')
-        .update(gttUpdateData)
-        .eq('trigger_id', gttId)
-        .eq('broker_connection_id', brokerId)
-        .eq('user_id', user.id);
-
       return new Response(
-        JSON.stringify({ success: true, data: data.data }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          success: true,
+          data: data.data,
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+        }
       );
     }
 
     if (req.method === 'DELETE') {
       const gttId = url.searchParams.get('gtt_id');
 
-      if (!gttId) throw new Error('Missing gtt_id parameter');
+      if (!gttId) {
+        throw new Error('Missing gtt_id parameter');
+      }
       const kiteUrl = `https://api.kite.trade/gtt/triggers/${gttId}`;
 
       console.log('Deleting GTT order:', gttId);
 
       const response = await fetch(kiteUrl, {
         method: 'DELETE',
-        headers: { 'Authorization': authToken, 'X-Kite-Version': '3' },
+        headers: {
+          'Authorization': authToken,
+          'X-Kite-Version': '3',
+        },
       });
 
       if (!response.ok) {
@@ -460,16 +358,17 @@ Deno.serve(async (req: Request) => {
 
       const data = await response.json();
 
-      await supabase
-        .from('gtt_orders')
-        .delete()
-        .eq('trigger_id', gttId)
-        .eq('broker_connection_id', brokerId)
-        .eq('user_id', user.id);
-
       return new Response(
-        JSON.stringify({ success: true, data: data.data }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          success: true,
+          data: data.data,
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+        }
       );
     }
 
@@ -485,7 +384,10 @@ Deno.serve(async (req: Request) => {
       }),
       {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
       }
     );
   }

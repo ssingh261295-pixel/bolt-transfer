@@ -404,21 +404,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         gttData['condition[trigger_values][0]'] = sortedTriggers[0];
         gttData['condition[trigger_values][1]'] = sortedTriggers[1];
 
-        // For OCO, both legs are exit orders (opposite of the position)
-        const exitTransactionType = transactionType === 'BUY' ? 'SELL' : 'BUY';
-
         // Determine which order corresponds to which trigger
+        // If trigger1 is the lower value, order[0] triggers first, otherwise order[1] triggers first
         const order1TriggersFirst = trigger1 === sortedTriggers[0];
 
         if (order1TriggersFirst) {
-          // Order 0: First trigger (lower price - stoploss)
-          gttData['orders[0][transaction_type]'] = exitTransactionType;
+          // Order 0: First trigger (lower price)
           gttData['orders[0][price]'] = parseFloat(price1);
 
-          // Order 1: Second trigger (higher price - target)
+          // Order 1: Second trigger (higher price)
           gttData['orders[1][exchange]'] = exchange;
           gttData['orders[1][tradingsymbol]'] = symbol;
-          gttData['orders[1][transaction_type]'] = exitTransactionType;
+          gttData['orders[1][transaction_type]'] = transactionType;
           gttData['orders[1][quantity]'] = quantity2;
           gttData['orders[1][order_type]'] = orderType2;
           gttData['orders[1][product]'] = product2;
@@ -428,14 +425,13 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           }
           gttData['orders[1][price]'] = parseFloat(price2);
         } else {
-          // Order 0: Second trigger (higher price - target, using price2)
-          gttData['orders[0][transaction_type]'] = exitTransactionType;
+          // Order 0: Second trigger (higher price - using price2)
           gttData['orders[0][price]'] = parseFloat(price2);
 
-          // Order 1: First trigger (lower price - stoploss, using price1)
+          // Order 1: First trigger (lower price - using price1)
           gttData['orders[1][exchange]'] = exchange;
           gttData['orders[1][tradingsymbol]'] = symbol;
-          gttData['orders[1][transaction_type]'] = exitTransactionType;
+          gttData['orders[1][transaction_type]'] = transactionType;
           gttData['orders[1][quantity]'] = quantity1;
           gttData['orders[1][order_type]'] = orderType1;
           gttData['orders[1][product]'] = product1;
@@ -681,9 +677,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           {/* Transaction and Trigger Type */}
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                {gttType === 'two-leg' ? 'Position type (for exit orders)' : 'Transaction type'}
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Transaction type</label>
               <div className="flex gap-4">
                 <label className="flex items-center cursor-pointer">
                   <input
@@ -693,9 +687,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     onChange={(e) => setTransactionType(e.target.value as 'BUY')}
                     className="w-4 h-4 text-blue-600"
                   />
-                  <span className="ml-2 text-sm text-gray-900">
-                    {gttType === 'two-leg' ? 'Buy (will place SELL exit orders)' : 'Buy'}
-                  </span>
+                  <span className="ml-2 text-sm text-gray-900">Buy</span>
                 </label>
                 <label className="flex items-center cursor-pointer">
                   <input
@@ -705,16 +697,9 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     onChange={(e) => setTransactionType(e.target.value as 'SELL')}
                     className="w-4 h-4 text-blue-600"
                   />
-                  <span className="ml-2 text-sm text-gray-900">
-                    {gttType === 'two-leg' ? 'Sell (will place BUY exit orders)' : 'Sell'}
-                  </span>
+                  <span className="ml-2 text-sm text-gray-900">Sell</span>
                 </label>
               </div>
-              {gttType === 'two-leg' && (
-                <div className="mt-2 text-xs text-gray-600">
-                  Select your current position type. Both stoploss and target will be exit orders.
-                </div>
-              )}
             </div>
 
             <div>
