@@ -68,9 +68,10 @@ export function Dashboard() {
             supabase
               .from('gtt_orders')
               .select('*', { count: 'exact', head: false })
-              .eq('broker_connection_id', broker.id)
-              .eq('status', 'active'),
+              .eq('broker_connection_id', broker.id),
           ]);
+
+          console.log(`GTT Response for broker ${broker.id}:`, gttResponse);
 
           if (positionsResponse.ok) {
             const result = await positionsResponse.json();
@@ -85,7 +86,9 @@ export function Dashboard() {
               }, 0);
 
               const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;
-              const activeGtt = gttResponse.data?.length || 0;
+              const activeGtt = gttResponse.data?.filter((gtt: any) => gtt.status === 'active').length || 0;
+
+              console.log(`Broker ${broker.id} - Active GTT count:`, activeGtt, 'Total GTT:', gttResponse.data?.length);
 
               accountResults.push({
                 broker_id: broker.id,
@@ -215,7 +218,7 @@ export function Dashboard() {
 
               <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-green-100">Total Available Cash</h3>
+                  <h3 className="text-sm font-medium text-green-100">Total Opening Balance</h3>
                   <Wallet className="w-5 h-5 text-green-200" />
                 </div>
                 <p className="text-3xl font-bold">{formatCurrency(totalAvailableCash)}</p>
@@ -294,7 +297,7 @@ export function Dashboard() {
                     </div>
 
                     <div className="bg-green-50 rounded-lg p-4 border border-green-100">
-                      <p className="text-sm font-medium text-green-900 mb-1">Available Cash</p>
+                      <p className="text-sm font-medium text-green-900 mb-1">Opening Balance</p>
                       <p className="text-2xl font-bold text-green-600">
                         {formatCurrency(account.available_cash)}
                       </p>
