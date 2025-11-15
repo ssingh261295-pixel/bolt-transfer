@@ -742,7 +742,38 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="flex gap-4 mb-3">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  checked={product1 === 'NRML'}
+                  onChange={() => setProduct1('NRML')}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="ml-2 text-sm text-gray-900">NRML</span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  checked={product1 === 'MIS'}
+                  onChange={() => setProduct1('MIS')}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="ml-2 text-sm text-gray-900">MIS</span>
+              </label>
+              <label className="flex items-center cursor-pointer ml-auto">
+                <input
+                  type="radio"
+                  checked={orderType1 === 'LIMIT'}
+                  onChange={() => setOrderType1('LIMIT')}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="ml-2 text-sm text-gray-900">LIMIT</span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              {/* Trigger Price */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Trigger price</label>
                 <div className="flex gap-2 mb-2">
@@ -808,6 +839,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                 )}
               </div>
 
+              {/* Quantity */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Qty. {selectedInstrument?.lot_size && (
@@ -820,98 +852,78 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   type="number"
                   value={quantity1}
                   onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none mt-8"
                   min="1"
                   step={selectedInstrument?.lot_size || 1}
                   required
                 />
               </div>
-            </div>
 
-            <div className="flex gap-4 mb-3">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  checked={product1 === 'NRML'}
-                  onChange={() => setProduct1('NRML')}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <span className="ml-2 text-sm text-gray-900">NRML</span>
-              </label>
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  checked={product1 === 'MIS'}
-                  onChange={() => setProduct1('MIS')}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <span className="ml-2 text-sm text-gray-900">MIS</span>
-              </label>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
-              <div className="flex gap-2 mb-2">
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={!usePricePercent1}
-                    onChange={() => setUsePricePercent1(false)}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="ml-1 text-xs text-gray-700">Price</span>
-                </label>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={usePricePercent1}
-                    onChange={() => setUsePricePercent1(true)}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="ml-1 text-xs text-gray-700">%</span>
-                </label>
+              {/* Price */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
+                <div className="flex gap-2 mb-2">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={!usePricePercent1}
+                      onChange={() => setUsePricePercent1(false)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="ml-1 text-xs text-gray-700">Price</span>
+                  </label>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={usePricePercent1}
+                      onChange={() => setUsePricePercent1(true)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="ml-1 text-xs text-gray-700">%</span>
+                  </label>
+                </div>
+                {!usePricePercent1 ? (
+                  <div>
+                    <input
+                      type="number"
+                      step="0.05"
+                      value={price1}
+                      onChange={(e) => setPrice1(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder="0.00"
+                      required
+                    />
+                    {currentLTP && price1 && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        {calculatePercentFromLTP(price1)}% of LTP
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={pricePercent1}
+                      onChange={(e) => {
+                        setPricePercent1(e.target.value);
+                        if (currentLTP && e.target.value) {
+                          const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
+                          setPrice1(calculatedPrice.toFixed(2));
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder="2.5"
+                      required
+                    />
+                    {pricePercent1 && currentLTP && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        = ₹{(currentLTP * (1 + parseFloat(pricePercent1) / 100)).toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              {!usePricePercent1 ? (
-                <div>
-                  <input
-                    type="number"
-                    step="0.05"
-                    value={price1}
-                    onChange={(e) => setPrice1(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="0.00"
-                    required
-                  />
-                  {currentLTP && price1 && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      {calculatePercentFromLTP(price1)}% of LTP
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={pricePercent1}
-                    onChange={(e) => {
-                      setPricePercent1(e.target.value);
-                      if (currentLTP && e.target.value) {
-                        const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
-                        setPrice1(calculatedPrice.toFixed(2));
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    placeholder="2.5"
-                    required
-                  />
-                  {pricePercent1 && currentLTP && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      = ₹{(currentLTP * (1 + parseFloat(pricePercent1) / 100)).toFixed(2)}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
 
@@ -924,7 +936,38 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="flex gap-4 mb-3">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={product2 === 'NRML'}
+                    onChange={() => setProduct2('NRML')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-900">NRML</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={product2 === 'MIS'}
+                    onChange={() => setProduct2('MIS')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-900">MIS</span>
+                </label>
+                <label className="flex items-center cursor-pointer ml-auto">
+                  <input
+                    type="radio"
+                    checked={orderType2 === 'LIMIT'}
+                    onChange={() => setOrderType2('LIMIT')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-2 text-sm text-gray-900">LIMIT</span>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                {/* Trigger Price */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Trigger price</label>
                   <div className="flex gap-2 mb-2">
@@ -990,6 +1033,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   )}
                 </div>
 
+                {/* Quantity */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Qty. {selectedInstrument?.lot_size && (
@@ -1002,98 +1046,78 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     type="number"
                     value={quantity2}
                     onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none mt-8"
                     min="1"
                     step={selectedInstrument?.lot_size || 1}
                     required
                   />
                 </div>
-              </div>
 
-              <div className="flex gap-4 mb-3">
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={product2 === 'NRML'}
-                    onChange={() => setProduct2('NRML')}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="ml-2 text-sm text-gray-900">NRML</span>
-                </label>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={product2 === 'MIS'}
-                    onChange={() => setProduct2('MIS')}
-                    className="w-4 h-4 text-blue-600"
-                />
-                  <span className="ml-2 text-sm text-gray-900">MIS</span>
-                </label>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
-                <div className="flex gap-2 mb-2">
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={!usePricePercent2}
-                      onChange={() => setUsePricePercent2(false)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="ml-1 text-xs text-gray-700">Price</span>
-                  </label>
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={usePricePercent2}
-                      onChange={() => setUsePricePercent2(true)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="ml-1 text-xs text-gray-700">%</span>
-                  </label>
+                {/* Price */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
+                  <div className="flex gap-2 mb-2">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={!usePricePercent2}
+                        onChange={() => setUsePricePercent2(false)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="ml-1 text-xs text-gray-700">Price</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={usePricePercent2}
+                        onChange={() => setUsePricePercent2(true)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="ml-1 text-xs text-gray-700">%</span>
+                    </label>
+                  </div>
+                  {!usePricePercent2 ? (
+                    <div>
+                      <input
+                        type="number"
+                        step="0.05"
+                        value={price2}
+                        onChange={(e) => setPrice2(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="0.00"
+                        required
+                      />
+                      {currentLTP && price2 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {calculatePercentFromLTP(price2)}% of LTP
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={pricePercent2}
+                        onChange={(e) => {
+                          setPricePercent2(e.target.value);
+                          if (currentLTP && e.target.value) {
+                            const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
+                            setPrice2(calculatedPrice.toFixed(2));
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="2.5"
+                        required
+                      />
+                      {pricePercent2 && currentLTP && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          = ₹{(currentLTP * (1 + parseFloat(pricePercent2) / 100)).toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {!usePricePercent2 ? (
-                  <div>
-                    <input
-                      type="number"
-                      step="0.05"
-                      value={price2}
-                      onChange={(e) => setPrice2(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      placeholder="0.00"
-                      required
-                    />
-                    {currentLTP && price2 && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {calculatePercentFromLTP(price2)}% of LTP
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={pricePercent2}
-                      onChange={(e) => {
-                        setPricePercent2(e.target.value);
-                        if (currentLTP && e.target.value) {
-                          const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
-                          setPrice2(calculatedPrice.toFixed(2));
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      placeholder="2.5"
-                      required
-                    />
-                    {pricePercent2 && currentLTP && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        = ₹{(currentLTP * (1 + parseFloat(pricePercent2) / 100)).toFixed(2)}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           )}
