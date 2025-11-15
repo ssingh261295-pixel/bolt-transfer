@@ -62,38 +62,108 @@ Deno.serve(async (req: Request) => {
     const authToken = `token ${brokerConnection.api_key}:${brokerConnection.access_token}`;
 
     if (req.method === 'GET') {
-      const kiteUrl = 'https://api.kite.trade/gtt/triggers';
+      const syncParam = url.searchParams.get('sync');
 
-      console.log('Fetching GTT orders from Zerodha...');
+      if (syncParam === 'true') {
+        const kiteUrl = 'https://api.kite.trade/gtt/triggers';
 
-      const response = await fetch(kiteUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': authToken,
-          'X-Kite-Version': '3',
-        },
-      });
+        console.log('Fetching GTT orders from Zerodha...');
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Zerodha API error:', response.status, errorText);
-        throw new Error(`Failed to fetch GTT orders: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          data: data.data || [],
-        }),
-        {
+        const response = await fetch(kiteUrl, {
+          method: 'GET',
           headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json',
+            'Authorization': authToken,
+            'X-Kite-Version': '3',
           },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Zerodha API error:', response.status, errorText);
+          throw new Error(`Failed to fetch GTT orders: ${response.status}`);
         }
-      );
+
+        const data = await response.json();
+        const gttOrders = data.data || [];
+
+        if (gttOrders.length > 0) {
+          for (const gtt of gttOrders) {
+            const gttData = {
+              user_id: user.id,
+              broker_connection_id: brokerId,
+              symbol: gtt.condition?.tradingsymbol || '',
+              exchange: gtt.condition?.exchange || '',
+              transaction_type: gtt.orders?.[0]?.transaction_type || 'BUY',
+              quantity: gtt.orders?.[0]?.quantity || 0,
+              gtt_type: gtt.type === 'two-leg' ? 'oco' : 'single',
+              trigger_price: gtt.condition?.trigger_values?.[0] || null,
+              limit_price: gtt.orders?.[0]?.price || null,
+              stop_loss: gtt.type === 'two-leg' ? gtt.condition?.trigger_values?.[0] : null,
+              target: gtt.type === 'two-leg' ? gtt.condition?.trigger_values?.[1] : null,
+              status: gtt.status || 'active',
+              trigger_id: gtt.id?.toString() || null,
+              updated_at: new Date().toISOString(),
+            };
+
+            const { data: existingGTT } = await supabase
+              .from('gtt_orders')
+              .select('id')
+              .eq('broker_connection_id', brokerId)
+              .eq('trigger_id', gtt.id?.toString())
+              .maybeSingle();
+
+            if (existingGTT) {
+              await supabase
+                .from('gtt_orders')
+                .update(gttData)
+                .eq('id', existingGTT.id);
+            } else {
+              await supabase
+                .from('gtt_orders')
+                .insert(gttData);
+            }
+          }
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: gttOrders,
+            synced: true,
+          }),
+          {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      } else {
+        const { data: gttOrders, error: dbError } = await supabase
+          .from('gtt_orders')
+          .select('*')
+          .eq('broker_connection_id', brokerId)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (dbError) {
+          throw new Error(`Database error: ${dbError.message}`);
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: gttOrders || [],
+            fromDatabase: true,
+          }),
+          {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      }
     }
 
     if (req.method === 'POST') {
