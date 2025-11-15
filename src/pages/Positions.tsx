@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { LineChart, X, RefreshCw, Bell, ArrowUpDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodha } from '../hooks/useZerodha';
 import { GTTModal } from '../components/orders/GTTModal';
+import { useRealtimePrice } from '../hooks/useRealtimePrice';
 
 type SortField = 'symbol' | 'quantity' | 'average_price' | 'current_price' | 'pnl' | 'pnl_percentage';
 type SortDirection = 'asc' | 'desc';
@@ -24,6 +25,35 @@ export function Positions() {
   const [selectedPosition, setSelectedPosition] = useState<any>(null);
   const [sortField, setSortField] = useState<SortField>('pnl');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const symbolsForPrice = useMemo(() => {
+    return positions.map(pos => ({
+      symbol: pos.symbol,
+      exchange: pos.exchange || 'NSE',
+    })).filter(s => s.symbol);
+  }, [positions]);
+
+  const { getPrice } = useRealtimePrice({
+    symbols: symbolsForPrice,
+    brokerId: selectedBroker === 'all' ? brokers[0]?.id : selectedBroker,
+    enabled: positions.length > 0 && selectedBroker !== 'all' && selectedBroker !== '',
+    interval: 3000,
+  });
+
+  const realtimeSummary = useMemo(() => {
+    const filtered = selectedBroker === 'all' ? allPositions : allPositions.filter(pos => pos.broker_connection_id === selectedBroker);
+
+    const totalPnL = filtered.reduce((sum, pos) => {
+      const realtimePrice = getPrice(pos.symbol);
+      const currentPrice = realtimePrice || pos.current_price || pos.average_price;
+      const pnl = (currentPrice - pos.average_price) * pos.quantity;
+      return sum + pnl;
+    }, 0);
+
+    const totalInvested = filtered.reduce((sum, pos) => sum + (Math.abs(pos.quantity) * pos.average_price), 0);
+
+    return { totalPnL, totalInvested };
+  }, [allPositions, selectedBroker, getPrice]);
 
   useEffect(() => {
     if (user) {
@@ -256,13 +286,13 @@ export function Positions() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="text-sm text-gray-600 mb-1">Total P&L</h3>
-          <p className={`text-3xl font-bold ${summary.totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {summary.totalPnL >= 0 ? '+' : ''}₹{summary.totalPnL.toFixed(2)}
+          <p className={`text-3xl font-bold ${realtimeSummary.totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {realtimeSummary.totalPnL >= 0 ? '+' : ''}₹{realtimeSummary.totalPnL.toFixed(2)}
           </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="text-sm text-gray-600 mb-1">Total Invested</h3>
-          <p className="text-3xl font-bold text-gray-900">₹{summary.totalInvested.toFixed(2)}</p>
+          <p className="text-3xl font-bold text-gray-900">₹{realtimeSummary.totalInvested.toFixed(2)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="text-sm text-gray-600 mb-1">Open Positions</h3>
@@ -368,17 +398,40 @@ export function Positions() {
                       ₹{position.average_price?.toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ₹{position.current_price?.toFixed(2) || position.average_price?.toFixed(2)}
+                      {(() => {
+                        const realtimePrice = getPrice(position.symbol);
+                        const displayPrice = realtimePrice || position.current_price || position.average_price;
+                        return (
+                          <span className={realtimePrice ? 'text-green-600 font-medium' : ''}>
+                            ₹{displayPrice.toFixed(2)}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`font-medium ${position.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {position.pnl >= 0 ? '+' : ''}₹{position.pnl?.toFixed(2)}
-                      </span>
+                      {(() => {
+                        const realtimePrice = getPrice(position.symbol);
+                        const currentPrice = realtimePrice || position.current_price || position.average_price;
+                        const pnl = (currentPrice - position.average_price) * position.quantity;
+                        return (
+                          <span className={`font-medium ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {pnl >= 0 ? '+' : ''}₹{pnl.toFixed(2)}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`font-medium ${position.pnl_percentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {position.pnl_percentage >= 0 ? '+' : ''}{position.pnl_percentage?.toFixed(2)}%
-                      </span>
+                      {(() => {
+                        const realtimePrice = getPrice(position.symbol);
+                        const currentPrice = realtimePrice || position.current_price || position.average_price;
+                        const pnl = (currentPrice - position.average_price) * position.quantity;
+                        const pnlPercentage = ((currentPrice - position.average_price) / position.average_price) * 100;
+                        return (
+                          <span className={`font-medium ${pnlPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {pnlPercentage >= 0 ? '+' : ''}{pnlPercentage.toFixed(2)}%
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">

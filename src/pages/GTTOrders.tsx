@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Plus, RefreshCw, Edit2, Trash2, ArrowUpDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
+import { useRealtimePrice } from '../hooks/useRealtimePrice';
 
 type SortField = 'symbol' | 'trigger_price' | 'created_at' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -26,6 +27,20 @@ export function GTTOrders() {
   const [deleteTarget, setDeleteTarget] = useState<{ gttId?: number; brokerId?: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const symbolsForPrice = useMemo(() => {
+    return gttOrders.map(gtt => ({
+      symbol: gtt.condition?.tradingsymbol || '',
+      exchange: gtt.condition?.exchange || 'NSE',
+    })).filter(s => s.symbol);
+  }, [gttOrders]);
+
+  const { getPrice } = useRealtimePrice({
+    symbols: symbolsForPrice,
+    brokerId: selectedBrokerId === 'all' ? brokers[0]?.id : selectedBrokerId,
+    enabled: gttOrders.length > 0 && selectedBrokerId !== 'all' && selectedBrokerId !== '',
+    interval: 3000,
+  });
+
   useEffect(() => {
     if (user) {
       loadBrokers();
@@ -40,7 +55,7 @@ export function GTTOrders() {
 
   useEffect(() => {
     if (selectedBrokerId) {
-      loadGTTOrders();
+      handleSync();
     }
   }, [selectedBrokerId]);
 
@@ -647,7 +662,15 @@ export function GTTOrders() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
-                      ₹{gtt.condition?.last_price?.toFixed(2) || 'N/A'}
+                      {(() => {
+                        const realtimePrice = getPrice(gtt.condition?.tradingsymbol);
+                        const displayPrice = realtimePrice || gtt.condition?.last_price;
+                        return displayPrice ? (
+                          <span className={realtimePrice ? 'text-green-600 font-medium' : ''}>
+                            ₹{displayPrice.toFixed(2)}
+                          </span>
+                        ) : 'N/A';
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {quantity}
