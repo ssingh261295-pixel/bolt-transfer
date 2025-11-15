@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, List, Trash2, Eye, Activity } from 'lucide-react';
+import { Plus, List, Trash2, Eye, Activity, Search, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
@@ -11,6 +11,11 @@ export function Watchlist() {
   const [selectedWatchlist, setSelectedWatchlist] = useState<any>(null);
   const [formData, setFormData] = useState({ name: '' });
   const [brokerId, setBrokerId] = useState<string>('');
+  const [showAddInstrument, setShowAddInstrument] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [allFOInstruments, setAllFOInstruments] = useState<any[]>([]);
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(brokerId);
 
@@ -97,6 +102,136 @@ export function Watchlist() {
     }
   };
 
+  const searchInstruments = async (query: string) => {
+    if (!query || query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NFO&search=${encodeURIComponent(query)}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+        }
+      );
+
+      const result = await response.json();
+      if (result.success) {
+        setSearchResults(result.instruments);
+      }
+    } catch (error) {
+      console.error('Error searching instruments:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const loadAllFOInstruments = async () => {
+    setSearching(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NFO`,
+        {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+        }
+      );
+
+      const result = await response.json();
+      if (result.success) {
+        setAllFOInstruments(result.instruments);
+      }
+    } catch (error) {
+      console.error('Error loading F&O instruments:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const addInstrumentToWatchlist = async (instrument: any) => {
+    if (!selectedWatchlist) return;
+
+    const currentSymbols = selectedWatchlist.symbols || [];
+    const exists = currentSymbols.some((s: any) => s.instrument_token === instrument.instrument_token);
+
+    if (exists) {
+      alert('Instrument already in watchlist');
+      return;
+    }
+
+    const newSymbol = {
+      symbol: instrument.tradingsymbol,
+      exchange: instrument.exchange,
+      instrument_token: parseInt(instrument.instrument_token),
+      name: instrument.name,
+      instrument_type: instrument.instrument_type,
+      expiry: instrument.expiry,
+      strike: instrument.strike,
+      lot_size: instrument.lot_size,
+    };
+
+    const { error } = await supabase
+      .from('watchlists')
+      .update({ symbols: [...currentSymbols, newSymbol] })
+      .eq('id', selectedWatchlist.id);
+
+    if (!error) {
+      loadWatchlists();
+      setSearchQuery('');
+      setSearchResults([]);
+    }
+  };
+
+  const createAllFOWatchlist = async () => {
+    if (allFOInstruments.length === 0) {
+      await loadAllFOInstruments();
+      return;
+    }
+
+    const { error } = await supabase.from('watchlists').insert({
+      user_id: user?.id,
+      name: 'All F&O Instruments',
+      symbols: allFOInstruments.map(inst => ({
+        symbol: inst.tradingsymbol,
+        exchange: inst.exchange,
+        instrument_token: parseInt(inst.instrument_token),
+        name: inst.name,
+        instrument_type: inst.instrument_type,
+        expiry: inst.expiry,
+        strike: inst.strike,
+        lot_size: inst.lot_size,
+      })),
+    });
+
+    if (!error) {
+      setShowCreateForm(false);
+      loadWatchlists();
+    }
+  };
+
+  const removeInstrumentFromWatchlist = async (instrumentToken: number) => {
+    if (!selectedWatchlist) return;
+
+    const currentSymbols = selectedWatchlist.symbols || [];
+    const updatedSymbols = currentSymbols.filter((s: any) => s.instrument_token !== instrumentToken);
+
+    const { error } = await supabase
+      .from('watchlists')
+      .update({ symbols: updatedSymbols })
+      .eq('id', selectedWatchlist.id);
+
+    if (!error) {
+      loadWatchlists();
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -153,6 +288,22 @@ export function Watchlist() {
               </button>
             </div>
           </form>
+          <div className="mt-4 pt-4 border-t">
+            <button
+              onClick={createAllFOWatchlist}
+              disabled={searching}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+            >
+              {searching ? (
+                <>Loading...</>
+              ) : (
+                <>
+                  <List className="w-5 h-5" />
+                  Create Watchlist with All F&O Instruments
+                </>
+              )}
+            </button>
+          </div>
         </div>
       )}
 
@@ -200,7 +351,59 @@ export function Watchlist() {
         <div className="lg:col-span-3">
           {selectedWatchlist ? (
             <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">{selectedWatchlist.name}</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">{selectedWatchlist.name}</h3>
+                <button
+                  onClick={() => setShowAddInstrument(!showAddInstrument)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                >
+                  {showAddInstrument ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  {showAddInstrument ? 'Close' : 'Add Instrument'}
+                </button>
+              </div>
+
+              {showAddInstrument && (
+                <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        searchInstruments(e.target.value);
+                      }}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Search F&O instruments (e.g., NIFTY, BANKNIFTY)"
+                    />
+                  </div>
+
+                  {searching && (
+                    <div className="mt-2 text-center text-sm text-gray-600">Searching...</div>
+                  )}
+
+                  {searchResults.length > 0 && (
+                    <div className="mt-2 max-h-60 overflow-y-auto space-y-1">
+                      {searchResults.map((inst: any) => (
+                        <div
+                          key={inst.instrument_token}
+                          className="flex items-center justify-between p-2 hover:bg-white rounded cursor-pointer"
+                          onClick={() => addInstrumentToWatchlist(inst)}
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{inst.tradingsymbol}</p>
+                            <p className="text-xs text-gray-600">
+                              {inst.name} | {inst.instrument_type} | Exp: {inst.expiry || 'N/A'}
+                            </p>
+                          </div>
+                          <Plus className="w-4 h-4 text-blue-600" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {Array.isArray(selectedWatchlist.symbols) && selectedWatchlist.symbols.length > 0 ? (
                 <div className="space-y-2">
                   {selectedWatchlist.symbols.map((symbol: any, index: number) => {
@@ -211,8 +414,8 @@ export function Watchlist() {
                     const isPositive = change >= 0;
 
                     return (
-                      <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                        <div>
+                      <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg group">
+                        <div className="flex-1">
                           <p className="font-medium text-gray-900">{symbol.symbol}</p>
                           <p className="text-sm text-gray-600">{symbol.exchange}</p>
                           {tick && (
@@ -224,16 +427,24 @@ export function Watchlist() {
                             </div>
                           )}
                         </div>
-                        <div className="text-right">
-                          <p className="font-medium text-gray-900">
-                            ₹{price.toFixed(2)}
-                            {isConnected && ltp && (
-                              <span className="ml-1 text-xs text-green-600">●</span>
-                            )}
-                          </p>
-                          <p className={`text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                            {isPositive ? '+' : ''}{change.toFixed(2)}%
-                          </p>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="font-medium text-gray-900">
+                              ₹{price.toFixed(2)}
+                              {isConnected && ltp && (
+                                <span className="ml-1 text-xs text-green-600">●</span>
+                              )}
+                            </p>
+                            <p className={`text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                              {isPositive ? '+' : ''}{change.toFixed(2)}%
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => removeInstrumentFromWatchlist(symbol.instrument_token)}
+                            className="opacity-0 group-hover:opacity-100 p-1 text-red-600 hover:bg-red-50 rounded transition"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     );
