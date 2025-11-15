@@ -310,62 +310,72 @@ export function Watchlist() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-1 space-y-2">
-          {watchlists.map((watchlist) => (
-            <button
-              key={watchlist.id}
-              onClick={() => setSelectedWatchlist(watchlist)}
-              className={`w-full flex items-center justify-between p-4 rounded-lg border transition ${
-                selectedWatchlist?.id === watchlist.id
-                  ? 'bg-blue-50 border-blue-200'
-                  : 'bg-white border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Eye className="w-5 h-5 text-gray-600" />
-                <div className="text-left">
-                  <p className="font-medium text-gray-900">{watchlist.name}</p>
-                  <p className="text-xs text-gray-600">
-                    {Array.isArray(watchlist.symbols) ? watchlist.symbols.length : 0} symbols
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(watchlist.id);
-                }}
-                className="p-1 text-red-600 hover:bg-red-50 rounded transition"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </button>
-          ))}
-
-          {loading && (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="text-sm text-gray-600 mt-2">Loading...</p>
-            </div>
-          )}
-
-          {!loading && watchlists.length === 0 && (
-            <div className="text-center py-8 bg-white rounded-lg border border-gray-200 p-6">
-              <List className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm font-medium text-gray-900 mb-1">No watchlists yet</p>
-              <p className="text-xs text-gray-600 mb-4">Create your first watchlist to start tracking instruments</p>
-              <button
-                onClick={() => setShowCreateForm(true)}
-                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-              >
-                Create Watchlist
-              </button>
-            </div>
-          )}
+      {loading && watchlists.length === 0 && (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="text-sm text-gray-600 mt-3">Loading watchlists...</p>
         </div>
+      )}
 
-        <div className="lg:col-span-3">
+      {!loading && watchlists.length === 0 && (
+        <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300">
+          <List className="w-16 h-16 text-gray-400 mx-auto mb-3" />
+          <p className="text-lg font-medium text-gray-900 mb-2">No watchlists yet</p>
+          <p className="text-sm text-gray-600 mb-6">Create your first watchlist to start tracking instruments</p>
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+          >
+            <Plus className="w-5 h-5" />
+            Create Watchlist
+          </button>
+        </div>
+      )}
+
+      {!loading && watchlists.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center gap-3 overflow-x-auto pb-2">
+            {watchlists.map((watchlist) => (
+              <button
+                key={watchlist.id}
+                onClick={() => setSelectedWatchlist(watchlist)}
+                className={`flex-shrink-0 relative group px-4 py-3 rounded-lg border-2 transition ${
+                  selectedWatchlist?.id === watchlist.id
+                    ? 'bg-blue-50 border-blue-500'
+                    : 'bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Eye className={`w-4 h-4 ${selectedWatchlist?.id === watchlist.id ? 'text-blue-600' : 'text-gray-500'}`} />
+                  <div className="text-left">
+                    <p className={`text-sm font-semibold ${selectedWatchlist?.id === watchlist.id ? 'text-blue-900' : 'text-gray-900'}`}>
+                      {watchlist.name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {Array.isArray(watchlist.symbols) ? watchlist.symbols.length : 0} symbols
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`Delete watchlist "${watchlist.name}"?`)) {
+                      handleDelete(watchlist.id);
+                    }
+                  }}
+                  className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition shadow-sm"
+                  title="Delete watchlist"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!loading && watchlists.length > 0 && (
+        <div>
           {selectedWatchlist ? (
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
@@ -532,15 +542,9 @@ export function Watchlist() {
                 </div>
               )}
             </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center">
-              <List className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No watchlist selected</h3>
-              <p className="text-gray-600">Select or create a watchlist to get started</p>
-            </div>
-          )}
+          ) : null}
         </div>
-      </div>
+      )}
     </div>
   );
 }
