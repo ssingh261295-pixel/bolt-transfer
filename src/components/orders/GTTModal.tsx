@@ -226,8 +226,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       setTriggerPercent1('2');
       setPricePercent1('2');
     } else if (gttType === 'two-leg') {
-      if (transactionType === 'BUY') {
-        // Buy OCO: Stoploss at -2%, Target at +2%
+      if (transactionType === 'SELL') {
+        // Sell OCO (closing a long position): Stoploss at -2% (below), Target at +2% (above)
         const stoploss = (ltp * 0.98).toFixed(2);
         const target = (ltp * 1.02).toFixed(2);
         setTriggerPrice1(stoploss);
@@ -239,7 +239,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         setTriggerPercent2('2');
         setPricePercent2('2');
       } else {
-        // Sell OCO: Stoploss at +2% (above), Target at -2% (below)
+        // Buy OCO (closing a short position): Stoploss at +2% (above), Target at -2% (below)
         const stoploss = (ltp * 1.02).toFixed(2);
         const target = (ltp * 0.98).toFixed(2);
         setTriggerPrice1(stoploss);
