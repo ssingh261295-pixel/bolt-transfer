@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, X, TrendingUp, TrendingDown } from 'lucide-react';
+import { SymbolSelector } from './SymbolSelector';
 
 interface Indicator {
   id: string;
@@ -194,34 +195,15 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Symbol
-            </label>
-            <input
-              type="text"
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="RELIANCE"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Exchange
-            </label>
-            <select
-              value={exchange}
-              onChange={(e) => setExchange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="NSE">NSE</option>
-              <option value="NFO">NFO</option>
-              <option value="BSE">BSE</option>
-            </select>
-          </div>
+        <div className="grid grid-cols-2 gap-4">
+          <SymbolSelector
+            value={symbol}
+            exchange={exchange}
+            onChange={(newSymbol, newExchange) => {
+              setSymbol(newSymbol);
+              setExchange(newExchange);
+            }}
+          />
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
