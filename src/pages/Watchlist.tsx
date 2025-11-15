@@ -210,7 +210,7 @@ export function Watchlist() {
     const exists = currentSymbols.some((s: any) => s.instrument_token === instrument.instrument_token);
 
     if (exists) {
-      alert('Instrument already in watchlist');
+      setError('Instrument already in watchlist');
       return;
     }
 
@@ -225,28 +225,44 @@ export function Watchlist() {
       lot_size: instrument.lot_size,
     };
 
-    const { error } = await supabase
-      .from('watchlists')
-      .update({ symbols: [...currentSymbols, newSymbol] })
-      .eq('id', selectedWatchlist.id);
+    try {
+      const updatedSymbols = [...currentSymbols, newSymbol];
+      const { error: updateError } = await supabase
+        .from('watchlists')
+        .update({ symbols: updatedSymbols })
+        .eq('id', selectedWatchlist.id);
 
-    if (!error) {
-      loadWatchlists();
+      if (updateError) {
+        console.error('Error adding instrument:', updateError);
+        setError(`Failed to add instrument: ${updateError.message}`);
+        return;
+      }
+
+      setSelectedWatchlist({ ...selectedWatchlist, symbols: updatedSymbols });
       setSearchQuery('');
       setSearchResults([]);
+      await loadWatchlists();
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setError('Failed to add instrument');
     }
   };
 
   const createAllFOWatchlist = async () => {
     if (allFOInstruments.length === 0) {
       await loadAllFOInstruments();
+    }
+
+    if (allFOInstruments.length === 0) {
+      setError('No F&O instruments available. Please try again.');
       return;
     }
 
-    const { error } = await supabase.from('watchlists').insert({
-      user_id: user?.id,
-      name: 'All F&O Instruments',
-      symbols: allFOInstruments.map(inst => ({
+    try {
+      setLoading(true);
+      setError('');
+
+      const symbols = allFOInstruments.map(inst => ({
         symbol: inst.tradingsymbol,
         exchange: inst.exchange,
         instrument_token: parseInt(inst.instrument_token),
@@ -255,12 +271,30 @@ export function Watchlist() {
         expiry: inst.expiry,
         strike: inst.strike,
         lot_size: inst.lot_size,
-      })),
-    });
+      }));
 
-    if (!error) {
+      console.log(`Creating watchlist with ${symbols.length} instruments`);
+
+      const { error: createError } = await supabase.from('watchlists').insert({
+        user_id: user?.id,
+        name: 'All F&O Instruments',
+        symbols: symbols,
+      });
+
+      if (createError) {
+        console.error('Error creating all F&O watchlist:', createError);
+        setError(`Failed to create watchlist: ${createError.message}`);
+        return;
+      }
+
       setShowCreateForm(false);
-      loadWatchlists();
+      setAllFOInstruments([]);
+      await loadWatchlists();
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setError('Failed to create F&O watchlist');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -304,13 +338,24 @@ export function Watchlist() {
             )}
           </div>
         </div>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-        >
-          <Plus className="w-5 h-5" />
-          Create Watchlist
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          >
+            <Plus className="w-5 h-5" />
+            Create Watchlist
+          </button>
+          <button
+            onClick={createAllFOWatchlist}
+            disabled={searching || loading}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Create a watchlist with all available F&O instruments"
+          >
+            <List className="w-5 h-5" />
+            {searching || loading ? 'Loading...' : 'All F&O'}
+          </button>
+        </div>
       </div>
 
       {showCreateForm && (
@@ -345,22 +390,6 @@ export function Watchlist() {
               </button>
             </div>
           </form>
-          <div className="mt-4 pt-4 border-t">
-            <button
-              onClick={createAllFOWatchlist}
-              disabled={searching}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
-            >
-              {searching ? (
-                <>Loading...</>
-              ) : (
-                <>
-                  <List className="w-5 h-5" />
-                  Create Watchlist with All F&O Instruments
-                </>
-              )}
-            </button>
-          </div>
         </div>
       )}
 
@@ -476,50 +505,78 @@ export function Watchlist() {
               )}
 
               {Array.isArray(selectedWatchlist.symbols) && selectedWatchlist.symbols.length > 0 ? (
-                <div className="space-y-2">
-                  {selectedWatchlist.symbols.map((symbol: any, index: number) => {
-                    const ltp = symbol.instrument_token ? getLTP(symbol.instrument_token) : null;
-                    const tick = symbol.instrument_token ? ticks.get(symbol.instrument_token) : null;
-                    const price = ltp ?? symbol.price ?? 0;
-                    const change = tick?.close ? ((price - tick.close) / tick.close) * 100 : 0;
-                    const isPositive = change >= 0;
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Symbol</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Last</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Chg</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Chg%</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">High</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Low</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Volume</th>
+                        <th className="py-2 px-3"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {selectedWatchlist.symbols.map((symbol: any, index: number) => {
+                        const ltp = symbol.instrument_token ? getLTP(symbol.instrument_token) : null;
+                        const tick = symbol.instrument_token ? ticks.get(symbol.instrument_token) : null;
+                        const price = ltp ?? symbol.price ?? 0;
+                        const change = tick?.close ? (price - tick.close) : 0;
+                        const changePercent = tick?.close ? ((price - tick.close) / tick.close) * 100 : 0;
+                        const isPositive = change >= 0;
 
-                    return (
-                      <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg group">
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{symbol.symbol}</p>
-                          <p className="text-sm text-gray-600">{symbol.exchange}</p>
-                          {tick && (
-                            <div className="flex gap-3 mt-1 text-xs text-gray-500">
-                              <span>O: {tick.open?.toFixed(2)}</span>
-                              <span>H: {tick.high?.toFixed(2)}</span>
-                              <span>L: {tick.low?.toFixed(2)}</span>
-                              <span>Vol: {tick.volume_traded?.toLocaleString()}</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="font-medium text-gray-900">
-                              ₹{price.toFixed(2)}
-                              {isConnected && ltp && (
-                                <span className="ml-1 text-xs text-green-600">●</span>
-                              )}
-                            </p>
-                            <p className={`text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                              {isPositive ? '+' : ''}{change.toFixed(2)}%
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => removeInstrumentFromWatchlist(symbol.instrument_token)}
-                            className="opacity-0 group-hover:opacity-100 p-1 text-red-600 hover:bg-red-50 rounded transition"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        return (
+                          <tr key={index} className="hover:bg-gray-50 group">
+                            <td className="py-3 px-3">
+                              <div className="flex items-center gap-2">
+                                {isConnected && ltp && (
+                                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                                )}
+                                <div>
+                                  <p className="font-medium text-sm text-gray-900">{symbol.symbol}</p>
+                                  <p className="text-xs text-gray-500">{symbol.exchange}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className="text-sm font-medium text-gray-900">₹{price.toFixed(2)}</p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className={`text-sm font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                {isPositive ? '+' : ''}₹{change.toFixed(2)}
+                              </p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className={`text-sm font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                {isPositive ? '+' : ''}{changePercent.toFixed(2)}%
+                              </p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className="text-sm text-gray-600">{tick?.high ? `₹${tick.high.toFixed(2)}` : '-'}</p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className="text-sm text-gray-600">{tick?.low ? `₹${tick.low.toFixed(2)}` : '-'}</p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className="text-sm text-gray-600">{tick?.volume_traded ? tick.volume_traded.toLocaleString() : '-'}</p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <button
+                                onClick={() => removeInstrumentFromWatchlist(symbol.instrument_token)}
+                                className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                title="Remove"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
                 <div className="text-center py-12 text-gray-500">
