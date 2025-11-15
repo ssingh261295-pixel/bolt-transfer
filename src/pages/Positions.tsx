@@ -116,7 +116,7 @@ export function Positions() {
     setPositions(sortPositions(filtered));
 
     const totalPnL = filtered.reduce((sum, pos) => sum + (pos.pnl || 0), 0);
-    const totalInvested = filtered.reduce((sum, pos) => sum + (pos.quantity * pos.average_price), 0);
+    const totalInvested = filtered.reduce((sum, pos) => sum + (Math.abs(pos.quantity) * pos.average_price), 0);
 
     setSummary({ totalPnL, totalInvested });
   };
@@ -413,6 +413,13 @@ export function Positions() {
           brokerConnectionId={selectedPosition.broker_connection_id}
           initialSymbol={selectedPosition.symbol}
           initialExchange={selectedPosition.exchange}
+          allBrokers={brokers}
+          positionData={{
+            quantity: Math.abs(selectedPosition.quantity),
+            averagePrice: selectedPosition.average_price,
+            currentPrice: selectedPosition.current_price,
+            transactionType: selectedPosition.quantity > 0 ? 'SELL' : 'BUY'
+          }}
         />
       )}
     </div>

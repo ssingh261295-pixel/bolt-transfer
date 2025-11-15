@@ -14,14 +14,20 @@ interface GTTModalProps {
   initialSymbol?: string;
   initialExchange?: string;
   allBrokers?: any[];
+  positionData?: {
+    quantity: number;
+    averagePrice: number;
+    currentPrice: number;
+    transactionType: 'BUY' | 'SELL';
+  };
 }
 
-export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, initialSymbol, initialExchange, allBrokers }: GTTModalProps) {
+export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, initialSymbol, initialExchange, allBrokers, positionData }: GTTModalProps) {
   const { session } = useAuth();
   const [symbol, setSymbol] = useState(initialSymbol || '');
   const [exchange, setExchange] = useState(initialExchange || 'NFO');
-  const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>('BUY');
-  const [gttType, setGttType] = useState<'single' | 'two-leg'>('single');
+  const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>(positionData?.transactionType || 'BUY');
+  const [gttType, setGttType] = useState<'single' | 'two-leg'>(positionData ? 'two-leg' : 'single');
   const [selectedBrokerIds, setSelectedBrokerIds] = useState<string[]>(
     brokerConnectionId && brokerConnectionId !== 'all' ? [brokerConnectionId] : []
   );
@@ -186,6 +192,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         );
         if (instrument) {
           setSelectedInstrument(instrument);
+
+          const lotSize = parseInt(instrument.lot_size) || 1;
+          const qty = positionData?.quantity || lotSize;
+          setQuantity1(qty);
+          setQuantity2(qty);
+
           if (instrument.instrument_token) {
             const ltp = await fetchLTP(instrument.instrument_token, instrument.tradingsymbol, initialExchange || exchange);
             if (ltp) {
@@ -196,7 +208,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       }
     };
     fetchInitialLTP();
-  }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT]);
+  }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT, positionData]);
 
   // Re-calculate prefilled values when GTT type or transaction type changes
   useEffect(() => {
@@ -638,6 +650,30 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           )}
 
 
+          {/* Symbol Header with LTP */}
+          {selectedInstrument && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-xl font-bold text-gray-900">
+                    {selectedInstrument.tradingsymbol}
+                  </h3>
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
+                    {selectedInstrument.exchange || exchange}
+                  </span>
+                  {currentLTP && (
+                    <div className="text-lg font-semibold text-gray-900">
+                      {currentLTP.toFixed(2)}
+                    </div>
+                  )}
+                </div>
+                {fetchingLTP && (
+                  <div className="text-xs text-gray-500 animate-pulse">Updating...</div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Transaction and Trigger Type */}
           <div className="grid grid-cols-2 gap-6">
             <div>
@@ -773,13 +809,20 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Qty.</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Qty. {selectedInstrument?.lot_size && (
+                    <span className="text-xs text-gray-500 font-normal">
+                      (Lot size: {selectedInstrument.lot_size})
+                    </span>
+                  )}
+                </label>
                 <input
                   type="number"
                   value={quantity1}
                   onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   min="1"
+                  step={selectedInstrument?.lot_size || 1}
                   required
                 />
               </div>
@@ -948,13 +991,20 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Qty.</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Qty. {selectedInstrument?.lot_size && (
+                      <span className="text-xs text-gray-500 font-normal">
+                        (Lot size: {selectedInstrument.lot_size})
+                      </span>
+                    )}
+                  </label>
                   <input
                     type="number"
                     value={quantity2}
                     onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     min="1"
+                    step={selectedInstrument?.lot_size || 1}
                     required
                   />
                 </div>
