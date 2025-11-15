@@ -1,17 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Plus, Play, Pause, Trash2, TrendingUp } from 'lucide-react';
+import { Plus, Play, Pause, Trash2, TrendingUp, Edit } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { StrategyBuilder } from '../components/strategies/StrategyBuilder';
 
 export function Strategies() {
   const { user } = useAuth();
   const [strategies, setStrategies] = useState<any[]>([]);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    strategy_type: 'intraday',
-  });
+  const [showBuilder, setShowBuilder] = useState(false);
+  const [editingStrategy, setEditingStrategy] = useState<any>(null);
 
   useEffect(() => {
     if (user) {
@@ -31,22 +28,38 @@ export function Strategies() {
     }
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveStrategy = async (strategyData: any) => {
+    if (editingStrategy) {
+      const { error } = await supabase
+        .from('strategies')
+        .update({
+          ...strategyData,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', editingStrategy.id);
 
-    const { error } = await supabase.from('strategies').insert({
-      user_id: user?.id,
-      name: formData.name,
-      description: formData.description,
-      strategy_type: formData.strategy_type,
-      is_active: false,
-    });
+      if (!error) {
+        setShowBuilder(false);
+        setEditingStrategy(null);
+        loadStrategies();
+      }
+    } else {
+      const { error } = await supabase.from('strategies').insert({
+        user_id: user?.id,
+        ...strategyData,
+        is_active: false,
+      });
 
-    if (!error) {
-      setShowCreateForm(false);
-      setFormData({ name: '', description: '', strategy_type: 'intraday' });
-      loadStrategies();
+      if (!error) {
+        setShowBuilder(false);
+        loadStrategies();
+      }
     }
+  };
+
+  const handleEditStrategy = (strategy: any) => {
+    setEditingStrategy(strategy);
+    setShowBuilder(true);
   };
 
   const toggleActive = async (id: string, currentStatus: boolean) => {
@@ -79,7 +92,10 @@ export function Strategies() {
           <p className="text-sm text-gray-600 mt-1">Create and manage your automated strategies</p>
         </div>
         <button
-          onClick={() => setShowCreateForm(true)}
+          onClick={() => {
+            setEditingStrategy(null);
+            setShowBuilder(true);
+          }}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
         >
           <Plus className="w-5 h-5" />
@@ -87,63 +103,16 @@ export function Strategies() {
         </button>
       </div>
 
-      {showCreateForm && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Create New Strategy</h3>
-          <form onSubmit={handleCreate} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Strategy Name</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                placeholder="e.g., Moving Average Crossover"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                placeholder="Describe your strategy..."
-                rows={3}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Strategy Type</label>
-              <select
-                value={formData.strategy_type}
-                onChange={(e) => setFormData({ ...formData, strategy_type: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-              >
-                <option value="intraday">Intraday</option>
-                <option value="swing">Swing Trading</option>
-                <option value="scalping">Scalping</option>
-                <option value="positional">Positional</option>
-              </select>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
-              >
-                Create Strategy
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+      {showBuilder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <StrategyBuilder
+            onSave={handleSaveStrategy}
+            onCancel={() => {
+              setShowBuilder(false);
+              setEditingStrategy(null);
+            }}
+            initialData={editingStrategy}
+          />
         </div>
       )}
 
@@ -158,6 +127,12 @@ export function Strategies() {
                 </p>
               </div>
               <div className="flex gap-2">
+                <button
+                  onClick={() => handleEditStrategy(strategy)}
+                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => toggleActive(strategy.id, strategy.is_active)}
                   className={`p-2 rounded-lg transition ${
@@ -178,10 +153,24 @@ export function Strategies() {
             </div>
 
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Type</span>
-                <span className="text-gray-900 capitalize">{strategy.strategy_type}</span>
-              </div>
+              {strategy.symbol && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Symbol</span>
+                  <span className="text-gray-900 font-medium">{strategy.symbol} ({strategy.exchange})</span>
+                </div>
+              )}
+              {strategy.timeframe && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Timeframe</span>
+                  <span className="text-gray-900 capitalize">{strategy.timeframe}</span>
+                </div>
+              )}
+              {strategy.indicators && strategy.indicators.length > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Indicators</span>
+                  <span className="text-gray-900">{strategy.indicators.length}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-600">Status</span>
                 <span
@@ -204,13 +193,16 @@ export function Strategies() {
           </div>
         ))}
 
-        {strategies.length === 0 && !showCreateForm && (
+        {strategies.length === 0 && !showBuilder && (
           <div className="col-span-full bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center">
             <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No strategies yet</h3>
             <p className="text-gray-600 mb-4">Create your first trading strategy</p>
             <button
-              onClick={() => setShowCreateForm(true)}
+              onClick={() => {
+                setEditingStrategy(null);
+                setShowBuilder(true);
+              }}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
             >
               <Plus className="w-5 h-5" />
