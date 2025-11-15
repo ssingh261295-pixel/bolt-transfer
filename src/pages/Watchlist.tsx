@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, X, ChevronDown } from 'lucide-react';
+import { Plus, List, Trash2, Eye, Activity, Search, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
@@ -7,14 +7,18 @@ import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
 export function Watchlist() {
   const { user } = useAuth();
   const [watchlists, setWatchlists] = useState<any[]>([]);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedWatchlist, setSelectedWatchlist] = useState<any>(null);
+  const [formData, setFormData] = useState({ name: '' });
   const [brokerId, setBrokerId] = useState<string>('');
+  const [showAddInstrument, setShowAddInstrument] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newWatchlistName, setNewWatchlistName] = useState('');
-  const [showWatchlistDropdown, setShowWatchlistDropdown] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(brokerId);
 
@@ -41,76 +45,137 @@ export function Watchlist() {
         subscribe(tokens, 'full');
       }
     }
+    setCurrentPage(1);
   }, [isConnected, selectedWatchlist, subscribe]);
 
   const loadBrokerConnection = async () => {
     const { data } = await supabase
       .from('broker_connections')
-      .select('*')
+      .select('id')
       .eq('user_id', user?.id)
-      .eq('broker_name', 'zerodha')
-      .maybeSingle();
+      .eq('is_active', true)
+      .single();
 
-    if (data?.id) {
+    if (data) {
       setBrokerId(data.id);
     }
   };
 
   const loadWatchlists = async () => {
-    const { data } = await supabase
-      .from('watchlists')
-      .select('*')
-      .eq('user_id', user?.id)
-      .order('created_at');
+    try {
+      setLoading(true);
+      setError('');
+      const { data, error: fetchError } = await supabase
+        .from('watchlists')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
 
-    if (data) {
-      setWatchlists(data);
-      if (data.length > 0 && !selectedWatchlist) {
-        setSelectedWatchlist(data[0]);
+      if (fetchError) {
+        console.error('Error loading watchlists:', fetchError);
+        setError(`Failed to load watchlists: ${fetchError.message}`);
+        return;
       }
+
+      if (data) {
+        setWatchlists(data);
+        if (data.length > 0 && !selectedWatchlist) {
+          setSelectedWatchlist(data[0]);
+        }
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setError('An unexpected error occurred');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const createWatchlist = async () => {
-    if (!newWatchlistName.trim()) return;
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-    const { error } = await supabase.from('watchlists').insert({
-      user_id: user?.id,
-      name: newWatchlistName,
-      symbols: [],
-    });
+    if (!formData.name.trim()) {
+      setError('Watchlist name is required');
+      return;
+    }
+
+    try {
+      setError('');
+      const { error: createError } = await supabase.from('watchlists').insert({
+        user_id: user?.id,
+        name: formData.name,
+        symbols: [],
+      });
+
+      if (createError) {
+        console.error('Error creating watchlist:', createError);
+        setError(`Failed to create watchlist: ${createError.message}`);
+        return;
+      }
+
+      setShowCreateForm(false);
+      setFormData({ name: '' });
+      await loadWatchlists();
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setError('Failed to create watchlist');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase
+      .from('watchlists')
+      .delete()
+      .eq('id', id);
 
     if (!error) {
-      setNewWatchlistName('');
-      setShowCreateModal(false);
+      if (selectedWatchlist?.id === id) {
+        setSelectedWatchlist(null);
+      }
       loadWatchlists();
     }
   };
 
   const searchInstruments = async (query: string) => {
-    if (query.length < 2) {
+    if (!query || query.length < 2) {
       setSearchResults([]);
       return;
     }
 
     setSearching(true);
+    setError('');
     try {
       const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setError('Not authenticated. Please log in.');
+        return;
+      }
+
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NFO&search=${query}`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NFO&search=${encodeURIComponent(query)}`,
         {
           headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
+            'Authorization': `Bearer ${session.access_token}`,
           },
         }
       );
 
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}: ${response.statusText}`);
+      }
+
       const result = await response.json();
+      console.log('Search result:', result);
+
       if (result.success) {
-        setSearchResults(result.instruments.slice(0, 20));
+        setSearchResults(result.instruments || []);
+      } else {
+        setError(result.error || 'Failed to search instruments');
       }
     } catch (error) {
       console.error('Error searching instruments:', error);
+      setError(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSearching(false);
     }
@@ -122,7 +187,10 @@ export function Watchlist() {
     const currentSymbols = selectedWatchlist.symbols || [];
     const exists = currentSymbols.some((s: any) => s.instrument_token === instrument.instrument_token);
 
-    if (exists) return;
+    if (exists) {
+      setError('Instrument already in watchlist');
+      return;
+    }
 
     const newSymbol = {
       symbol: instrument.tradingsymbol,
@@ -135,17 +203,26 @@ export function Watchlist() {
       lot_size: instrument.lot_size,
     };
 
-    const updatedSymbols = [...currentSymbols, newSymbol];
-    const { error } = await supabase
-      .from('watchlists')
-      .update({ symbols: updatedSymbols })
-      .eq('id', selectedWatchlist.id);
+    try {
+      const updatedSymbols = [...currentSymbols, newSymbol];
+      const { error: updateError } = await supabase
+        .from('watchlists')
+        .update({ symbols: updatedSymbols })
+        .eq('id', selectedWatchlist.id);
 
-    if (!error) {
+      if (updateError) {
+        console.error('Error adding instrument:', updateError);
+        setError(`Failed to add instrument: ${updateError.message}`);
+        return;
+      }
+
       setSelectedWatchlist({ ...selectedWatchlist, symbols: updatedSymbols });
       setSearchQuery('');
       setSearchResults([]);
       await loadWatchlists();
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setError('Failed to add instrument');
     }
   };
 
@@ -161,197 +238,309 @@ export function Watchlist() {
       .eq('id', selectedWatchlist.id);
 
     if (!error) {
-      setSelectedWatchlist({ ...selectedWatchlist, symbols: updatedSymbols });
-      await loadWatchlists();
-    }
-  };
-
-  const deleteWatchlist = async (id: string) => {
-    if (!confirm('Delete this watchlist?')) return;
-
-    const { error } = await supabase.from('watchlists').delete().eq('id', id);
-    if (!error) {
-      setSelectedWatchlist(null);
       loadWatchlists();
     }
   };
 
   return (
-    <div className="flex h-screen bg-white">
-      <div className="w-80 border-r border-gray-200 flex flex-col">
-        <div className="p-3 border-b border-gray-100">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                searchInstruments(e.target.value);
-              }}
-              placeholder="Search eg: infy bse, nifty fut, index fund, etc"
-              className="w-full pl-9 pr-16 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-400"
-            />
-            <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-400 font-mono">Ctrl + K</span>
-          </div>
-
-          {searchResults.length > 0 && (
-            <div className="absolute left-3 right-3 mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-80 overflow-y-auto z-50">
-              {searchResults.map((inst: any) => (
-                <button
-                  key={inst.instrument_token}
-                  onClick={() => addInstrumentToWatchlist(inst)}
-                  className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-0"
-                >
-                  <div className="font-medium text-sm text-gray-900">{inst.tradingsymbol}</div>
-                  <div className="text-xs text-gray-500">{inst.name} · {inst.exchange}</div>
-                </button>
-              ))}
-            </div>
-          )}
+    <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="text-red-700 hover:text-red-900">
+            <X className="w-4 h-4" />
+          </button>
         </div>
+      )}
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-3 py-2 border-b border-gray-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 flex-1">
-                <button
-                  onClick={() => setShowWatchlistDropdown(!showWatchlistDropdown)}
-                  className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 font-medium"
-                >
-                  {selectedWatchlist?.name || 'Select Watchlist'}
-                  <ChevronDown className="w-3 h-3" />
-                </button>
-                <span className="text-xs text-gray-400">
-                  ({selectedWatchlist?.symbols?.length || 0} / 250)
-                </span>
-              </div>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="text-blue-600 hover:text-blue-700 text-xs font-medium"
-              >
-                + New group
-              </button>
-            </div>
-
-            {showWatchlistDropdown && (
-              <div className="mt-2 bg-white border border-gray-200 rounded shadow-lg">
-                {watchlists.map((wl) => (
-                  <div
-                    key={wl.id}
-                    className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                  >
-                    <button
-                      onClick={() => {
-                        setSelectedWatchlist(wl);
-                        setShowWatchlistDropdown(false);
-                      }}
-                      className="flex-1 text-left text-sm text-gray-700"
-                    >
-                      {wl.name}
-                    </button>
-                    <button
-                      onClick={() => deleteWatchlist(wl.id)}
-                      className="text-red-500 hover:text-red-700 text-xs"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Watchlists</h2>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-sm text-gray-600">Track your favorite stocks and instruments</p>
+            {isConnected && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                <Activity className="w-3 h-3 animate-pulse" />
+                Live
               </div>
             )}
           </div>
-
-          {selectedWatchlist?.symbols?.length > 0 ? (
-            <div className="divide-y divide-gray-100">
-              {selectedWatchlist.symbols.map((symbol: any, index: number) => {
-                const ltp = symbol.instrument_token ? getLTP(symbol.instrument_token) : null;
-                const tick = symbol.instrument_token ? ticks.get(symbol.instrument_token) : null;
-                const price = ltp ?? 0;
-                const change = tick?.close ? (price - tick.close) : 0;
-                const changePercent = tick?.close ? ((price - tick.close) / tick.close) * 100 : 0;
-                const isPositive = change >= 0;
-
-                return (
-                  <div
-                    key={index}
-                    className="px-3 py-2 hover:bg-gray-50 cursor-pointer group relative"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-gray-900 truncate">
-                          {symbol.symbol}
-                        </div>
-                        <div className="text-xs text-gray-500">{symbol.exchange}</div>
-                      </div>
-                      <div className="text-right ml-3">
-                        <div className="text-sm font-medium text-gray-900">
-                          {price > 0 ? `₹${price.toFixed(2)}` : '-'}
-                        </div>
-                        <div className={`text-xs font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                          {change !== 0 ? `${isPositive ? '+' : ''}${change.toFixed(2)} (${isPositive ? '+' : ''}${changePercent.toFixed(2)}%)` : '-'}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => removeInstrumentFromWatchlist(symbol.instrument_token)}
-                      className="absolute right-1 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1 bg-white border border-gray-200 rounded shadow-sm hover:bg-red-50 hover:border-red-300 transition"
-                    >
-                      <X className="w-3 h-3 text-red-600" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="p-8 text-center text-gray-500 text-sm">
-              <p>No instruments in this watchlist</p>
-              <p className="text-xs mt-1">Search and add instruments above</p>
-            </div>
-          )}
         </div>
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >
+          <Plus className="w-5 h-5" />
+          Create Watchlist
+        </button>
       </div>
 
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <div className="text-center text-gray-400">
-          <div className="text-lg mb-2">Select an instrument to view details</div>
-          <div className="text-sm">Charts and analysis will appear here</div>
-        </div>
-      </div>
+      {showCreateForm && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Create New Watchlist</h3>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Watchlist Name</label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ name: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                placeholder="e.g., Tech Stocks"
+                required
+              />
+            </div>
 
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-96">
-            <h3 className="text-lg font-semibold mb-4">Create New Watchlist</h3>
-            <input
-              type="text"
-              value={newWatchlistName}
-              onChange={(e) => setNewWatchlistName(e.target.value)}
-              placeholder="Enter watchlist name"
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 mb-4"
-              autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && createWatchlist()}
-            />
             <div className="flex gap-3">
               <button
-                onClick={createWatchlist}
-                className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+                type="submit"
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
               >
-                Create
+                Create Watchlist
               </button>
               <button
-                onClick={() => {
-                  setShowCreateModal(false);
-                  setNewWatchlistName('');
-                }}
-                className="flex-1 bg-gray-100 text-gray-700 py-2 rounded hover:bg-gray-200"
+                type="button"
+                onClick={() => setShowCreateForm(false)}
+                className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition"
               >
                 Cancel
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-1 space-y-2">
+          {watchlists.map((watchlist) => (
+            <button
+              key={watchlist.id}
+              onClick={() => setSelectedWatchlist(watchlist)}
+              className={`w-full flex items-center justify-between p-4 rounded-lg border transition ${
+                selectedWatchlist?.id === watchlist.id
+                  ? 'bg-blue-50 border-blue-200'
+                  : 'bg-white border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Eye className="w-5 h-5 text-gray-600" />
+                <div className="text-left">
+                  <p className="font-medium text-gray-900">{watchlist.name}</p>
+                  <p className="text-xs text-gray-600">
+                    {Array.isArray(watchlist.symbols) ? watchlist.symbols.length : 0} symbols
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(watchlist.id);
+                }}
+                className="p-1 text-red-600 hover:bg-red-50 rounded transition"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </button>
+          ))}
+
+          {loading && (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="text-sm text-gray-600 mt-2">Loading...</p>
+            </div>
+          )}
+
+          {!loading && watchlists.length === 0 && (
+            <div className="text-center py-8 bg-white rounded-lg border border-gray-200 p-6">
+              <List className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm font-medium text-gray-900 mb-1">No watchlists yet</p>
+              <p className="text-xs text-gray-600 mb-4">Create your first watchlist to start tracking instruments</p>
+              <button
+                onClick={() => setShowCreateForm(true)}
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+              >
+                Create Watchlist
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="lg:col-span-3">
+          {selectedWatchlist ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">{selectedWatchlist.name}</h3>
+                <button
+                  onClick={() => setShowAddInstrument(!showAddInstrument)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                >
+                  {showAddInstrument ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  {showAddInstrument ? 'Close' : 'Add Instrument'}
+                </button>
+              </div>
+
+              {showAddInstrument && (
+                <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        searchInstruments(e.target.value);
+                      }}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Search F&O instruments (e.g., NIFTY, BANKNIFTY)"
+                    />
+                  </div>
+
+                  {searching && (
+                    <div className="mt-2 text-center text-sm text-gray-600">Searching...</div>
+                  )}
+
+                  {searchResults.length > 0 && (
+                    <div className="mt-2 max-h-60 overflow-y-auto space-y-1">
+                      {searchResults.map((inst: any) => (
+                        <div
+                          key={inst.instrument_token}
+                          className="flex items-center justify-between p-2 hover:bg-white rounded cursor-pointer"
+                          onClick={() => addInstrumentToWatchlist(inst)}
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{inst.tradingsymbol}</p>
+                            <p className="text-xs text-gray-600">
+                              {inst.name} | {inst.instrument_type} | Exp: {inst.expiry || 'N/A'}
+                            </p>
+                          </div>
+                          <Plus className="w-4 h-4 text-blue-600" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {Array.isArray(selectedWatchlist.symbols) && selectedWatchlist.symbols.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm text-gray-600">
+                      Showing {Math.min((currentPage - 1) * itemsPerPage + 1, selectedWatchlist.symbols.length)} - {Math.min(currentPage * itemsPerPage, selectedWatchlist.symbols.length)} of {selectedWatchlist.symbols.length} instruments
+                    </p>
+                    {selectedWatchlist.symbols.length > itemsPerPage && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <span className="px-3 py-1 text-sm text-gray-600">
+                          Page {currentPage} of {Math.ceil(selectedWatchlist.symbols.length / itemsPerPage)}
+                        </span>
+                        <button
+                          onClick={() => setCurrentPage(p => Math.min(Math.ceil(selectedWatchlist.symbols.length / itemsPerPage), p + 1))}
+                          disabled={currentPage >= Math.ceil(selectedWatchlist.symbols.length / itemsPerPage)}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-left py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Symbol</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Last</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Chg</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Chg%</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">High</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Low</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Volume</th>
+                          <th className="py-2 px-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {selectedWatchlist.symbols
+                          .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                          .map((symbol: any, index: number) => {
+                        const ltp = symbol.instrument_token ? getLTP(symbol.instrument_token) : null;
+                        const tick = symbol.instrument_token ? ticks.get(symbol.instrument_token) : null;
+                        const price = ltp ?? symbol.price ?? 0;
+                        const change = tick?.close ? (price - tick.close) : 0;
+                        const changePercent = tick?.close ? ((price - tick.close) / tick.close) * 100 : 0;
+                        const isPositive = change >= 0;
+
+                        return (
+                          <tr key={index} className="hover:bg-gray-50 group">
+                            <td className="py-3 px-3">
+                              <div className="flex items-center gap-2">
+                                {isConnected && ltp && (
+                                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                                )}
+                                <div>
+                                  <p className="font-medium text-sm text-gray-900">{symbol.symbol}</p>
+                                  <p className="text-xs text-gray-500">{symbol.exchange}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className="text-sm font-medium text-gray-900">₹{price.toFixed(2)}</p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className={`text-sm font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                {isPositive ? '+' : ''}₹{change.toFixed(2)}
+                              </p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className={`text-sm font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                {isPositive ? '+' : ''}{changePercent.toFixed(2)}%
+                              </p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className="text-sm text-gray-600">{tick?.high ? `₹${tick.high.toFixed(2)}` : '-'}</p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className="text-sm text-gray-600">{tick?.low ? `₹${tick.low.toFixed(2)}` : '-'}</p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className="text-sm text-gray-600">{tick?.volume_traded ? tick.volume_traded.toLocaleString() : '-'}</p>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <button
+                                onClick={() => removeInstrumentFromWatchlist(symbol.instrument_token)}
+                                className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                title="Remove"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <p>No symbols in this watchlist</p>
+                  <p className="text-sm mt-1">Add symbols to start tracking</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center">
+              <List className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No watchlist selected</h3>
+              <p className="text-gray-600">Select or create a watchlist to get started</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
