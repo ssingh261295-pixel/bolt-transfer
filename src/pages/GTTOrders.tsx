@@ -54,7 +54,7 @@ export function GTTOrders() {
   }, [brokers]);
 
   useEffect(() => {
-    if (selectedBrokerId) {
+    if (selectedBrokerId && selectedBrokerId !== '' && session?.access_token) {
       handleSync();
     }
   }, [selectedBrokerId]);
@@ -230,30 +230,42 @@ export function GTTOrders() {
   }, [sortField, sortDirection]);
 
   const handleSync = async () => {
+    if (!session?.access_token) {
+      console.error('No session token available for sync');
+      return;
+    }
+
     setSyncing(true);
     try {
+      console.log('Starting GTT sync for broker:', selectedBrokerId);
       // Sync from Zerodha API to database
       if (selectedBrokerId === 'all') {
-        await Promise.all(brokers.map(async (broker) => {
+        const syncResults = await Promise.all(brokers.map(async (broker) => {
           const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${broker.id}&sync=true`;
-          await fetch(apiUrl, {
+          const response = await fetch(apiUrl, {
             headers: {
-              'Authorization': `Bearer ${session?.access_token}`,
+              'Authorization': `Bearer ${session.access_token}`,
               'Content-Type': 'application/json',
             },
           });
+          const result = await response.json();
+          console.log(`Sync result for broker ${broker.id}:`, result);
+          return result;
         }));
+        console.log('All brokers synced:', syncResults);
       } else {
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${selectedBrokerId}&sync=true`;
-        await fetch(apiUrl, {
+        const response = await fetch(apiUrl, {
           headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
+            'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
           },
         });
+        const result = await response.json();
+        console.log('Sync result:', result);
       }
       // Reload from database after sync
-      await loadGTTOrders();
+      await loadGTTOrdersFromDB();
     } catch (err) {
       console.error('Failed to sync GTT orders:', err);
     } finally {
