@@ -84,6 +84,12 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
     ));
   };
 
+  const updateIndicatorWithParams = (id: string, name: string, params: Record<string, number>) => {
+    setIndicators(indicators.map(i =>
+      i.id === id ? { ...i, name, params } : i
+    ));
+  };
+
   const updateIndicatorParam = (id: string, param: string, value: number) => {
     setIndicators(indicators.map(i =>
       i.id === id ? { ...i, params: { ...i.params, [param]: value } } : i
@@ -249,8 +255,7 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
                       value={indicator.name}
                       onChange={(e) => {
                         const newIndicator = AVAILABLE_INDICATORS.find(ai => ai.value === e.target.value);
-                        updateIndicator(indicator.id, 'name', e.target.value);
-                        updateIndicator(indicator.id, 'params', newIndicator?.defaultParams || {});
+                        updateIndicatorWithParams(indicator.id, e.target.value, newIndicator?.defaultParams || {});
                       }}
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
                     >
@@ -305,52 +310,66 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
 
         <div className="space-y-3">
           {entryConditions.map(condition => (
-            <div key={condition.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
-              <div className="flex-1 grid grid-cols-4 gap-3">
-                <select
-                  value={condition.indicator1}
-                  onChange={(e) => updateCondition('entry', condition.id, 'indicator1', e.target.value)}
-                  className="px-2 py-1.5 border border-gray-300 rounded text-sm"
-                >
-                  {getIndicatorOptions().map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+            <div key={condition.id} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg">
+              <div className="flex-1 space-y-2">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">First Value</label>
+                    <select
+                      value={condition.indicator1}
+                      onChange={(e) => updateCondition('entry', condition.id, 'indicator1', e.target.value)}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                    >
+                      {getIndicatorOptions().map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                <select
-                  value={condition.operator}
-                  onChange={(e) => updateCondition('entry', condition.id, 'operator', e.target.value)}
-                  className="px-2 py-1.5 border border-gray-300 rounded text-sm"
-                >
-                  {OPERATORS.map(op => (
-                    <option key={op.value} value={op.value}>{op.label}</option>
-                  ))}
-                </select>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Operator</label>
+                    <select
+                      value={condition.operator}
+                      onChange={(e) => updateCondition('entry', condition.id, 'operator', e.target.value)}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                    >
+                      {OPERATORS.map(op => (
+                        <option key={op.value} value={op.value}>{op.label}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                <select
-                  value={condition.indicator2}
-                  onChange={(e) => updateCondition('entry', condition.id, 'indicator2', e.target.value)}
-                  className="px-2 py-1.5 border border-gray-300 rounded text-sm"
-                >
-                  {getIndicatorOptions().map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Second Value</label>
+                    <select
+                      value={condition.indicator2}
+                      onChange={(e) => updateCondition('entry', condition.id, 'indicator2', e.target.value)}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                    >
+                      {getIndicatorOptions().map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
                 {condition.indicator2 === 'value' && (
-                  <input
-                    type="number"
-                    value={condition.value || 0}
-                    onChange={(e) => updateCondition('entry', condition.id, 'value', parseFloat(e.target.value))}
-                    className="px-2 py-1.5 border border-gray-300 rounded text-sm"
-                    placeholder="Value"
-                  />
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Custom Value</label>
+                    <input
+                      type="number"
+                      value={condition.value || 0}
+                      onChange={(e) => updateCondition('entry', condition.id, 'value', parseFloat(e.target.value))}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                      placeholder="Enter value"
+                    />
+                  </div>
                 )}
               </div>
 
               <button
                 onClick={() => removeCondition('entry', condition.id)}
-                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                className="mt-6 p-1.5 text-red-600 hover:bg-red-50 rounded"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -377,52 +396,66 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
 
         <div className="space-y-3">
           {exitConditions.map(condition => (
-            <div key={condition.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
-              <div className="flex-1 grid grid-cols-4 gap-3">
-                <select
-                  value={condition.indicator1}
-                  onChange={(e) => updateCondition('exit', condition.id, 'indicator1', e.target.value)}
-                  className="px-2 py-1.5 border border-gray-300 rounded text-sm"
-                >
-                  {getIndicatorOptions().map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+            <div key={condition.id} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg">
+              <div className="flex-1 space-y-2">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">First Value</label>
+                    <select
+                      value={condition.indicator1}
+                      onChange={(e) => updateCondition('exit', condition.id, 'indicator1', e.target.value)}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                    >
+                      {getIndicatorOptions().map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                <select
-                  value={condition.operator}
-                  onChange={(e) => updateCondition('exit', condition.id, 'operator', e.target.value)}
-                  className="px-2 py-1.5 border border-gray-300 rounded text-sm"
-                >
-                  {OPERATORS.map(op => (
-                    <option key={op.value} value={op.value}>{op.label}</option>
-                  ))}
-                </select>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Operator</label>
+                    <select
+                      value={condition.operator}
+                      onChange={(e) => updateCondition('exit', condition.id, 'operator', e.target.value)}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                    >
+                      {OPERATORS.map(op => (
+                        <option key={op.value} value={op.value}>{op.label}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                <select
-                  value={condition.indicator2}
-                  onChange={(e) => updateCondition('exit', condition.id, 'indicator2', e.target.value)}
-                  className="px-2 py-1.5 border border-gray-300 rounded text-sm"
-                >
-                  {getIndicatorOptions().map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Second Value</label>
+                    <select
+                      value={condition.indicator2}
+                      onChange={(e) => updateCondition('exit', condition.id, 'indicator2', e.target.value)}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                    >
+                      {getIndicatorOptions().map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
                 {condition.indicator2 === 'value' && (
-                  <input
-                    type="number"
-                    value={condition.value || 0}
-                    onChange={(e) => updateCondition('exit', condition.id, 'value', parseFloat(e.target.value))}
-                    className="px-2 py-1.5 border border-gray-300 rounded text-sm"
-                    placeholder="Value"
-                  />
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Custom Value</label>
+                    <input
+                      type="number"
+                      value={condition.value || 0}
+                      onChange={(e) => updateCondition('exit', condition.id, 'value', parseFloat(e.target.value))}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                      placeholder="Enter value"
+                    />
+                  </div>
                 )}
               </div>
 
               <button
                 onClick={() => removeCondition('exit', condition.id)}
-                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                className="mt-6 p-1.5 text-red-600 hover:bg-red-50 rounded"
               >
                 <X className="w-4 h-4" />
               </button>
