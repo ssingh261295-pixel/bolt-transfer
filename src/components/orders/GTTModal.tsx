@@ -239,17 +239,17 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         setTriggerPercent2('2');
         setPricePercent2('2');
       } else {
-        // Sell OCO: Stoploss at +2%, Target at -2%
-        const stoploss = (ltp * 1.02).toFixed(2);
-        const target = (ltp * 0.98).toFixed(2);
+        // Sell OCO: Stoploss at -2% (below), Target at +2% (above)
+        const stoploss = (ltp * 0.98).toFixed(2);
+        const target = (ltp * 1.02).toFixed(2);
         setTriggerPrice1(stoploss);
         setPrice1(stoploss);
-        setTriggerPercent1('2');
-        setPricePercent1('2');
+        setTriggerPercent1('-2');
+        setPricePercent1('-2');
         setTriggerPrice2(target);
         setPrice2(target);
-        setTriggerPercent2('-2');
-        setPricePercent2('-2');
+        setTriggerPercent2('2');
+        setPricePercent2('2');
       }
     }
   };
