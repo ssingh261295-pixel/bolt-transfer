@@ -65,17 +65,22 @@ export function Dashboard() {
                 },
               }
             ),
-            supabase
-              .from('gtt_orders')
-              .select('*', { count: 'exact', head: false })
-              .eq('broker_connection_id', broker.id),
+            fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${broker.id}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${session?.access_token}`,
+                },
+              }
+            ),
           ]);
 
-          console.log(`GTT Response for broker ${broker.id}:`, gttResponse);
+          const gttResult = await gttResponse.json();
+          console.log(`GTT API Response for broker ${broker.id}:`, gttResult);
 
           if (positionsResponse.ok) {
             const result = await positionsResponse.json();
-            console.log('API Response for broker', broker.id, ':', result);
+            console.log('Positions API Response for broker', broker.id, ':', result);
 
             if (result.success) {
               const equity = result.margins?.equity || {};
@@ -86,9 +91,10 @@ export function Dashboard() {
               }, 0);
 
               const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;
-              const activeGtt = gttResponse.data?.filter((gtt: any) => gtt.status === 'active').length || 0;
+              const gttOrders = gttResult.success ? (gttResult.data || []) : [];
+              const activeGtt = gttOrders.filter((gtt: any) => gtt.status === 'active').length;
 
-              console.log(`Broker ${broker.id} - Active GTT count:`, activeGtt, 'Total GTT:', gttResponse.data?.length);
+              console.log(`Broker ${broker.id} - Active GTT count:`, activeGtt, 'Total GTT:', gttOrders.length);
 
               accountResults.push({
                 broker_id: broker.id,
