@@ -775,26 +775,28 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
             <div className="grid grid-cols-3 gap-4">
               {/* Trigger Price */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Trigger price</label>
-                <div className="flex gap-2 mb-2">
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={!useTriggerPercent1}
-                      onChange={() => setUseTriggerPercent1(false)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="ml-1 text-xs text-gray-700">Price</span>
-                  </label>
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={useTriggerPercent1}
-                      onChange={() => setUseTriggerPercent1(true)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="ml-1 text-xs text-gray-700">%</span>
-                  </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-gray-700">Trigger price</label>
+                  <div className="flex gap-2">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={!useTriggerPercent1}
+                        onChange={() => setUseTriggerPercent1(false)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="ml-1 text-xs text-gray-700">Price</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={useTriggerPercent1}
+                        onChange={() => setUseTriggerPercent1(true)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="ml-1 text-xs text-gray-700">%</span>
+                    </label>
+                  </div>
                 </div>
                 {!useTriggerPercent1 ? (
                   <div>
@@ -861,26 +863,28 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
               {/* Price */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
-                <div className="flex gap-2 mb-2">
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={!usePricePercent1}
-                      onChange={() => setUsePricePercent1(false)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="ml-1 text-xs text-gray-700">Price</span>
-                  </label>
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={usePricePercent1}
-                      onChange={() => setUsePricePercent1(true)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="ml-1 text-xs text-gray-700">%</span>
-                  </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-gray-700">Price</label>
+                  <div className="flex gap-2">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={!usePricePercent1}
+                        onChange={() => setUsePricePercent1(false)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="ml-1 text-xs text-gray-700">Price</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={usePricePercent1}
+                        onChange={() => setUsePricePercent1(true)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="ml-1 text-xs text-gray-700">%</span>
+                    </label>
+                  </div>
                 </div>
                 {!usePricePercent1 ? (
                   <div>
@@ -969,26 +973,28 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
               <div className="grid grid-cols-3 gap-4">
                 {/* Trigger Price */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Trigger price</label>
-                  <div className="flex gap-2 mb-2">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={!useTriggerPercent2}
-                        onChange={() => setUseTriggerPercent2(false)}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="ml-1 text-xs text-gray-700">Price</span>
-                    </label>
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={useTriggerPercent2}
-                        onChange={() => setUseTriggerPercent2(true)}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="ml-1 text-xs text-gray-700">%</span>
-                    </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700">Trigger price</label>
+                    <div className="flex gap-2">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={!useTriggerPercent2}
+                          onChange={() => setUseTriggerPercent2(false)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="ml-1 text-xs text-gray-700">Price</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={useTriggerPercent2}
+                          onChange={() => setUseTriggerPercent2(true)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="ml-1 text-xs text-gray-700">%</span>
+                      </label>
+                    </div>
                   </div>
                   {!useTriggerPercent2 ? (
                     <div>
@@ -1055,26 +1061,28 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
                 {/* Price */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
-                  <div className="flex gap-2 mb-2">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={!usePricePercent2}
-                        onChange={() => setUsePricePercent2(false)}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="ml-1 text-xs text-gray-700">Price</span>
-                    </label>
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={usePricePercent2}
-                        onChange={() => setUsePricePercent2(true)}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="ml-1 text-xs text-gray-700">%</span>
-                    </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700">Price</label>
+                    <div className="flex gap-2">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={!usePricePercent2}
+                          onChange={() => setUsePricePercent2(false)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="ml-1 text-xs text-gray-700">Price</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={usePricePercent2}
+                          onChange={() => setUsePricePercent2(true)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="ml-1 text-xs text-gray-700">%</span>
+                      </label>
+                    </div>
                   </div>
                   {!usePricePercent2 ? (
                     <div>
