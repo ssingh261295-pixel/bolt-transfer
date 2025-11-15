@@ -212,10 +212,10 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
   // Re-calculate prefilled values when GTT type or transaction type changes
   useEffect(() => {
-    if (currentLTP && !editingGTT) {
+    if (currentLTP && !editingGTT && gttType === 'two-leg') {
       prefillPricesBasedOnLTP(currentLTP);
     }
-  }, [gttType, transactionType]);
+  }, [gttType, transactionType, currentLTP]);
 
   const prefillPricesBasedOnLTP = (ltp: number) => {
     if (gttType === 'single') {

@@ -24,6 +24,7 @@ export function GTTOrders() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteType, setDeleteType] = useState<'bulk' | 'single'>('bulk');
   const [deleteTarget, setDeleteTarget] = useState<{ gttId?: number; brokerId?: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -209,6 +210,7 @@ export function GTTOrders() {
 
   const confirmBulkDelete = async () => {
     setShowDeleteConfirm(false);
+    setDeleting(true);
 
     console.log('Starting bulk delete:', {
       ordersCount: selectedOrders.size,
@@ -282,6 +284,7 @@ export function GTTOrders() {
       setDeleteError(`Failed to delete GTT orders: ${firstError}`);
       setTimeout(() => setDeleteError(''), 5000);
     }
+    setDeleting(false);
   };
 
   const handleDelete = async (gttId: number, brokerId?: string) => {
@@ -293,6 +296,7 @@ export function GTTOrders() {
   const confirmSingleDelete = async () => {
     if (!deleteTarget?.gttId) return;
     setShowDeleteConfirm(false);
+    setDeleting(true);
 
     const { gttId, brokerId } = deleteTarget;
 
@@ -322,6 +326,8 @@ export function GTTOrders() {
     } catch (err: any) {
       setDeleteError('Failed to delete GTT order: ' + err.message);
       setTimeout(() => setDeleteError(''), 5000);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -385,6 +391,12 @@ export function GTTOrders() {
       {deleteError && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-sm text-red-800 font-medium">{deleteError}</p>
+        </div>
+      )}
+
+      {deleting && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800 font-medium">Deleting GTT order(s)...</p>
         </div>
       )}
 
