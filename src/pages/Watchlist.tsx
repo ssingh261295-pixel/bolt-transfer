@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, List, Trash2, Eye } from 'lucide-react';
+import { Plus, List, Trash2, Eye, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
 
 export function Watchlist() {
   const { user } = useAuth();
@@ -9,12 +10,47 @@ export function Watchlist() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedWatchlist, setSelectedWatchlist] = useState<any>(null);
   const [formData, setFormData] = useState({ name: '' });
+  const [brokerId, setBrokerId] = useState<string>('');
+
+  const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(brokerId);
 
   useEffect(() => {
     if (user) {
       loadWatchlists();
+      loadBrokerConnection();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (brokerId) {
+      connect();
+    }
+    return () => disconnect();
+  }, [brokerId, connect, disconnect]);
+
+  useEffect(() => {
+    if (isConnected && selectedWatchlist?.symbols) {
+      const tokens = selectedWatchlist.symbols
+        .filter((s: any) => s.instrument_token)
+        .map((s: any) => s.instrument_token);
+      if (tokens.length > 0) {
+        subscribe(tokens, 'full');
+      }
+    }
+  }, [isConnected, selectedWatchlist, subscribe]);
+
+  const loadBrokerConnection = async () => {
+    const { data } = await supabase
+      .from('broker_connections')
+      .select('id')
+      .eq('user_id', user?.id)
+      .eq('is_active', true)
+      .single();
+
+    if (data) {
+      setBrokerId(data.id);
+    }
+  };
 
   const loadWatchlists = async () => {
     const { data } = await supabase
@@ -66,7 +102,15 @@ export function Watchlist() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Watchlists</h2>
-          <p className="text-sm text-gray-600 mt-1">Track your favorite stocks and instruments</p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-sm text-gray-600">Track your favorite stocks and instruments</p>
+            {isConnected && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                <Activity className="w-3 h-3 animate-pulse" />
+                Live
+              </div>
+            )}
+          </div>
         </div>
         <button
           onClick={() => setShowCreateForm(true)}
@@ -159,18 +203,41 @@ export function Watchlist() {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{selectedWatchlist.name}</h3>
               {Array.isArray(selectedWatchlist.symbols) && selectedWatchlist.symbols.length > 0 ? (
                 <div className="space-y-2">
-                  {selectedWatchlist.symbols.map((symbol: any, index: number) => (
-                    <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">{symbol.symbol}</p>
-                        <p className="text-sm text-gray-600">{symbol.exchange}</p>
+                  {selectedWatchlist.symbols.map((symbol: any, index: number) => {
+                    const ltp = symbol.instrument_token ? getLTP(symbol.instrument_token) : null;
+                    const tick = symbol.instrument_token ? ticks.get(symbol.instrument_token) : null;
+                    const price = ltp ?? symbol.price ?? 0;
+                    const change = tick?.close ? ((price - tick.close) / tick.close) * 100 : 0;
+                    const isPositive = change >= 0;
+
+                    return (
+                      <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div>
+                          <p className="font-medium text-gray-900">{symbol.symbol}</p>
+                          <p className="text-sm text-gray-600">{symbol.exchange}</p>
+                          {tick && (
+                            <div className="flex gap-3 mt-1 text-xs text-gray-500">
+                              <span>O: {tick.open?.toFixed(2)}</span>
+                              <span>H: {tick.high?.toFixed(2)}</span>
+                              <span>L: {tick.low?.toFixed(2)}</span>
+                              <span>Vol: {tick.volume_traded?.toLocaleString()}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium text-gray-900">
+                            ₹{price.toFixed(2)}
+                            {isConnected && ltp && (
+                              <span className="ml-1 text-xs text-green-600">●</span>
+                            )}
+                          </p>
+                          <p className={`text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                            {isPositive ? '+' : ''}{change.toFixed(2)}%
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-medium text-gray-900">₹{symbol.price || '0.00'}</p>
-                        <p className="text-sm text-green-600">+0.00%</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-12 text-gray-500">

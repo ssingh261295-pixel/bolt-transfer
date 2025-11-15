@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { LineChart, X, RefreshCw, Bell, ArrowUpDown } from 'lucide-react';
+import { LineChart, X, RefreshCw, Bell, ArrowUpDown, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodha } from '../hooks/useZerodha';
+import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
 import { GTTModal } from '../components/orders/GTTModal';
 
 type SortField = 'symbol' | 'quantity' | 'average_price' | 'current_price' | 'pnl' | 'pnl_percentage';
@@ -25,6 +26,8 @@ export function Positions() {
   const [sortField, setSortField] = useState<SortField>('pnl');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
+  const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBroker !== 'all' ? selectedBroker : brokers[0]?.id);
+
   useEffect(() => {
     if (user) {
       loadPositions();
@@ -35,6 +38,25 @@ export function Positions() {
   useEffect(() => {
     filterPositions();
   }, [selectedBroker, allPositions]);
+
+  useEffect(() => {
+    const brokerId = selectedBroker !== 'all' ? selectedBroker : brokers[0]?.id;
+    if (brokerId) {
+      connect();
+    }
+    return () => disconnect();
+  }, [selectedBroker, brokers, connect, disconnect]);
+
+  useEffect(() => {
+    if (isConnected && positions.length > 0) {
+      const tokens = positions
+        .map(p => p.instrument_token)
+        .filter(Boolean);
+      if (tokens.length > 0) {
+        subscribe(tokens, 'full');
+      }
+    }
+  }, [isConnected, positions, subscribe]);
 
   const loadPositions = async () => {
     const { data } = await supabase
@@ -219,7 +241,15 @@ export function Positions() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Open Positions</h2>
-          <p className="text-sm text-gray-600 mt-1">Monitor your active trading positions</p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-sm text-gray-600">Monitor your active trading positions</p>
+            {isConnected && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                <Activity className="w-3 h-3 animate-pulse" />
+                Live
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -345,41 +375,52 @@ export function Positions() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {positions.map((position) => (
-                  <tr key={position.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="font-medium text-gray-900">{position.symbol}</div>
-                        <div className="text-sm text-gray-600">{position.exchange}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 font-medium">
-                        {position.broker_connections?.account_holder_name || position.broker_connections?.account_name || 'Default Account'}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {position.broker_connections?.client_id && `Client ID: ${position.broker_connections.client_id}`}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {position.quantity}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ₹{position.average_price?.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ₹{position.current_price?.toFixed(2) || position.average_price?.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`font-medium ${position.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {position.pnl >= 0 ? '+' : ''}₹{position.pnl?.toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`font-medium ${position.pnl_percentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {position.pnl_percentage >= 0 ? '+' : ''}{position.pnl_percentage?.toFixed(2)}%
-                      </span>
-                    </td>
+                {positions.map((position) => {
+                  const ltp = position.instrument_token ? getLTP(position.instrument_token) : null;
+                  const currentPrice = ltp ?? position.current_price ?? position.average_price;
+                  const pnl = (currentPrice - position.average_price) * position.quantity;
+                  const pnlPercentage = ((currentPrice - position.average_price) / position.average_price) * 100;
+
+                  return (
+                    <tr key={position.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {position.symbol}
+                            {isConnected && ltp && (
+                              <span className="ml-1 text-xs text-green-600">●</span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-600">{position.exchange}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 font-medium">
+                          {position.broker_connections?.account_holder_name || position.broker_connections?.account_name || 'Default Account'}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {position.broker_connections?.client_id && `Client ID: ${position.broker_connections.client_id}`}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {position.quantity}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        ₹{position.average_price?.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        ₹{currentPrice.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`font-medium ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {pnl >= 0 ? '+' : ''}₹{pnl.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`font-medium ${pnlPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {pnlPercentage >= 0 ? '+' : ''}{pnlPercentage.toFixed(2)}%
+                        </span>
+                      </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <button
@@ -396,10 +437,11 @@ export function Positions() {
                         >
                           <X className="w-4 h-4" />
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
