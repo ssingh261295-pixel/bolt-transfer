@@ -16,6 +16,8 @@ export function Watchlist() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
   const [allFOInstruments, setAllFOInstruments] = useState<any[]>([]);
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState(false);
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(brokerId);
 
@@ -58,33 +60,63 @@ export function Watchlist() {
   };
 
   const loadWatchlists = async () => {
-    const { data } = await supabase
-      .from('watchlists')
-      .select('*')
-      .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
+    try {
+      setLoading(true);
+      setError('');
+      const { data, error: fetchError } = await supabase
+        .from('watchlists')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
 
-    if (data) {
-      setWatchlists(data);
-      if (data.length > 0 && !selectedWatchlist) {
-        setSelectedWatchlist(data[0]);
+      if (fetchError) {
+        console.error('Error loading watchlists:', fetchError);
+        setError(`Failed to load watchlists: ${fetchError.message}`);
+        return;
       }
+
+      if (data) {
+        setWatchlists(data);
+        if (data.length > 0 && !selectedWatchlist) {
+          setSelectedWatchlist(data[0]);
+        }
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setError('An unexpected error occurred');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const { error } = await supabase.from('watchlists').insert({
-      user_id: user?.id,
-      name: formData.name,
-      symbols: [],
-    });
+    if (!formData.name.trim()) {
+      setError('Watchlist name is required');
+      return;
+    }
 
-    if (!error) {
+    try {
+      setError('');
+      const { error: createError } = await supabase.from('watchlists').insert({
+        user_id: user?.id,
+        name: formData.name,
+        symbols: [],
+      });
+
+      if (createError) {
+        console.error('Error creating watchlist:', createError);
+        setError(`Failed to create watchlist: ${createError.message}`);
+        return;
+      }
+
       setShowCreateForm(false);
       setFormData({ name: '' });
-      loadWatchlists();
+      await loadWatchlists();
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setError('Failed to create watchlist');
     }
   };
 
@@ -109,23 +141,39 @@ export function Watchlist() {
     }
 
     setSearching(true);
+    setError('');
     try {
       const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setError('Not authenticated. Please log in.');
+        return;
+      }
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NFO&search=${encodeURIComponent(query)}`,
         {
           headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
+            'Authorization': `Bearer ${session.access_token}`,
           },
         }
       );
 
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}: ${response.statusText}`);
+      }
+
       const result = await response.json();
+      console.log('Search result:', result);
+
       if (result.success) {
-        setSearchResults(result.instruments);
+        setSearchResults(result.instruments || []);
+      } else {
+        setError(result.error || 'Failed to search instruments');
       }
     } catch (error) {
       console.error('Error searching instruments:', error);
+      setError(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSearching(false);
     }
@@ -234,6 +282,15 @@ export function Watchlist() {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="text-red-700 hover:text-red-900">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Watchlists</h2>
@@ -340,10 +397,24 @@ export function Watchlist() {
             </button>
           ))}
 
-          {watchlists.length === 0 && (
+          {loading && (
             <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="text-sm text-gray-600 mt-2">Loading...</p>
+            </div>
+          )}
+
+          {!loading && watchlists.length === 0 && (
+            <div className="text-center py-8 bg-white rounded-lg border border-gray-200 p-6">
               <List className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-600">No watchlists yet</p>
+              <p className="text-sm font-medium text-gray-900 mb-1">No watchlists yet</p>
+              <p className="text-xs text-gray-600 mb-4">Create your first watchlist to start tracking instruments</p>
+              <button
+                onClick={() => setShowCreateForm(true)}
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+              >
+                Create Watchlist
+              </button>
             </div>
           )}
         </div>
