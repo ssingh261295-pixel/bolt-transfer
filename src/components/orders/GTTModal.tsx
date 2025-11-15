@@ -226,30 +226,63 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       setTriggerPercent1('2');
       setPricePercent1('2');
     } else if (gttType === 'two-leg') {
-      if (transactionType === 'SELL') {
-        // Sell OCO (closing a long position): Stoploss at -2% (below), Target at +2% (above)
-        const stoploss = (ltp * 0.98).toFixed(2);
-        const target = (ltp * 1.02).toFixed(2);
-        setTriggerPrice1(stoploss);
-        setPrice1(stoploss);
-        setTriggerPercent1('-2');
-        setPricePercent1('-2');
-        setTriggerPrice2(target);
-        setPrice2(target);
-        setTriggerPercent2('2');
-        setPricePercent2('2');
+      // Check if this is from a position (closing) or new GTT (opening)
+      const isClosingPosition = positionData !== undefined;
+
+      if (isClosingPosition) {
+        // Closing position logic
+        if (transactionType === 'SELL') {
+          // Sell OCO (closing a long position): Stoploss at -2% (below), Target at +2% (above)
+          const stoploss = (ltp * 0.98).toFixed(2);
+          const target = (ltp * 1.02).toFixed(2);
+          setTriggerPrice1(stoploss);
+          setPrice1(stoploss);
+          setTriggerPercent1('-2');
+          setPricePercent1('-2');
+          setTriggerPrice2(target);
+          setPrice2(target);
+          setTriggerPercent2('2');
+          setPricePercent2('2');
+        } else {
+          // Buy OCO (closing a short position): Stoploss at +2% (above), Target at -2% (below)
+          const stoploss = (ltp * 1.02).toFixed(2);
+          const target = (ltp * 0.98).toFixed(2);
+          setTriggerPrice1(stoploss);
+          setPrice1(stoploss);
+          setTriggerPercent1('2');
+          setPricePercent1('2');
+          setTriggerPrice2(target);
+          setPrice2(target);
+          setTriggerPercent2('-2');
+          setPricePercent2('-2');
+        }
       } else {
-        // Buy OCO (closing a short position): Stoploss at +2% (above), Target at -2% (below)
-        const stoploss = (ltp * 1.02).toFixed(2);
-        const target = (ltp * 0.98).toFixed(2);
-        setTriggerPrice1(stoploss);
-        setPrice1(stoploss);
-        setTriggerPercent1('2');
-        setPricePercent1('2');
-        setTriggerPrice2(target);
-        setPrice2(target);
-        setTriggerPercent2('-2');
-        setPricePercent2('-2');
+        // Opening new position logic
+        if (transactionType === 'BUY') {
+          // Buy OCO (entering long): Lower trigger to buy on dip, higher trigger to buy on breakout
+          const lowerTrigger = (ltp * 0.98).toFixed(2);
+          const higherTrigger = (ltp * 1.02).toFixed(2);
+          setTriggerPrice1(lowerTrigger);
+          setPrice1(lowerTrigger);
+          setTriggerPercent1('-2');
+          setPricePercent1('-2');
+          setTriggerPrice2(higherTrigger);
+          setPrice2(higherTrigger);
+          setTriggerPercent2('2');
+          setPricePercent2('2');
+        } else {
+          // Sell OCO (entering short): Higher trigger to sell on rise, lower trigger to sell on fall
+          const higherTrigger = (ltp * 1.02).toFixed(2);
+          const lowerTrigger = (ltp * 0.98).toFixed(2);
+          setTriggerPrice1(higherTrigger);
+          setPrice1(higherTrigger);
+          setTriggerPercent1('2');
+          setPricePercent1('2');
+          setTriggerPrice2(lowerTrigger);
+          setPrice2(lowerTrigger);
+          setTriggerPercent2('-2');
+          setPricePercent2('-2');
+        }
       }
     }
   };
@@ -650,29 +683,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           )}
 
 
-          {/* Symbol Header with LTP */}
-          {selectedInstrument && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <h3 className="text-xl font-bold text-gray-900">
-                    {selectedInstrument.tradingsymbol}
-                  </h3>
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
-                    {selectedInstrument.exchange || exchange}
-                  </span>
-                  {currentLTP && (
-                    <div className="text-lg font-semibold text-gray-900">
-                      {currentLTP.toFixed(2)}
-                    </div>
-                  )}
-                </div>
-                {fetchingLTP && (
-                  <div className="text-xs text-gray-500 animate-pulse">Updating...</div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Transaction and Trigger Type */}
           <div className="grid grid-cols-2 gap-6">
