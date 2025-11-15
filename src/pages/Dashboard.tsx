@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Wallet, RefreshCw, Filter } from 'lucide-react';
+import { Wallet, RefreshCw, Filter, TrendingUp, Activity, ListChecks } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
-interface MarginData {
+interface AccountData {
   broker_id: string;
   broker_name: string;
   account_name: string;
@@ -12,15 +12,19 @@ interface MarginData {
   available_margin: number;
   used_margin: number;
   available_cash: number;
+  today_pnl: number;
+  active_trades: number;
+  active_gtt: number;
   last_updated: Date;
 }
 
 export function Dashboard() {
   const { user, session } = useAuth();
   const [brokers, setBrokers] = useState<any[]>([]);
-  const [marginData, setMarginData] = useState<MarginData[]>([]);
+  const [accountsData, setAccountsData] = useState<AccountData[]>([]);
   const [selectedBroker, setSelectedBroker] = useState<string>('all');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>('');
 
   useEffect(() => {
     if (user) {
@@ -39,74 +43,104 @@ export function Dashboard() {
     if (data) {
       setBrokers(data);
       if (data.length > 0) {
-        fetchMarginData(data);
+        fetchAccountsData(data);
       }
     }
   };
 
-  const fetchMarginData = async (brokersToFetch: any[]) => {
+  const fetchAccountsData = async (brokersToFetch: any[]) => {
     setLoading(true);
-    const marginResults: MarginData[] = [];
+    setError('');
+    const accountResults: AccountData[] = [];
 
     for (const broker of brokersToFetch) {
       if (broker.broker_name === 'zerodha') {
         try {
-          const response = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions?broker_id=${broker.id}`,
-            {
-              headers: {
-                'Authorization': `Bearer ${session?.access_token}`,
-              },
-            }
-          );
+          const [positionsResponse, gttResponse] = await Promise.all([
+            fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions?broker_id=${broker.id}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${session?.access_token}`,
+                },
+              }
+            ),
+            supabase
+              .from('gtt_orders')
+              .select('*', { count: 'exact', head: false })
+              .eq('broker_connection_id', broker.id)
+              .eq('status', 'active'),
+          ]);
 
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.margins) {
-              const equity = result.margins.equity || {};
-              marginResults.push({
+          if (positionsResponse.ok) {
+            const result = await positionsResponse.json();
+            console.log('API Response for broker', broker.id, ':', result);
+
+            if (result.success) {
+              const equity = result.margins?.equity || {};
+              const positions = result.positions || [];
+
+              const todayPnl = positions.reduce((sum: number, pos: any) => {
+                return sum + (pos.pnl || 0);
+              }, 0);
+
+              const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;
+              const activeGtt = gttResponse.data?.length || 0;
+
+              accountResults.push({
                 broker_id: broker.id,
                 broker_name: broker.broker_name,
                 account_name: broker.account_name || '',
                 account_holder_name: broker.account_holder_name || '',
                 client_id: broker.client_id || '',
-                available_margin: parseFloat(equity.available?.live_balance || 0),
+                available_margin: parseFloat(equity.available?.live_balance || equity.available?.adhoc_margin || 0),
                 used_margin: parseFloat(equity.utilised?.debits || 0),
                 available_cash: parseFloat(equity.available?.cash || 0),
+                today_pnl: todayPnl,
+                active_trades: activeTrades,
+                active_gtt: activeGtt,
                 last_updated: new Date(),
               });
             }
           }
-        } catch (error) {
-          console.error(`Error fetching margin for broker ${broker.id}:`, error);
+        } catch (err) {
+          console.error(`Error fetching data for broker ${broker.id}:`, err);
+          setError(`Failed to fetch data for some accounts`);
         }
       }
     }
 
-    setMarginData(marginResults);
+    setAccountsData(accountResults);
     setLoading(false);
   };
 
   const handleRefresh = () => {
     if (brokers.length > 0) {
-      fetchMarginData(brokers);
+      fetchAccountsData(brokers);
     }
   };
 
-  const filteredMarginData = selectedBroker === 'all'
-    ? marginData
-    : marginData.filter(m => m.broker_id === selectedBroker);
+  const filteredAccountsData = selectedBroker === 'all'
+    ? accountsData
+    : accountsData.filter(a => a.broker_id === selectedBroker);
 
-  const totalAvailableMargin = filteredMarginData.reduce((sum, m) => sum + m.available_margin, 0);
-  const totalUsedMargin = filteredMarginData.reduce((sum, m) => sum + m.used_margin, 0);
-  const totalAvailableCash = filteredMarginData.reduce((sum, m) => sum + m.available_cash, 0);
+  const totalAvailableMargin = filteredAccountsData.reduce((sum, a) => sum + a.available_margin, 0);
+  const totalUsedMargin = filteredAccountsData.reduce((sum, a) => sum + a.used_margin, 0);
+  const totalAvailableCash = filteredAccountsData.reduce((sum, a) => sum + a.available_cash, 0);
+  const totalTodayPnl = filteredAccountsData.reduce((sum, a) => sum + a.today_pnl, 0);
+  const totalActiveTrades = filteredAccountsData.reduce((sum, a) => sum + a.active_trades, 0);
+  const totalActiveGtt = filteredAccountsData.reduce((sum, a) => sum + a.active_gtt, 0);
+
+  const formatCurrency = (value: number) => {
+    return `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Account Overview</h2>
-          <p className="text-sm text-gray-600 mt-1">View margin and cash details by account</p>
+          <p className="text-sm text-gray-600 mt-1">View margin, P&L, and trading activity by account</p>
         </div>
         <button
           onClick={handleRefresh}
@@ -118,11 +152,17 @@ export function Dashboard() {
         </button>
       </div>
 
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
       {brokers.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <Wallet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No broker connections</h3>
-          <p className="text-gray-600 mb-4">Connect a broker to view your margin details</p>
+          <p className="text-gray-600 mb-4">Connect a broker to view your account details</p>
           <a
             href="/brokers"
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
@@ -153,14 +193,14 @@ export function Dashboard() {
             </div>
           )}
 
-          {selectedBroker === 'all' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {selectedBroker === 'all' && accountsData.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-medium text-blue-100">Total Available Margin</h3>
                   <Wallet className="w-5 h-5 text-blue-200" />
                 </div>
-                <p className="text-3xl font-bold">₹{totalAvailableMargin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                <p className="text-3xl font-bold">{formatCurrency(totalAvailableMargin)}</p>
                 <p className="text-xs text-blue-100 mt-1">Across all accounts</p>
               </div>
 
@@ -169,7 +209,7 @@ export function Dashboard() {
                   <h3 className="text-sm font-medium text-orange-100">Total Used Margin</h3>
                   <Wallet className="w-5 h-5 text-orange-200" />
                 </div>
-                <p className="text-3xl font-bold">₹{totalUsedMargin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                <p className="text-3xl font-bold">{formatCurrency(totalUsedMargin)}</p>
                 <p className="text-xs text-orange-100 mt-1">Across all accounts</p>
               </div>
 
@@ -178,58 +218,108 @@ export function Dashboard() {
                   <h3 className="text-sm font-medium text-green-100">Total Available Cash</h3>
                   <Wallet className="w-5 h-5 text-green-200" />
                 </div>
-                <p className="text-3xl font-bold">₹{totalAvailableCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                <p className="text-3xl font-bold">{formatCurrency(totalAvailableCash)}</p>
                 <p className="text-xs text-green-100 mt-1">Across all accounts</p>
+              </div>
+
+              <div className={`bg-gradient-to-br ${totalTodayPnl >= 0 ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600'} rounded-xl p-6 text-white`}>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-white/80">Today's P&L</h3>
+                  <TrendingUp className="w-5 h-5 text-white/70" />
+                </div>
+                <p className="text-3xl font-bold">{totalTodayPnl >= 0 ? '+' : ''}{formatCurrency(totalTodayPnl)}</p>
+                <p className="text-xs text-white/80 mt-1">Across all accounts</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-purple-100">Active Trades</h3>
+                  <Activity className="w-5 h-5 text-purple-200" />
+                </div>
+                <p className="text-3xl font-bold">{totalActiveTrades}</p>
+                <p className="text-xs text-purple-100 mt-1">Open positions</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-6 text-white">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-indigo-100">Active GTT</h3>
+                  <ListChecks className="w-5 h-5 text-indigo-200" />
+                </div>
+                <p className="text-3xl font-bold">{totalActiveGtt}</p>
+                <p className="text-xs text-indigo-100 mt-1">Pending orders</p>
               </div>
             </div>
           )}
 
           <div className="grid grid-cols-1 gap-6">
-            {filteredMarginData.length === 0 && !loading ? (
+            {filteredAccountsData.length === 0 && !loading ? (
               <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-                <p className="text-gray-600">No margin data available</p>
+                <p className="text-gray-600">No account data available</p>
                 <p className="text-sm text-gray-500 mt-1">Click refresh to fetch latest data</p>
               </div>
             ) : (
-              filteredMarginData.map((margin) => (
-                <div key={margin.broker_id} className="bg-white rounded-xl border border-gray-200 p-6">
+              filteredAccountsData.map((account) => (
+                <div key={account.broker_id} className="bg-white rounded-xl border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-6">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">
-                        {margin.account_holder_name || margin.account_name || margin.client_id}
+                        {account.account_holder_name || account.account_name || account.client_id}
                       </h3>
-                      {margin.client_id && (
-                        <p className="text-sm text-gray-600">Client ID: {margin.client_id}</p>
+                      {account.client_id && (
+                        <p className="text-sm text-gray-600">Client ID: {account.client_id}</p>
                       )}
-                      {margin.account_name && margin.account_holder_name && (
-                        <p className="text-xs text-gray-500">{margin.account_name}</p>
+                      {account.account_name && account.account_holder_name && (
+                        <p className="text-xs text-gray-500">{account.account_name}</p>
                       )}
                     </div>
                     <div className="text-right text-xs text-gray-500">
                       <p>Last updated</p>
-                      <p>{margin.last_updated.toLocaleTimeString()}</p>
+                      <p>{account.last_updated.toLocaleTimeString()}</p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
                       <p className="text-sm font-medium text-blue-900 mb-1">Available Margin</p>
                       <p className="text-2xl font-bold text-blue-600">
-                        ₹{margin.available_margin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        {formatCurrency(account.available_margin)}
                       </p>
                     </div>
 
                     <div className="bg-orange-50 rounded-lg p-4 border border-orange-100">
                       <p className="text-sm font-medium text-orange-900 mb-1">Used Margin</p>
                       <p className="text-2xl font-bold text-orange-600">
-                        ₹{margin.used_margin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        {formatCurrency(account.used_margin)}
                       </p>
                     </div>
 
                     <div className="bg-green-50 rounded-lg p-4 border border-green-100">
                       <p className="text-sm font-medium text-green-900 mb-1">Available Cash</p>
                       <p className="text-2xl font-bold text-green-600">
-                        ₹{margin.available_cash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        {formatCurrency(account.available_cash)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className={`${account.today_pnl >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'} rounded-lg p-4 border`}>
+                      <p className={`text-sm font-medium ${account.today_pnl >= 0 ? 'text-emerald-900' : 'text-red-900'} mb-1`}>Today's P&L</p>
+                      <p className={`text-2xl font-bold ${account.today_pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {account.today_pnl >= 0 ? '+' : ''}{formatCurrency(account.today_pnl)}
+                      </p>
+                    </div>
+
+                    <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
+                      <p className="text-sm font-medium text-purple-900 mb-1">Active Trades</p>
+                      <p className="text-2xl font-bold text-purple-600">
+                        {account.active_trades}
+                      </p>
+                    </div>
+
+                    <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-100">
+                      <p className="text-sm font-medium text-indigo-900 mb-1">Active GTT</p>
+                      <p className="text-2xl font-bold text-indigo-600">
+                        {account.active_gtt}
                       </p>
                     </div>
                   </div>

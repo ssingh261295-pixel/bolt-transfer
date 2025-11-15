@@ -111,6 +111,52 @@ Deno.serve(async (req: Request) => {
       throw new Error('Failed to sync positions');
     }
 
+    if (req.method === 'GET' && url.pathname.endsWith('/margins')) {
+      const brokerId = url.searchParams.get('broker_id');
+
+      if (!brokerId) {
+        throw new Error('Missing broker_id');
+      }
+
+      const { data: brokerConnection } = await supabase
+        .from('broker_connections')
+        .select('api_key, access_token')
+        .eq('id', brokerId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!brokerConnection) {
+        throw new Error('Broker connection not found');
+      }
+
+      if (!brokerConnection.access_token) {
+        throw new Error('Broker not authorized. Please complete the Zerodha login flow from the Brokers page.');
+      }
+
+      const response = await fetch('https://api.kite.trade/user/margins', {
+        headers: {
+          'Authorization': `token ${brokerConnection.api_key}:${brokerConnection.access_token}`,
+          'X-Kite-Version': '3',
+        },
+      });
+
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        return new Response(
+          JSON.stringify({ success: true, margins: result.data || {} }),
+          {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      }
+
+      throw new Error('Failed to fetch margins');
+    }
+
     if (req.method === 'GET' && url.pathname.endsWith('/holdings')) {
       const brokerId = url.searchParams.get('broker_id');
 
@@ -157,7 +203,61 @@ Deno.serve(async (req: Request) => {
       throw new Error('Failed to fetch holdings');
     }
 
-    throw new Error('Invalid endpoint');
+    const brokerId = url.searchParams.get('broker_id');
+
+    if (!brokerId) {
+      throw new Error('Missing broker_id');
+    }
+
+    const { data: brokerConnection } = await supabase
+      .from('broker_connections')
+      .select('api_key, access_token')
+      .eq('id', brokerId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!brokerConnection) {
+      throw new Error('Broker connection not found');
+    }
+
+    if (!brokerConnection.access_token) {
+      throw new Error('Broker not authorized. Please complete the Zerodha login flow from the Brokers page.');
+    }
+
+    const [positionsResponse, marginsResponse] = await Promise.all([
+      fetch('https://api.kite.trade/portfolio/positions', {
+        headers: {
+          'Authorization': `token ${brokerConnection.api_key}:${brokerConnection.access_token}`,
+          'X-Kite-Version': '3',
+        },
+      }),
+      fetch('https://api.kite.trade/user/margins', {
+        headers: {
+          'Authorization': `token ${brokerConnection.api_key}:${brokerConnection.access_token}`,
+          'X-Kite-Version': '3',
+        },
+      }),
+    ]);
+
+    const positionsResult = await positionsResponse.json();
+    const marginsResult = await marginsResponse.json();
+
+    const positions = positionsResult.status === 'success' ? positionsResult.data?.net || [] : [];
+    const margins = marginsResult.status === 'success' ? marginsResult.data || {} : {};
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        positions,
+        margins,
+      }),
+      {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
   } catch (error) {
     return new Response(
