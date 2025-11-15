@@ -72,7 +72,7 @@ export function GTTOrders() {
     }
   };
 
-  const loadGTTOrders = async (throwOnError = false) => {
+  const loadGTTOrdersFromDB = async () => {
     if (!selectedBrokerId || brokers.length === 0) return;
 
     setLoading(true);
@@ -95,7 +95,6 @@ export function GTTOrders() {
 
         if (error) {
           console.error('Failed to load GTT orders from database:', error);
-          if (throwOnError) throw error;
           setGttOrders([]);
         } else {
           // Transform to match Zerodha API structure for display
@@ -145,7 +144,6 @@ export function GTTOrders() {
 
         if (error) {
           console.error('Failed to load GTT orders from database:', error);
-          if (throwOnError) throw error;
           setGttOrders([]);
         } else {
           const transformed = (data || []).map((gtt: any) => ({
@@ -178,7 +176,6 @@ export function GTTOrders() {
       }
     } catch (err) {
       console.error('Failed to load GTT orders:', err);
-      if (throwOnError) throw err;
       setGttOrders([]);
     } finally {
       setLoading(false);
@@ -351,16 +348,10 @@ export function GTTOrders() {
 
     if (successCount > 0) {
       setSelectedOrders(new Set());
-      try {
-        await loadGTTOrders(true);
-        setDeleteMessage(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
-        setDeleteError('');
-        setTimeout(() => setDeleteMessage(''), 5000);
-      } catch (err: any) {
-        setDeleteMessage('');
-        setDeleteError(`Deleted ${successCount} order(s) but failed to refresh list. Please reload the page.`);
-        setTimeout(() => setDeleteError(''), 5000);
-      }
+      await loadGTTOrdersFromDB();
+      setDeleteMessage(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
+      setDeleteError('');
+      setTimeout(() => setDeleteMessage(''), 5000);
     } else {
       const firstError = results.find(r => !r.success)?.error || 'Unknown error';
       setDeleteError(`Failed to delete GTT orders: ${firstError}`);
@@ -398,9 +389,9 @@ export function GTTOrders() {
       const result = await response.json();
 
       if (result.success) {
+        await loadGTTOrdersFromDB();
         setDeleteMessage('Successfully deleted GTT order');
         setTimeout(() => setDeleteMessage(''), 5000);
-        await loadGTTOrders();
       } else {
         setDeleteError('Failed to delete GTT order: ' + result.error);
         setTimeout(() => setDeleteError(''), 5000);
