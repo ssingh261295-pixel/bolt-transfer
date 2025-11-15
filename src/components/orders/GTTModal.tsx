@@ -524,7 +524,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">
@@ -852,8 +852,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   type="number"
                   value={quantity1}
                   onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none mt-8"
-                  min="1"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  min={selectedInstrument?.lot_size || 1}
                   step={selectedInstrument?.lot_size || 1}
                   required
                 />
@@ -1046,8 +1046,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     type="number"
                     value={quantity2}
                     onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none mt-8"
-                    min="1"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    min={selectedInstrument?.lot_size || 1}
                     step={selectedInstrument?.lot_size || 1}
                     required
                   />
