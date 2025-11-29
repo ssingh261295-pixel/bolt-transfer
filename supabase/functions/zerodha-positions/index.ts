@@ -90,6 +90,7 @@ Deno.serve(async (req: Request) => {
               current_price: position.last_price,
               pnl: pnl,
               pnl_percentage: pnlPercentage,
+              instrument_token: position.instrument_token,
             };
           });
 

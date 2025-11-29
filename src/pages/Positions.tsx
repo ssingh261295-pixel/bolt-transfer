@@ -136,9 +136,20 @@ export function Positions() {
     }
 
     setPositions(sortPositions(filtered));
+    updateSummary(filtered);
+  };
 
-    const totalPnL = filtered.reduce((sum, pos) => sum + (pos.pnl || 0), 0);
-    const totalInvested = filtered.reduce((sum, pos) => sum + (Math.abs(pos.quantity) * pos.average_price), 0);
+  const updateSummary = (positionsToSum: any[]) => {
+    const totalPnL = positionsToSum.reduce((sum, pos) => {
+      const ltp = pos.instrument_token ? getLTP(pos.instrument_token) : null;
+      const currentPrice = ltp ?? pos.current_price ?? pos.average_price;
+      const pnl = (currentPrice - pos.average_price) * pos.quantity;
+      return sum + pnl;
+    }, 0);
+
+    const totalInvested = positionsToSum.reduce((sum, pos) => {
+      return sum + (Math.abs(pos.quantity) * pos.average_price);
+    }, 0);
 
     setSummary({ totalPnL, totalInvested });
   };
@@ -149,6 +160,13 @@ export function Positions() {
       setPositions(sortPositions(filtered));
     }
   }, [sortField, sortDirection]);
+
+  useEffect(() => {
+    if (ticks.size > 0 && positions.length > 0) {
+      const filtered = selectedBroker === 'all' ? positions : positions.filter(pos => pos.broker_connection_id === selectedBroker);
+      updateSummary(filtered);
+    }
+  }, [ticks, positions, selectedBroker]);
 
   const loadBrokers = async () => {
     const { data } = await supabase
