@@ -53,35 +53,26 @@ export function AdminPanel() {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.rpc('get_all_users_admin');
 
-      if (filter !== 'all') {
-        query = query.eq('account_status', filter);
+      if (error) {
+        console.error('Failed to load users:', error);
+        throw error;
       }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
       if (data) {
-        const userIds = data.map(profile => profile.id);
-        const { data: authUsers } = await supabase.auth.admin.listUsers();
+        let filteredUsers = data;
 
-        const usersWithEmail = data.map(profile => {
-          const authUser = authUsers?.users.find(u => u.id === profile.id);
-          return {
-            ...profile,
-            email: authUser?.email
-          };
-        });
+        if (filter !== 'all') {
+          filteredUsers = data.filter((u: any) => u.account_status === filter);
+        }
 
-        setUsers(usersWithEmail);
+        setUsers(filteredUsers);
       }
     } catch (err) {
       console.error('Failed to load users:', err);
+      setMessage('Failed to load users. Please check console for details.');
+      setTimeout(() => setMessage(''), 5000);
     } finally {
       setLoading(false);
     }
@@ -323,7 +314,15 @@ export function AdminPanel() {
                     <td className="px-6 py-4">
                       {!userProfile.is_admin && (
                         <div className="flex gap-2">
-                          {userProfile.account_status !== 'active' && (
+                          {userProfile.account_status === 'pending' && (
+                            <button
+                              onClick={() => updateUserStatus(userProfile.id, 'active')}
+                              className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700 transition"
+                            >
+                              Approve
+                            </button>
+                          )}
+                          {userProfile.account_status === 'disabled' && (
                             <button
                               onClick={() => updateUserStatus(userProfile.id, 'active')}
                               className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700 transition"
