@@ -63,14 +63,16 @@ export function Positions() {
       .from('positions')
       .select(`
         *,
-        broker_connections (
+        broker_connections!inner (
           account_name,
           broker_name,
           client_id,
-          account_holder_name
+          account_holder_name,
+          is_active
         )
       `)
       .eq('user_id', user?.id)
+      .eq('broker_connections.is_active', true)
       .neq('quantity', 0)
       .order('created_at', { ascending: false });
 

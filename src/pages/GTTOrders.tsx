@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Plus, RefreshCw, Edit2, Trash2, ArrowUpDown } from 'lucide-react';
+import { Plus, RefreshCw, Edit2, Trash2, ArrowUpDown, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
+import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
 
 type SortField = 'symbol' | 'trigger_price' | 'created_at' | 'status';
 type SortDirection = 'asc' | 'desc';
 
 export function GTTOrders() {
   const { user, session } = useAuth();
+  const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBrokerId !== 'all' ? selectedBrokerId : brokers[0]?.id);
   const [gttOrders, setGttOrders] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
   const [selectedBrokerId, setSelectedBrokerId] = useState<string>('all');
@@ -34,15 +36,34 @@ export function GTTOrders() {
 
   useEffect(() => {
     if (brokers.length > 0 && (!selectedBrokerId || selectedBrokerId === '')) {
-      setSelectedBrokerId(brokers[0].id);
+      setSelectedBrokerId('all');
     }
   }, [brokers]);
 
   useEffect(() => {
-    if (selectedBrokerId) {
+    if (selectedBrokerId && brokers.length > 0) {
       loadGTTOrders();
     }
-  }, [selectedBrokerId]);
+  }, [selectedBrokerId, brokers]);
+
+  useEffect(() => {
+    const brokerId = selectedBrokerId !== 'all' ? selectedBrokerId : brokers[0]?.id;
+    if (brokerId) {
+      connect();
+    }
+    return () => disconnect();
+  }, [selectedBrokerId, brokers, connect, disconnect]);
+
+  useEffect(() => {
+    if (isConnected && gttOrders.length > 0) {
+      const tokens = gttOrders
+        .map(order => order.condition?.instrument_token)
+        .filter(Boolean);
+      if (tokens.length > 0) {
+        subscribe(tokens, 'full');
+      }
+    }
+  }, [isConnected, gttOrders, subscribe]);
 
   const loadBrokers = async () => {
     const { data } = await supabase
@@ -344,6 +365,12 @@ export function GTTOrders() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">GTT ({gttOrders.length})</h2>
+          {isConnected && (
+            <div className="flex items-center gap-1.5 mt-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs w-fit">
+              <Activity className="w-3 h-3 animate-pulse" />
+              Live
+            </div>
+          )}
         </div>
         <div className="flex gap-3">
           {brokers.length > 0 && (
@@ -502,6 +529,9 @@ export function GTTOrders() {
                 const isOCO = gtt.type === 'two-leg';
                 const transactionType = gtt.orders?.[0]?.transaction_type;
                 const quantity = gtt.orders?.[0]?.quantity || 0;
+                const instrumentToken = gtt.condition?.instrument_token;
+                const ltp = instrumentToken ? getLTP(instrumentToken) : null;
+                const currentPrice = ltp ?? gtt.condition?.last_price ?? 0;
 
                 return (
                   <tr key={gtt.id} className="hover:bg-gray-50 transition">
@@ -523,6 +553,9 @@ export function GTTOrders() {
                     <td className="px-4 py-3">
                       <div className="text-sm font-medium text-gray-900">
                         {gtt.condition?.tradingsymbol || 'N/A'}
+                        {isConnected && ltp && (
+                          <span className="ml-1 text-xs text-green-600">●</span>
+                        )}
                         <span className="text-xs text-gray-500 ml-1">
                           {gtt.condition?.exchange}
                         </span>
@@ -560,13 +593,13 @@ export function GTTOrders() {
                           <div className="text-gray-900">
                             ₹{gtt.condition?.trigger_values?.[0]?.toFixed(2)}
                             <span className="text-xs text-gray-500 ml-1">
-                              {calculatePercentage(gtt.condition?.trigger_values?.[0], gtt.condition?.last_price)}
+                              {calculatePercentage(gtt.condition?.trigger_values?.[0], currentPrice)}
                             </span>
                           </div>
                           <div className="text-gray-900">
                             ₹{gtt.condition?.trigger_values?.[1]?.toFixed(2)}
                             <span className="text-xs text-gray-500 ml-1">
-                              {calculatePercentage(gtt.condition?.trigger_values?.[1], gtt.condition?.last_price)}
+                              {calculatePercentage(gtt.condition?.trigger_values?.[1], currentPrice)}
                             </span>
                           </div>
                         </div>
@@ -574,13 +607,13 @@ export function GTTOrders() {
                         <div className="text-sm text-gray-900">
                           ₹{gtt.condition?.trigger_values?.[0]?.toFixed(2)}
                           <span className="text-xs text-gray-500 ml-1">
-                            {calculatePercentage(gtt.condition?.trigger_values?.[0], gtt.condition?.last_price)}
+                            {calculatePercentage(gtt.condition?.trigger_values?.[0], currentPrice)}
                           </span>
                         </div>
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
-                      ₹{gtt.condition?.last_price?.toFixed(2) || 'N/A'}
+                      ₹{currentPrice?.toFixed(2) || 'N/A'}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {quantity}
