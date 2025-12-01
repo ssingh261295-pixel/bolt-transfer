@@ -51,10 +51,12 @@ export function Dashboard() {
   const fetchAccountsData = async (brokersToFetch: any[]) => {
     setLoading(true);
     setError('');
-    const accountResults: AccountData[] = [];
 
-    for (const broker of brokersToFetch) {
-      if (broker.broker_name === 'zerodha') {
+    try {
+      // Fetch all brokers' data in parallel instead of sequentially
+      const accountPromises = brokersToFetch.map(async (broker) => {
+        if (broker.broker_name !== 'zerodha') return null;
+
         try {
           const [positionsResponse, gttResponse] = await Promise.all([
             fetch(
@@ -75,52 +77,60 @@ export function Dashboard() {
             ),
           ]);
 
-          const gttResult = await gttResponse.json();
-          console.log(`GTT API Response for broker ${broker.id}:`, gttResult);
+          const [result, gttResult] = await Promise.all([
+            positionsResponse.json(),
+            gttResponse.json(),
+          ]);
 
-          if (positionsResponse.ok) {
-            const result = await positionsResponse.json();
-            console.log('Positions API Response for broker', broker.id, ':', result);
+          if (result.success) {
+            const equity = result.margins?.equity || {};
+            const positions = result.positions || [];
 
-            if (result.success) {
-              const equity = result.margins?.equity || {};
-              const positions = result.positions || [];
+            const todayPnl = positions.reduce((sum: number, pos: any) => {
+              return sum + (pos.pnl || 0);
+            }, 0);
 
-              const todayPnl = positions.reduce((sum: number, pos: any) => {
-                return sum + (pos.pnl || 0);
-              }, 0);
+            const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;
+            const gttOrders = gttResult.success ? (gttResult.data || []) : [];
+            const activeGtt = gttOrders.filter((gtt: any) => gtt.status === 'active').length;
 
-              const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;
-              const gttOrders = gttResult.success ? (gttResult.data || []) : [];
-              const activeGtt = gttOrders.filter((gtt: any) => gtt.status === 'active').length;
-
-              console.log(`Broker ${broker.id} - Active GTT count:`, activeGtt, 'Total GTT:', gttOrders.length);
-
-              accountResults.push({
-                broker_id: broker.id,
-                broker_name: broker.broker_name,
-                account_name: broker.account_name || '',
-                account_holder_name: broker.account_holder_name || '',
-                client_id: broker.client_id || '',
-                available_margin: parseFloat(equity.available?.live_balance || equity.available?.adhoc_margin || 0),
-                used_margin: parseFloat(equity.utilised?.debits || 0),
-                available_cash: parseFloat(equity.available?.cash || 0),
-                today_pnl: todayPnl,
-                active_trades: activeTrades,
-                active_gtt: activeGtt,
-                last_updated: new Date(),
-              });
-            }
+            return {
+              broker_id: broker.id,
+              broker_name: broker.broker_name,
+              account_name: broker.account_name || '',
+              account_holder_name: broker.account_holder_name || '',
+              client_id: broker.client_id || '',
+              available_margin: parseFloat(equity.available?.live_balance || equity.available?.adhoc_margin || 0),
+              used_margin: parseFloat(equity.utilised?.debits || 0),
+              available_cash: parseFloat(equity.available?.cash || 0),
+              today_pnl: todayPnl,
+              active_trades: activeTrades,
+              active_gtt: activeGtt,
+              last_updated: new Date(),
+            };
           }
         } catch (err) {
           console.error(`Error fetching data for broker ${broker.id}:`, err);
-          setError(`Failed to fetch data for some accounts`);
+          return null;
         }
-      }
-    }
 
-    setAccountsData(accountResults);
-    setLoading(false);
+        return null;
+      });
+
+      const results = await Promise.all(accountPromises);
+      const accountResults = results.filter((result): result is AccountData => result !== null);
+
+      setAccountsData(accountResults);
+
+      if (accountResults.length < brokersToFetch.length) {
+        setError(`Failed to fetch data for some accounts`);
+      }
+    } catch (err) {
+      console.error('Error fetching accounts data:', err);
+      setError('Failed to fetch account data');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRefresh = () => {
@@ -261,7 +271,29 @@ export function Dashboard() {
           )}
 
           <div className="grid grid-cols-1 gap-6">
-            {filteredAccountsData.length === 0 && !loading ? (
+            {loading ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <div className="animate-pulse">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <div className="h-6 bg-gray-200 rounded w-48 mb-2"></div>
+                      <div className="h-4 bg-gray-200 rounded w-32"></div>
+                    </div>
+                    <div className="h-4 bg-gray-200 rounded w-24"></div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div className="bg-gray-100 rounded-lg p-4 h-24"></div>
+                    <div className="bg-gray-100 rounded-lg p-4 h-24"></div>
+                    <div className="bg-gray-100 rounded-lg p-4 h-24"></div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-gray-100 rounded-lg p-4 h-24"></div>
+                    <div className="bg-gray-100 rounded-lg p-4 h-24"></div>
+                    <div className="bg-gray-100 rounded-lg p-4 h-24"></div>
+                  </div>
+                </div>
+              </div>
+            ) : filteredAccountsData.length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
                 <p className="text-gray-600">No account data available</p>
                 <p className="text-sm text-gray-500 mt-1">Click refresh to fetch latest data</p>
