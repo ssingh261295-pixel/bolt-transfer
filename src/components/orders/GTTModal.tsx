@@ -265,21 +265,10 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           setPricePercent2('-2');
         }
       } else {
-        // Opening new position logic - BUY means stoploss below (-2%) and target above (+2%)
+        // Opening new position logic - Zerodha's GTT entry order logic
         if (transactionType === 'BUY') {
-          // Buy OCO (entering long): Stoploss at -2%, Target at +2%
-          const stoploss = (ltp * 0.98).toFixed(2);
-          const target = (ltp * 1.02).toFixed(2);
-          setTriggerPrice1(stoploss);
-          setPrice1(stoploss);
-          setTriggerPercent1('-2');
-          setPricePercent1('-2');
-          setTriggerPrice2(target);
-          setPrice2(target);
-          setTriggerPercent2('2');
-          setPricePercent2('2');
-        } else {
-          // Sell OCO (entering short): Stoploss at +2%, Target at -2%
+          // Buy OCO (entering long): Stoploss at +2% (higher), Target at -2% (lower)
+          // This is for entry GTTs where you want to buy if price goes up OR down
           const stoploss = (ltp * 1.02).toFixed(2);
           const target = (ltp * 0.98).toFixed(2);
           setTriggerPrice1(stoploss);
@@ -290,6 +279,19 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           setPrice2(target);
           setTriggerPercent2('-2');
           setPricePercent2('-2');
+        } else {
+          // Sell OCO (entering short): Stoploss at -2% (lower), Target at +2% (higher)
+          // This is for entry GTTs where you want to sell if price goes down OR up
+          const stoploss = (ltp * 0.98).toFixed(2);
+          const target = (ltp * 1.02).toFixed(2);
+          setTriggerPrice1(stoploss);
+          setPrice1(stoploss);
+          setTriggerPercent1('-2');
+          setPricePercent1('-2');
+          setTriggerPrice2(target);
+          setPrice2(target);
+          setTriggerPercent2('2');
+          setPricePercent2('2');
         }
       }
     }
