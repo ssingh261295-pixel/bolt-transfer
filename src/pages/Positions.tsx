@@ -25,6 +25,8 @@ export function Positions() {
   const [selectedPosition, setSelectedPosition] = useState<any>(null);
   const [sortField, setSortField] = useState<SortField>('pnl');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [selectedPositions, setSelectedPositions] = useState<Set<string>>(new Set());
+  const [isExiting, setIsExiting] = useState(false);
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBroker !== 'all' ? selectedBroker : brokers[0]?.id);
 
@@ -284,6 +286,89 @@ export function Positions() {
     setSelectedPosition(null);
   };
 
+  const handleSelectAll = () => {
+    if (selectedPositions.size === positions.length) {
+      setSelectedPositions(new Set());
+    } else {
+      setSelectedPositions(new Set(positions.map(p => p.id)));
+    }
+  };
+
+  const handleSelectPosition = (positionId: string) => {
+    const newSelected = new Set(selectedPositions);
+    if (newSelected.has(positionId)) {
+      newSelected.delete(positionId);
+    } else {
+      newSelected.add(positionId);
+    }
+    setSelectedPositions(newSelected);
+  };
+
+  const handleBulkExit = async () => {
+    if (selectedPositions.size === 0) return;
+
+    const { data: gttOrders } = await supabase
+      .from('gtt_orders')
+      .select('id, symbol')
+      .in('position_id', Array.from(selectedPositions));
+
+    const hasGTT = gttOrders && gttOrders.length > 0;
+    const gttMessage = hasGTT ? `\n\n${gttOrders.length} GTT order(s) will also be deleted.` : '';
+
+    if (!confirm(`Are you sure you want to exit ${selectedPositions.size} position(s)?${gttMessage}`)) {
+      return;
+    }
+
+    setIsExiting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/exit-bulk`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            position_ids: Array.from(selectedPositions),
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        const messages = [
+          `✓ Successfully exited ${result.exited} position(s)`,
+        ];
+
+        if (result.gtt_deleted > 0) {
+          messages.push(`${result.gtt_deleted} GTT order(s) deleted`);
+        }
+
+        if (result.failed > 0) {
+          messages.push(`${result.failed} position(s) failed`);
+        }
+
+        setSyncMessage(messages.join(', '));
+        setSelectedPositions(new Set());
+        await loadPositions();
+        setTimeout(() => setSyncMessage(''), 5000);
+      } else {
+        setSyncMessage(`Failed to exit positions: ${result.error || 'Unknown error'}`);
+        setTimeout(() => setSyncMessage(''), 5000);
+      }
+    } catch (error: any) {
+      console.error('Error exiting positions:', error);
+      setSyncMessage(`Error: ${error.message || 'Failed to exit positions'}`);
+      setTimeout(() => setSyncMessage(''), 5000);
+    } finally {
+      setIsExiting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -300,6 +385,16 @@ export function Positions() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {selectedPositions.size > 0 && (
+            <button
+              onClick={handleBulkExit}
+              disabled={isExiting}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <X className={`w-5 h-5 ${isExiting ? 'animate-spin' : ''}`} />
+              Exit Selected ({selectedPositions.size})
+            </button>
+          )}
           <select
             value={selectedBroker}
             onChange={(e) => setSelectedBroker(e.target.value)}
@@ -360,6 +455,14 @@ export function Positions() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="px-6 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={positions.length > 0 && selectedPositions.size === positions.length}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                    />
+                  </th>
                   <th
                     onClick={() => handleSort('symbol')}
                     className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
@@ -431,6 +534,14 @@ export function Positions() {
 
                   return (
                     <tr key={position.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedPositions.has(position.id)}
+                          onChange={() => handleSelectPosition(position.id)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                        />
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
                           <div className="font-medium text-gray-900">

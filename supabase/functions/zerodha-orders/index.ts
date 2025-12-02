@@ -227,7 +227,7 @@ Deno.serve(async (req: Request) => {
         transaction_type: exitTransactionType,
         quantity: exitQuantity.toString(),
         order_type: 'MARKET',
-        product: position.product || 'MIS',
+        product: position.product_type || 'MIS',
         validity: 'DAY',
       };
 
@@ -275,6 +275,112 @@ Deno.serve(async (req: Request) => {
       } else {
         throw new Error(result.message || 'Exit order placement failed');
       }
+    }
+
+    if (req.method === 'POST' && url.pathname.endsWith('/exit-bulk')) {
+      const { position_ids } = await req.json();
+
+      if (!position_ids || position_ids.length === 0) {
+        throw new Error('No positions provided');
+      }
+
+      const { data: positions } = await supabase
+        .from('positions')
+        .select('*, broker_connections!inner(api_key, access_token)')
+        .in('id', position_ids)
+        .eq('user_id', user.id);
+
+      if (!positions || positions.length === 0) {
+        throw new Error('No valid positions found');
+      }
+
+      const results = [];
+      const errors = [];
+
+      for (const position of positions) {
+        try {
+          const exitTransactionType = position.quantity > 0 ? 'SELL' : 'BUY';
+          const exitQuantity = Math.abs(position.quantity);
+
+          const params: any = {
+            tradingsymbol: position.symbol,
+            exchange: position.exchange,
+            transaction_type: exitTransactionType,
+            quantity: exitQuantity.toString(),
+            order_type: 'MARKET',
+            product: position.product_type || 'MIS',
+            validity: 'DAY',
+          };
+
+          const response = await fetch('https://api.kite.trade/orders/regular', {
+            method: 'POST',
+            headers: {
+              'Authorization': `token ${position.broker_connections.api_key}:${position.broker_connections.access_token}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'X-Kite-Version': '3',
+            },
+            body: new URLSearchParams(params),
+          });
+
+          const result = await response.json();
+
+          if (result.status === 'success' && result.data?.order_id) {
+            await supabase.from('orders').insert({
+              user_id: user.id,
+              broker_connection_id: position.broker_connection_id,
+              symbol: position.symbol,
+              exchange: position.exchange,
+              order_type: 'MARKET',
+              transaction_type: exitTransactionType,
+              quantity: exitQuantity,
+              price: null,
+              trigger_price: null,
+              status: 'COMPLETE',
+              order_id: result.data.order_id,
+            });
+
+            await supabase
+              .from('positions')
+              .update({ quantity: 0 })
+              .eq('id', position.id);
+
+            results.push({ position_id: position.id, symbol: position.symbol, order_id: result.data.order_id });
+          } else {
+            errors.push({ position_id: position.id, symbol: position.symbol, error: result.message || 'Failed' });
+          }
+        } catch (err) {
+          errors.push({ position_id: position.id, symbol: position.symbol, error: err.message });
+        }
+      }
+
+      const { data: gttOrders } = await supabase
+        .from('gtt_orders')
+        .select('id, symbol')
+        .in('position_id', position_ids);
+
+      if (gttOrders && gttOrders.length > 0) {
+        await supabase
+          .from('gtt_orders')
+          .delete()
+          .in('position_id', position_ids);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          exited: results.length,
+          failed: errors.length,
+          gtt_deleted: gttOrders?.length || 0,
+          results,
+          errors,
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
     }
 
     throw new Error('Invalid endpoint');
