@@ -34,6 +34,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
     price: '',
     trigger_price: '',
   });
+  const [orderErrors, setOrderErrors] = useState<string[]>([]);
 
   useEffect(() => {
     if (isOpen && user) {
@@ -52,6 +53,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
       setFilteredInstruments([]);
       setLastOrderDetails(null);
       setSelectedInstrument(null);
+      setOrderErrors([]);
     }
   }, [isOpen, user]);
 
@@ -258,6 +260,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
     if (successCount > 0) {
       onSuccess();
       setLastOrderDetails(firstSuccessfulOrder);
+      setOrderErrors(errorMessages);
       if (errorMessages.length === 0) {
         // Don't close immediately, show GTT option
       }
@@ -268,6 +271,9 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
         price: '',
         trigger_price: '',
       });
+    } else {
+      // All orders failed
+      setOrderErrors(errorMessages);
     }
   };
 
@@ -290,6 +296,17 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {error}
+            </div>
+          )}
+
+          {orderErrors.length > 0 && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+              <div className="font-medium mb-2">Order Errors:</div>
+              <ul className="list-disc list-inside space-y-1">
+                {orderErrors.map((err, idx) => (
+                  <li key={idx}>{err}</li>
+                ))}
+              </ul>
             </div>
           )}
 
