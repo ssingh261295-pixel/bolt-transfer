@@ -389,7 +389,7 @@ export function Positions() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-3 text-left">
+                  <th className="px-3 py-3 text-left">
                     <input
                       type="checkbox"
                       checked={positions.length > 0 && selectedPositions.size === positions.length}
@@ -399,46 +399,46 @@ export function Positions() {
                   </th>
                   <th
                     onClick={() => handleSort('symbol')}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
                   >
                     <div className="flex items-center gap-1">
                       Symbol
                       <ArrowUpDown className={`w-3 h-3 ${sortField === 'symbol' ? 'text-blue-600' : 'text-gray-400'}`} />
                     </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                     Account
                   </th>
                   <th
                     onClick={() => handleSort('quantity')}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
                   >
                     <div className="flex items-center gap-1">
-                      Quantity
+                      Qty.
                       <ArrowUpDown className={`w-3 h-3 ${sortField === 'quantity' ? 'text-blue-600' : 'text-gray-400'}`} />
                     </div>
                   </th>
                   <th
                     onClick={() => handleSort('average_price')}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
                   >
                     <div className="flex items-center gap-1">
-                      Avg. Price
+                      Avg.
                       <ArrowUpDown className={`w-3 h-3 ${sortField === 'average_price' ? 'text-blue-600' : 'text-gray-400'}`} />
                     </div>
                   </th>
                   <th
                     onClick={() => handleSort('current_price')}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
                   >
                     <div className="flex items-center gap-1">
-                      Current Price
+                      LTP
                       <ArrowUpDown className={`w-3 h-3 ${sortField === 'current_price' ? 'text-blue-600' : 'text-gray-400'}`} />
                     </div>
                   </th>
                   <th
                     onClick={() => handleSort('pnl')}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
                   >
                     <div className="flex items-center gap-1">
                       P&L
@@ -447,14 +447,14 @@ export function Positions() {
                   </th>
                   <th
                     onClick={() => handleSort('pnl_percentage')}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
                   >
                     <div className="flex items-center gap-1">
                       P&L %
                       <ArrowUpDown className={`w-3 h-3 ${sortField === 'pnl_percentage' ? 'text-blue-600' : 'text-gray-400'}`} />
                     </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider w-16">
                     Actions
                   </th>
                 </tr>
@@ -468,7 +468,7 @@ export function Positions() {
 
                   return (
                     <tr key={position.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <input
                           type="checkbox"
                           checked={selectedPositions.has(position.id)}
@@ -476,44 +476,44 @@ export function Positions() {
                           className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                         />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-medium text-gray-900">
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
                           {isConnected && ltp && (
                             <span className="text-xs text-green-600 mr-1">●</span>
                           )}
-                          {position.symbol} <span className="text-sm text-gray-600">({position.exchange})</span>
+                          {position.symbol} <span className="text-xs text-gray-600">({position.exchange})</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 font-medium">
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <div className="text-xs text-gray-900 font-medium">
                           {position.broker_connections?.account_holder_name || position.broker_connections?.account_name || 'Default Account'}
                           {position.broker_connections?.client_id && (
                             <span className="text-gray-600"> ({position.broker_connections.client_id})</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm font-medium">
                         <span className={position.quantity < 0 ? 'text-red-600' : 'text-gray-900'}>
                           {position.quantity}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
                         ₹{position.average_price?.toFixed(2)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
                         ₹{currentPrice.toFixed(2)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`font-medium ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className={`text-sm font-medium ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {pnl >= 0 ? '+' : ''}₹{pnl.toFixed(2)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`font-medium ${pnlPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className={`text-sm font-medium ${pnlPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {pnlPercentage >= 0 ? '+' : ''}{pnlPercentage.toFixed(2)}%
                         </span>
                       </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-3 whitespace-nowrap">
                       <div className="relative" ref={openMenuId === position.id ? menuRef : null}>
                         <button
                           onClick={() => toggleMenu(position.id)}
