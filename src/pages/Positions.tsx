@@ -270,10 +270,13 @@ export function Positions() {
   };
 
   const getPositionsToExit = () => {
-    if (selectedPosition && !selectedPositions.has(selectedPosition.id)) {
+    if (selectedPositions.size > 0) {
+      return positions.filter(p => selectedPositions.has(p.id));
+    }
+    if (selectedPosition) {
       return [selectedPosition];
     }
-    return positions.filter(p => selectedPositions.has(p.id));
+    return [];
   };
 
   const handleOpenGTT = (position: any) => {
@@ -326,14 +329,6 @@ export function Positions() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {selectedPositions.size > 0 && (
-            <button
-              onClick={() => handleOpenExitModal()}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-            >
-              Exit {selectedPositions.size} position{selectedPositions.size > 1 ? 's' : ''}
-            </button>
-          )}
           <select
             value={selectedBroker}
             onChange={(e) => setSelectedBroker(e.target.value)}
@@ -530,18 +525,20 @@ export function Positions() {
 
                         {openMenuId === position.id && (
                           <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
-                            <button
-                              onClick={() => handleOpenExitModal(position)}
-                              className="w-full text-left px-4 py-3 hover:bg-gray-50 transition text-sm text-gray-700"
-                            >
-                              Exit position
-                            </button>
-                            <button
-                              onClick={() => handleOpenGTT(position)}
-                              className="w-full text-left px-4 py-3 hover:bg-gray-50 transition text-sm text-gray-700 border-t border-gray-100"
-                            >
-                              Create GTT
-                            </button>
+                            <div className="py-1">
+                              <button
+                                onClick={() => handleOpenExitModal(position)}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                              >
+                                Exit position
+                              </button>
+                              <button
+                                onClick={() => handleOpenGTT(position)}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                              >
+                                Create GTT
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -551,6 +548,17 @@ export function Positions() {
                 })}
               </tbody>
             </table>
+
+            {selectedPositions.size > 0 && (
+              <div className="flex justify-start items-center p-4 border-t">
+                <button
+                  onClick={() => handleOpenExitModal()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-sm"
+                >
+                  Exit {selectedPositions.size} position{selectedPositions.size > 1 ? 's' : ''}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

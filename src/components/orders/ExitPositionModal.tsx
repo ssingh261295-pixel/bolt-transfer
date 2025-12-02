@@ -25,38 +25,46 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
       let successCount = 0;
 
       for (const position of positions) {
-        const exitTransactionType = position.quantity > 0 ? 'SELL' : 'BUY';
-        const exitQuantity = Math.abs(position.quantity);
+        try {
+          const exitTransactionType = position.quantity > 0 ? 'SELL' : 'BUY';
+          const exitQuantity = Math.abs(position.quantity);
 
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/place`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session?.access_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              broker_connection_id: position.broker_connection_id,
-              symbol: position.symbol,
-              exchange: position.exchange,
-              transaction_type: exitTransactionType,
-              quantity: exitQuantity,
-              order_type: 'MARKET',
-              product: position.product_type || 'NRML',
-              validity: 'DAY',
-            }),
+          const response = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/place`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session?.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                broker_connection_id: position.broker_connection_id,
+                symbol: position.symbol,
+                exchange: position.exchange,
+                transaction_type: exitTransactionType,
+                quantity: exitQuantity,
+                order_type: 'MARKET',
+                product: position.product_type || 'NRML',
+                validity: 'DAY',
+              }),
+            }
+          );
+
+          const result = await response.json();
+
+          if (result.success) {
+            await supabase
+              .from('positions')
+              .update({ quantity: 0 })
+              .eq('id', position.id);
+            successCount++;
+          } else {
+            console.error(`Failed to exit ${position.symbol}:`, result.error);
+            setError(`Failed to exit ${position.symbol}: ${result.error || 'Unknown error'}`);
           }
-        );
-
-        const result = await response.json();
-
-        if (result.success) {
-          await supabase
-            .from('positions')
-            .update({ quantity: 0 })
-            .eq('id', position.id);
-          successCount++;
+        } catch (posErr: any) {
+          console.error(`Error exiting ${position.symbol}:`, posErr);
+          setError(`Error exiting ${position.symbol}: ${posErr.message}`);
         }
       }
 
