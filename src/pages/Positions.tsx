@@ -477,22 +477,19 @@ export function Positions() {
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="font-medium text-gray-900">
-                            {position.symbol}
-                            {isConnected && ltp && (
-                              <span className="ml-1 text-xs text-green-600">●</span>
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-600">{position.exchange}</div>
+                        <div className="font-medium text-gray-900">
+                          {isConnected && ltp && (
+                            <span className="text-xs text-green-600 mr-1">●</span>
+                          )}
+                          {position.symbol} <span className="text-sm text-gray-600">({position.exchange})</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900 font-medium">
                           {position.broker_connections?.account_holder_name || position.broker_connections?.account_name || 'Default Account'}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {position.broker_connections?.client_id && `Client ID: ${position.broker_connections.client_id}`}
+                          {position.broker_connections?.client_id && (
+                            <span className="text-gray-600"> ({position.broker_connections.client_id})</span>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
