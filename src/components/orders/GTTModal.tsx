@@ -153,8 +153,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       } else if (isOpen) {
         setSymbol(initialSymbol || '');
         setExchange(initialExchange || 'NFO');
-        setTransactionType('BUY');
-        setGttType('single');
+        // If opened from position page, keep transaction type and GTT type from initial state
+        if (!positionData) {
+          setTransactionType('BUY');
+          setGttType('single');
+        } else {
+          setTransactionType(positionData.transactionType);
+          setGttType('two-leg');
+        }
         setTriggerPrice1('');
         setTriggerPercent1('');
         setUseTriggerPercent1(false);
@@ -181,7 +187,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     };
 
     setupGTT();
-  }, [editingGTT, isOpen, initialSymbol, initialExchange]);
+  }, [editingGTT, isOpen, initialSymbol, initialExchange, positionData]);
 
   // Fetch LTP when symbol is pre-filled from position
   useEffect(() => {
