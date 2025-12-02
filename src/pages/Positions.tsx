@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useZerodha } from '../hooks/useZerodha';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
 import { GTTModal } from '../components/orders/GTTModal';
+import { ExitPositionModal } from '../components/orders/ExitPositionModal';
 
 type SortField = 'symbol' | 'quantity' | 'average_price' | 'current_price' | 'pnl' | 'pnl_percentage';
 type SortDirection = 'asc' | 'desc';
@@ -22,6 +23,7 @@ export function Positions() {
     totalInvested: 0,
   });
   const [gttModalOpen, setGttModalOpen] = useState(false);
+  const [exitModalOpen, setExitModalOpen] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<any>(null);
   const [sortField, setSortField] = useState<SortField>('pnl');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -237,43 +239,15 @@ export function Positions() {
     setTimeout(() => setSyncMessage(''), 6000);
   };
 
-  const handleClosePosition = async (position: any) => {
-    if (!confirm(`Exit position for ${position.symbol}? This will place a market order to close the position.`)) {
-      return;
-    }
+  const handleOpenExitModal = (position: any) => {
+    setSelectedPosition(position);
+    setExitModalOpen(true);
+  };
 
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/exit`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            position_id: position.id,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (result.success) {
-        setSyncMessage(`✓ Position exited successfully. Order ID: ${result.order_id}`);
-        await loadPositions();
-        setTimeout(() => setSyncMessage(''), 5000);
-      } else {
-        setSyncMessage(`Failed to exit position: ${result.error || 'Unknown error'}`);
-        setTimeout(() => setSyncMessage(''), 5000);
-      }
-    } catch (error: any) {
-      console.error('Error exiting position:', error);
-      setSyncMessage(`Error: ${error.message || 'Failed to exit position'}`);
-      setTimeout(() => setSyncMessage(''), 5000);
-    }
+  const handleExitSuccess = () => {
+    setSyncMessage('✓ Position exited successfully');
+    loadPositions();
+    setTimeout(() => setSyncMessage(''), 5000);
   };
 
   const handleOpenGTT = (position: any) => {
@@ -322,44 +296,68 @@ export function Positions() {
     setIsExiting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      const positionsToExit = positions.filter(p => selectedPositions.has(p.id));
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/exit-bulk`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            position_ids: Array.from(selectedPositions),
-          }),
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const position of positionsToExit) {
+        try {
+          const exitTransactionType = position.quantity > 0 ? 'SELL' : 'BUY';
+          const exitQuantity = Math.abs(position.quantity);
+
+          const response = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/place`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session?.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                broker_connection_id: position.broker_connection_id,
+                symbol: position.symbol,
+                exchange: position.exchange,
+                transaction_type: exitTransactionType,
+                quantity: exitQuantity,
+                order_type: 'MARKET',
+                product: position.product_type || 'NRML',
+                validity: 'DAY',
+              }),
+            }
+          );
+
+          const result = await response.json();
+
+          if (result.success) {
+            await supabase
+              .from('positions')
+              .update({ quantity: 0 })
+              .eq('id', position.id);
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        } catch (err) {
+          errorCount++;
         }
-      );
-
-      const result = await response.json();
-
-      if (result.success) {
-        const messages = [
-          `✓ Successfully exited ${result.exited} position(s)`,
-        ];
-
-        if (result.gtt_deleted > 0) {
-          messages.push(`${result.gtt_deleted} GTT order(s) deleted`);
-        }
-
-        if (result.failed > 0) {
-          messages.push(`${result.failed} position(s) failed`);
-        }
-
-        setSyncMessage(messages.join(', '));
-        setSelectedPositions(new Set());
-        await loadPositions();
-        setTimeout(() => setSyncMessage(''), 5000);
-      } else {
-        setSyncMessage(`Failed to exit positions: ${result.error || 'Unknown error'}`);
-        setTimeout(() => setSyncMessage(''), 5000);
       }
+
+      if (hasGTT) {
+        await supabase
+          .from('gtt_orders')
+          .delete()
+          .in('position_id', Array.from(selectedPositions));
+      }
+
+      const messages = [`✓ Successfully exited ${successCount} position(s)`];
+      if (hasGTT) messages.push(`${gttOrders.length} GTT order(s) deleted`);
+      if (errorCount > 0) messages.push(`${errorCount} failed`);
+
+      setSyncMessage(messages.join(', '));
+      setSelectedPositions(new Set());
+      await loadPositions();
+      setTimeout(() => setSyncMessage(''), 5000);
     } catch (error: any) {
       console.error('Error exiting positions:', error);
       setSyncMessage(`Error: ${error.message || 'Failed to exit positions'}`);
@@ -590,7 +588,7 @@ export function Positions() {
                           <Bell className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleClosePosition(position)}
+                          onClick={() => handleOpenExitModal(position)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
                           title="Exit position"
                         >
@@ -608,20 +606,28 @@ export function Positions() {
       </div>
 
       {selectedPosition && (
-        <GTTModal
-          isOpen={gttModalOpen}
-          onClose={handleCloseGTTModal}
-          brokerConnectionId={selectedPosition.broker_connection_id}
-          initialSymbol={selectedPosition.symbol}
-          initialExchange={selectedPosition.exchange}
-          allBrokers={brokers}
-          positionData={{
-            quantity: Math.abs(selectedPosition.quantity),
-            averagePrice: selectedPosition.average_price,
-            currentPrice: selectedPosition.current_price,
-            transactionType: selectedPosition.quantity > 0 ? 'SELL' : 'BUY'
-          }}
-        />
+        <>
+          <GTTModal
+            isOpen={gttModalOpen}
+            onClose={handleCloseGTTModal}
+            brokerConnectionId={selectedPosition.broker_connection_id}
+            initialSymbol={selectedPosition.symbol}
+            initialExchange={selectedPosition.exchange}
+            allBrokers={brokers}
+            positionData={{
+              quantity: Math.abs(selectedPosition.quantity),
+              averagePrice: selectedPosition.average_price,
+              currentPrice: selectedPosition.current_price,
+              transactionType: selectedPosition.quantity > 0 ? 'SELL' : 'BUY'
+            }}
+          />
+          <ExitPositionModal
+            isOpen={exitModalOpen}
+            onClose={() => setExitModalOpen(false)}
+            position={selectedPosition}
+            onSuccess={handleExitSuccess}
+          />
+        </>
       )}
     </div>
   );
