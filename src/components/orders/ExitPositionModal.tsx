@@ -95,15 +95,15 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
             )}
 
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full table-fixed">
                 <thead className="border-b">
                   <tr className="text-left text-sm text-gray-600">
-                    <th className="pb-3"></th>
-                    <th className="pb-3">Qty.</th>
-                    <th className="pb-3">Price</th>
-                    <th className="pb-3">Type</th>
-                    <th className="pb-3">Product</th>
-                    <th className="pb-3">Validity</th>
+                    <th className="pb-3 w-1/3"></th>
+                    <th className="pb-3 w-20 text-right pr-4">Qty.</th>
+                    <th className="pb-3 w-24 text-right pr-4">Price</th>
+                    <th className="pb-3 w-24">Type</th>
+                    <th className="pb-3 w-24">Product</th>
+                    <th className="pb-3 w-20">Validity</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -113,17 +113,17 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
 
                     return (
                       <tr key={position.id} className="border-b last:border-b-0">
-                        <td className="py-4">
-                          <div>
-                            <span className={`text-sm font-medium ${exitTransactionType === 'BUY' ? 'text-blue-600' : 'text-red-600'}`}>
+                        <td className="py-4 pr-4">
+                          <div className="flex flex-col">
+                            <span className={`text-sm font-medium mb-1 ${exitTransactionType === 'BUY' ? 'text-blue-600' : 'text-red-600'}`}>
                               {exitTransactionType}
                             </span>
                             <div className="text-sm text-gray-900 font-medium">{position.symbol}</div>
-                            <div className="text-xs text-gray-500">{position.exchange}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">{position.exchange}</div>
                           </div>
                         </td>
-                        <td className="py-4 text-sm">{exitQuantity}</td>
-                        <td className="py-4 text-sm">—</td>
+                        <td className="py-4 text-sm text-right pr-4">{exitQuantity}</td>
+                        <td className="py-4 text-sm text-right pr-4">—</td>
                         <td className="py-4 text-sm">MARKET</td>
                         <td className="py-4 text-sm">{position.product_type || 'NRML'}</td>
                         <td className="py-4 text-sm">DAY</td>
