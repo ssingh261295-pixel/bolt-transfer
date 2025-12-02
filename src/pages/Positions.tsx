@@ -495,8 +495,10 @@ export function Positions() {
                           {position.broker_connections?.client_id && `Client ID: ${position.broker_connections.client_id}`}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {position.quantity}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <span className={position.quantity < 0 ? 'text-red-600' : 'text-gray-900'}>
+                          {position.quantity}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         ₹{position.average_price?.toFixed(2)}

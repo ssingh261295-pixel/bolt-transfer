@@ -22,6 +22,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
   const [filteredInstruments, setFilteredInstruments] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [selectedInstrument, setSelectedInstrument] = useState<any>(null);
   const searchTimeoutRef = useRef<any>(null);
   const [formData, setFormData] = useState({
     symbol: '',
@@ -140,7 +141,13 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
   };
 
   const selectInstrument = (instrument: any) => {
-    setFormData({ ...formData, symbol: instrument.tradingsymbol });
+    const lotSize = parseInt(instrument.lot_size) || 1;
+    setSelectedInstrument(instrument);
+    setFormData({
+      ...formData,
+      symbol: instrument.tradingsymbol,
+      quantity: lotSize
+    });
     setShowSuggestions(false);
     setFilteredInstruments([]);
   };
@@ -278,7 +285,22 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">Select Accounts</label>
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-gray-700">Select Accounts</label>
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedBrokerIds.length === brokers.length) {
+                    setSelectedBrokerIds([]);
+                  } else {
+                    setSelectedBrokerIds(brokers.map(b => b.id));
+                  }
+                }}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                {selectedBrokerIds.length === brokers.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
             <div className="space-y-2 bg-gray-50 p-4 rounded-lg border border-gray-200 max-h-40 overflow-y-auto">
               {brokers.map((broker) => (
                 <label
@@ -382,15 +404,31 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Lot Size
+                {selectedInstrument?.lot_size && (
+                  <span className="text-xs text-gray-500 font-normal ml-2">
+                    (1 lot = {selectedInstrument.lot_size} qty)
+                  </span>
+                )}
+              </label>
               <input
                 type="number"
-                value={formData.quantity}
-                onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) })}
+                value={selectedInstrument?.lot_size ? formData.quantity / parseInt(selectedInstrument.lot_size) : formData.quantity}
+                onChange={(e) => {
+                  const lots = parseInt(e.target.value) || 1;
+                  const lotSize = selectedInstrument?.lot_size ? parseInt(selectedInstrument.lot_size) : 1;
+                  setFormData({ ...formData, quantity: lots * lotSize });
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 min="1"
                 required
               />
+              {selectedInstrument?.lot_size && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Total quantity: {formData.quantity}
+                </p>
+              )}
             </div>
           </div>
 

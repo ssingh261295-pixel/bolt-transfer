@@ -219,12 +219,20 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
   const prefillPricesBasedOnLTP = (ltp: number) => {
     if (gttType === 'single') {
-      // Single GTT: Pre-fill with +2% for trigger and price
-      const triggerValue = (ltp * 1.02).toFixed(2);
-      setTriggerPrice1(triggerValue);
-      setPrice1(triggerValue);
-      setTriggerPercent1('2');
-      setPricePercent1('2');
+      // Single GTT: BUY = +2%, SELL = -2%
+      if (transactionType === 'BUY') {
+        const triggerValue = (ltp * 1.02).toFixed(2);
+        setTriggerPrice1(triggerValue);
+        setPrice1(triggerValue);
+        setTriggerPercent1('2');
+        setPricePercent1('2');
+      } else {
+        const triggerValue = (ltp * 0.98).toFixed(2);
+        setTriggerPrice1(triggerValue);
+        setPrice1(triggerValue);
+        setTriggerPercent1('-2');
+        setPricePercent1('-2');
+      }
     } else if (gttType === 'two-leg') {
       // Check if this is from a position (closing) or new GTT (opening)
       const isClosingPosition = positionData !== undefined;
@@ -257,29 +265,29 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           setPricePercent2('-2');
         }
       } else {
-        // Opening new position logic
+        // Opening new position logic - BUY means stoploss below (-2%) and target above (+2%)
         if (transactionType === 'BUY') {
-          // Buy OCO (entering long): Lower trigger to buy on dip, higher trigger to buy on breakout
-          const lowerTrigger = (ltp * 0.98).toFixed(2);
-          const higherTrigger = (ltp * 1.02).toFixed(2);
-          setTriggerPrice1(lowerTrigger);
-          setPrice1(lowerTrigger);
+          // Buy OCO (entering long): Stoploss at -2%, Target at +2%
+          const stoploss = (ltp * 0.98).toFixed(2);
+          const target = (ltp * 1.02).toFixed(2);
+          setTriggerPrice1(stoploss);
+          setPrice1(stoploss);
           setTriggerPercent1('-2');
           setPricePercent1('-2');
-          setTriggerPrice2(higherTrigger);
-          setPrice2(higherTrigger);
+          setTriggerPrice2(target);
+          setPrice2(target);
           setTriggerPercent2('2');
           setPricePercent2('2');
         } else {
-          // Sell OCO (entering short): Higher trigger to sell on rise, lower trigger to sell on fall
-          const higherTrigger = (ltp * 1.02).toFixed(2);
-          const lowerTrigger = (ltp * 0.98).toFixed(2);
-          setTriggerPrice1(higherTrigger);
-          setPrice1(higherTrigger);
+          // Sell OCO (entering short): Stoploss at +2%, Target at -2%
+          const stoploss = (ltp * 1.02).toFixed(2);
+          const target = (ltp * 0.98).toFixed(2);
+          setTriggerPrice1(stoploss);
+          setPrice1(stoploss);
           setTriggerPercent1('2');
           setPricePercent1('2');
-          setTriggerPrice2(lowerTrigger);
-          setPrice2(lowerTrigger);
+          setTriggerPrice2(target);
+          setPrice2(target);
           setTriggerPercent2('-2');
           setPricePercent2('-2');
         }
@@ -597,9 +605,24 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           {/* Multi-Account Selection */}
           {!editingGTT && allBrokers && allBrokers.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Select Accounts ({selectedBrokerIds.length} selected)
-              </label>
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-sm font-medium text-gray-700">
+                  Select Accounts ({selectedBrokerIds.length} selected)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedBrokerIds.length === allBrokers.length) {
+                      setSelectedBrokerIds([]);
+                    } else {
+                      setSelectedBrokerIds(allBrokers.map(b => b.id));
+                    }
+                  }}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {selectedBrokerIds.length === allBrokers.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 {allBrokers.map((broker) => {
                   const isSelected = selectedBrokerIds.includes(broker.id);
