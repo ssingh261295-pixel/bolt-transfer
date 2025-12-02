@@ -51,6 +51,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
       setInstruments([]);
       setFilteredInstruments([]);
       setLastOrderDetails(null);
+      setSelectedInstrument(null);
     }
   }, [isOpen, user]);
 
@@ -124,6 +125,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
     if (!value || value.length < 2) {
       setFilteredInstruments([]);
       setShowSuggestions(false);
+      setSelectedInstrument(null);
       return;
     }
 
@@ -137,6 +139,19 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
 
       setFilteredInstruments(filtered);
       setShowSuggestions(true);
+
+      // Auto-select if there's an exact match
+      const exactMatch = instruments.find(
+        (inst) => inst.tradingsymbol?.toLowerCase() === searchLower
+      );
+      if (exactMatch) {
+        const lotSize = parseInt(exactMatch.lot_size) || 1;
+        setSelectedInstrument(exactMatch);
+        // Update quantity to match lot size if not already set correctly
+        if (!formData.quantity || formData.quantity === 1) {
+          setFormData(prev => ({ ...prev, symbol: value, quantity: lotSize }));
+        }
+      }
     }, 300);
   };
 
@@ -146,7 +161,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
     setFormData({
       ...formData,
       symbol: instrument.tradingsymbol,
-      quantity: lotSize
+      quantity: lotSize  // Set to 1 lot worth of quantity
     });
     setShowSuggestions(false);
     setFilteredInstruments([]);
