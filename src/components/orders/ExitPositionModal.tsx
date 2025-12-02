@@ -83,11 +83,13 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
-          <div className="p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">Exit positions</h2>
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="p-6 border-b">
+            <h2 className="text-xl font-semibold text-gray-900">Exit positions</h2>
+          </div>
 
+          <div className="flex-1 overflow-y-auto p-6">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4">
                 {error}
@@ -96,7 +98,7 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
 
             <div className="overflow-x-auto">
               <table className="w-full table-fixed">
-                <thead className="border-b">
+                <thead className="border-b sticky top-0 bg-white">
                   <tr className="text-left text-sm text-gray-600">
                     <th className="pb-3 w-1/3"></th>
                     <th className="pb-3 w-20 text-right pr-4">Qty.</th>
@@ -133,8 +135,10 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
                 </tbody>
               </table>
             </div>
+          </div>
 
-            <div className="flex gap-3 mt-6 justify-end">
+          <div className="p-6 border-t bg-white">
+            <div className="flex gap-3 justify-end">
               <button
                 type="button"
                 onClick={onClose}
