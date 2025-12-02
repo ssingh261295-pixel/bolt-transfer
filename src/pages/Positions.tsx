@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { LineChart, X, RefreshCw, Bell, ArrowUpDown, Activity } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { LineChart, RefreshCw, ArrowUpDown, Activity, MoreVertical } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodha } from '../hooks/useZerodha';
@@ -29,6 +29,8 @@ export function Positions() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedPositions, setSelectedPositions] = useState<Set<string>>(new Set());
   const [isExiting, setIsExiting] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBroker !== 'all' ? selectedBroker : brokers[0]?.id);
 
@@ -38,6 +40,17 @@ export function Positions() {
       loadBrokers();
     }
   }, [user]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     filterPositions();
@@ -239,25 +252,43 @@ export function Positions() {
     setTimeout(() => setSyncMessage(''), 6000);
   };
 
-  const handleOpenExitModal = (position: any) => {
-    setSelectedPosition(position);
-    setExitModalOpen(true);
+  const handleOpenExitModal = (position?: any) => {
+    if (position) {
+      setExitModalOpen(true);
+      setSelectedPosition(position);
+    } else if (selectedPositions.size > 0) {
+      setExitModalOpen(true);
+    }
+    setOpenMenuId(null);
   };
 
   const handleExitSuccess = () => {
-    setSyncMessage('✓ Position exited successfully');
+    setSyncMessage('✓ Position(s) exited successfully');
+    setSelectedPositions(new Set());
     loadPositions();
     setTimeout(() => setSyncMessage(''), 5000);
+  };
+
+  const getPositionsToExit = () => {
+    if (selectedPosition && !selectedPositions.has(selectedPosition.id)) {
+      return [selectedPosition];
+    }
+    return positions.filter(p => selectedPositions.has(p.id));
   };
 
   const handleOpenGTT = (position: any) => {
     setSelectedPosition(position);
     setGttModalOpen(true);
+    setOpenMenuId(null);
   };
 
   const handleCloseGTTModal = () => {
     setGttModalOpen(false);
     setSelectedPosition(null);
+  };
+
+  const toggleMenu = (positionId: string) => {
+    setOpenMenuId(openMenuId === positionId ? null : positionId);
   };
 
   const handleSelectAll = () => {
@@ -278,94 +309,6 @@ export function Positions() {
     setSelectedPositions(newSelected);
   };
 
-  const handleBulkExit = async () => {
-    if (selectedPositions.size === 0) return;
-
-    const { data: gttOrders } = await supabase
-      .from('gtt_orders')
-      .select('id, symbol')
-      .in('position_id', Array.from(selectedPositions));
-
-    const hasGTT = gttOrders && gttOrders.length > 0;
-    const gttMessage = hasGTT ? `\n\n${gttOrders.length} GTT order(s) will also be deleted.` : '';
-
-    if (!confirm(`Are you sure you want to exit ${selectedPositions.size} position(s)?${gttMessage}`)) {
-      return;
-    }
-
-    setIsExiting(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const positionsToExit = positions.filter(p => selectedPositions.has(p.id));
-
-      let successCount = 0;
-      let errorCount = 0;
-
-      for (const position of positionsToExit) {
-        try {
-          const exitTransactionType = position.quantity > 0 ? 'SELL' : 'BUY';
-          const exitQuantity = Math.abs(position.quantity);
-
-          const response = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/place`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${session?.access_token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                broker_connection_id: position.broker_connection_id,
-                symbol: position.symbol,
-                exchange: position.exchange,
-                transaction_type: exitTransactionType,
-                quantity: exitQuantity,
-                order_type: 'MARKET',
-                product: position.product_type || 'NRML',
-                validity: 'DAY',
-              }),
-            }
-          );
-
-          const result = await response.json();
-
-          if (result.success) {
-            await supabase
-              .from('positions')
-              .update({ quantity: 0 })
-              .eq('id', position.id);
-            successCount++;
-          } else {
-            errorCount++;
-          }
-        } catch (err) {
-          errorCount++;
-        }
-      }
-
-      if (hasGTT) {
-        await supabase
-          .from('gtt_orders')
-          .delete()
-          .in('position_id', Array.from(selectedPositions));
-      }
-
-      const messages = [`✓ Successfully exited ${successCount} position(s)`];
-      if (hasGTT) messages.push(`${gttOrders.length} GTT order(s) deleted`);
-      if (errorCount > 0) messages.push(`${errorCount} failed`);
-
-      setSyncMessage(messages.join(', '));
-      setSelectedPositions(new Set());
-      await loadPositions();
-      setTimeout(() => setSyncMessage(''), 5000);
-    } catch (error: any) {
-      console.error('Error exiting positions:', error);
-      setSyncMessage(`Error: ${error.message || 'Failed to exit positions'}`);
-      setTimeout(() => setSyncMessage(''), 5000);
-    } finally {
-      setIsExiting(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -385,12 +328,10 @@ export function Positions() {
         <div className="flex items-center gap-3">
           {selectedPositions.size > 0 && (
             <button
-              onClick={handleBulkExit}
-              disabled={isExiting}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handleOpenExitModal()}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
             >
-              <X className={`w-5 h-5 ${isExiting ? 'animate-spin' : ''}`} />
-              Exit Selected ({selectedPositions.size})
+              Exit {selectedPositions.size} position{selectedPositions.size > 1 ? 's' : ''}
             </button>
           )}
           <select
@@ -579,23 +520,32 @@ export function Positions() {
                         </span>
                       </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
+                      <div className="relative" ref={openMenuId === position.id ? menuRef : null}>
                         <button
-                          onClick={() => handleOpenGTT(position)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                          title="Create GTT"
+                          onClick={() => toggleMenu(position.id)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition"
                         >
-                          <Bell className="w-4 h-4" />
+                          <MoreVertical className="w-5 h-5 text-gray-600" />
                         </button>
-                        <button
-                          onClick={() => handleOpenExitModal(position)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                          title="Exit position"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                        </div>
-                      </td>
+
+                        {openMenuId === position.id && (
+                          <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                            <button
+                              onClick={() => handleOpenExitModal(position)}
+                              className="w-full text-left px-4 py-3 hover:bg-gray-50 transition text-sm text-gray-700"
+                            >
+                              Exit position
+                            </button>
+                            <button
+                              onClick={() => handleOpenGTT(position)}
+                              className="w-full text-left px-4 py-3 hover:bg-gray-50 transition text-sm text-gray-700 border-t border-gray-100"
+                            >
+                              Create GTT
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     </tr>
                   );
                 })}
@@ -606,29 +556,31 @@ export function Positions() {
       </div>
 
       {selectedPosition && (
-        <>
-          <GTTModal
-            isOpen={gttModalOpen}
-            onClose={handleCloseGTTModal}
-            brokerConnectionId={selectedPosition.broker_connection_id}
-            initialSymbol={selectedPosition.symbol}
-            initialExchange={selectedPosition.exchange}
-            allBrokers={brokers}
-            positionData={{
-              quantity: Math.abs(selectedPosition.quantity),
-              averagePrice: selectedPosition.average_price,
-              currentPrice: selectedPosition.current_price,
-              transactionType: selectedPosition.quantity > 0 ? 'SELL' : 'BUY'
-            }}
-          />
-          <ExitPositionModal
-            isOpen={exitModalOpen}
-            onClose={() => setExitModalOpen(false)}
-            position={selectedPosition}
-            onSuccess={handleExitSuccess}
-          />
-        </>
+        <GTTModal
+          isOpen={gttModalOpen}
+          onClose={handleCloseGTTModal}
+          brokerConnectionId={selectedPosition.broker_connection_id}
+          initialSymbol={selectedPosition.symbol}
+          initialExchange={selectedPosition.exchange}
+          allBrokers={brokers}
+          positionData={{
+            quantity: Math.abs(selectedPosition.quantity),
+            averagePrice: selectedPosition.average_price,
+            currentPrice: selectedPosition.current_price,
+            transactionType: selectedPosition.quantity > 0 ? 'SELL' : 'BUY'
+          }}
+        />
       )}
+
+      <ExitPositionModal
+        isOpen={exitModalOpen}
+        onClose={() => {
+          setExitModalOpen(false);
+          setSelectedPosition(null);
+        }}
+        positions={getPositionsToExit()}
+        onSuccess={handleExitSuccess}
+      />
     </div>
   );
 }
