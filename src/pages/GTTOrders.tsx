@@ -115,7 +115,9 @@ export function GTTOrders() {
 
         const results = await Promise.all(fetchPromises);
         const allOrders = results.flat();
-        setGttOrders(sortGTTOrders(allOrders));
+        // Filter out triggered orders
+        const activeOrders = allOrders.filter(order => order.status !== 'triggered');
+        setGttOrders(sortGTTOrders(activeOrders));
       } else {
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${selectedBrokerId}`;
         const response = await fetch(apiUrl, {
@@ -136,7 +138,9 @@ export function GTTOrders() {
               client_id: broker?.client_id
             }
           }));
-          setGttOrders(sortGTTOrders(ordersWithBroker));
+          // Filter out triggered orders
+          const activeOrders = ordersWithBroker.filter((order: any) => order.status !== 'triggered');
+          setGttOrders(sortGTTOrders(activeOrders));
         } else {
           setGttOrders([]);
         }
