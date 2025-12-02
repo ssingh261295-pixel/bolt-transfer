@@ -170,7 +170,6 @@ Deno.serve(async (req: Request) => {
 
         const orders = result.data;
 
-        // Bulk insert all orders at once instead of one-by-one
         if (orders.length > 0) {
           const orderRecords = orders.map((order: any) => ({
             user_id: user.id,
@@ -203,6 +202,79 @@ Deno.serve(async (req: Request) => {
       }
 
       throw new Error('Failed to sync orders');
+    }
+
+    if (req.method === 'POST' && url.pathname.endsWith('/exit')) {
+      const { position_id } = await req.json();
+
+      const { data: position } = await supabase
+        .from('positions')
+        .select('*, broker_connections!inner(api_key, access_token)')
+        .eq('id', position_id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!position || !position.broker_connections.access_token) {
+        throw new Error('Position or broker not found');
+      }
+
+      const exitTransactionType = position.quantity > 0 ? 'SELL' : 'BUY';
+      const exitQuantity = Math.abs(position.quantity);
+
+      const params: any = {
+        tradingsymbol: position.symbol,
+        exchange: position.exchange,
+        transaction_type: exitTransactionType,
+        quantity: exitQuantity.toString(),
+        order_type: 'MARKET',
+        product: position.product || 'MIS',
+        validity: 'DAY',
+      };
+
+      const response = await fetch('https://api.kite.trade/orders/regular', {
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${position.broker_connections.api_key}:${position.broker_connections.access_token}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Kite-Version': '3',
+        },
+        body: new URLSearchParams(params),
+      });
+
+      const result = await response.json();
+
+      if (result.status === 'success' && result.data?.order_id) {
+        await supabase.from('orders').insert({
+          user_id: user.id,
+          broker_connection_id: position.broker_connection_id,
+          symbol: position.symbol,
+          exchange: position.exchange,
+          order_type: 'MARKET',
+          transaction_type: exitTransactionType,
+          quantity: exitQuantity,
+          price: null,
+          trigger_price: null,
+          status: 'COMPLETE',
+          order_id: result.data.order_id,
+        });
+
+        await supabase
+          .from('positions')
+          .update({ quantity: 0 })
+          .eq('id', position_id);
+
+        return new Response(
+          JSON.stringify({ success: true, order_id: result.data.order_id, message: 'Position exited successfully' }),
+          {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      } else {
+        throw new Error(result.message || 'Exit order placement failed');
+      }
     }
 
     throw new Error('Invalid endpoint');

@@ -235,14 +235,42 @@ export function Positions() {
     setTimeout(() => setSyncMessage(''), 6000);
   };
 
-  const handleClosePosition = async (id: string) => {
-    const { error } = await supabase
-      .from('positions')
-      .delete()
-      .eq('id', id);
+  const handleClosePosition = async (position: any) => {
+    if (!confirm(`Exit position for ${position.symbol}? This will place a market order to close the position.`)) {
+      return;
+    }
 
-    if (!error) {
-      loadPositions();
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/exit`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            position_id: position.id,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        setSyncMessage(`✓ Position exited successfully. Order ID: ${result.order_id}`);
+        await loadPositions();
+        setTimeout(() => setSyncMessage(''), 5000);
+      } else {
+        setSyncMessage(`Failed to exit position: ${result.error || 'Unknown error'}`);
+        setTimeout(() => setSyncMessage(''), 5000);
+      }
+    } catch (error: any) {
+      console.error('Error exiting position:', error);
+      setSyncMessage(`Error: ${error.message || 'Failed to exit position'}`);
+      setTimeout(() => setSyncMessage(''), 5000);
     }
   };
 
@@ -451,9 +479,9 @@ export function Positions() {
                           <Bell className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleClosePosition(position.id)}
+                          onClick={() => handleClosePosition(position)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                          title="Close position"
+                          title="Exit position"
                         >
                           <X className="w-4 h-4" />
                         </button>
