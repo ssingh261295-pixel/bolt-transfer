@@ -36,6 +36,7 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
               headers: {
                 'Authorization': `Bearer ${session?.access_token}`,
                 'Content-Type': 'application/json',
+                'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
               },
               body: JSON.stringify({
                 broker_connection_id: position.broker_connection_id,

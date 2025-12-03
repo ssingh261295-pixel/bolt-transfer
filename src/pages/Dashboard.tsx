@@ -64,6 +64,8 @@ export function Dashboard() {
               {
                 headers: {
                   'Authorization': `Bearer ${session?.access_token}`,
+                  'Content-Type': 'application/json',
+                  'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
                 },
               }
             ),
@@ -72,10 +74,20 @@ export function Dashboard() {
               {
                 headers: {
                   'Authorization': `Bearer ${session?.access_token}`,
+                  'Content-Type': 'application/json',
+                  'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
                 },
               }
             ),
           ]);
+
+          if (!positionsResponse.ok || !gttResponse.ok) {
+            console.error(`Failed to fetch data for broker ${broker.id}:`, {
+              positions: positionsResponse.status,
+              gtt: gttResponse.status
+            });
+            return null;
+          }
 
           const [result, gttResult] = await Promise.all([
             positionsResponse.json(),
