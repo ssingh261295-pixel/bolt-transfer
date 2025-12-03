@@ -85,36 +85,19 @@ export class ZerodhaWebSocket {
           if (ticks.length > 0 && this.onTickCallback) {
             this.onTickCallback(ticks);
           }
-        } else if (typeof event.data === 'string') {
-          try {
-            const message = JSON.parse(event.data);
-            if (message.type === 'error') {
-              console.error('[Zerodha WS] Server error:', message);
-              if (this.onErrorCallback) {
-                this.onErrorCallback(new Error(message.message || 'WebSocket server error'));
-              }
-            }
-          } catch (e) {
-            console.warn('[Zerodha WS] Received non-JSON text message:', event.data);
-          }
         }
       };
 
       this.ws.onerror = (error) => {
-        console.warn('[Zerodha WS] Connection error - this is expected if broker tokens are not connected');
+        console.error('[Zerodha WS] Error:', error);
         if (this.onErrorCallback) {
-          this.onErrorCallback(new Error('WebSocket connection failed'));
+          this.onErrorCallback(new Error('WebSocket error'));
         }
       };
 
       this.ws.onclose = (event) => {
         this.isConnecting = false;
-
-        if (event.code === 1006) {
-          console.warn('[Zerodha WS] Connection closed abnormally - broker tokens may be invalid or expired');
-        } else if (event.code !== 1000) {
-          console.log(`[Zerodha WS] Disconnected: ${event.code} - ${event.reason || 'No reason provided'}`);
-        }
+        console.log(`[Zerodha WS] Disconnected: ${event.code} - ${event.reason}`);
 
         this.stopPing();
 
@@ -122,12 +105,10 @@ export class ZerodhaWebSocket {
           this.onDisconnectCallback(event.code, event.reason);
         }
 
-        if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts && event.code !== 1006) {
+        if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
           console.log(`[Zerodha WS] Reconnecting... Attempt ${this.reconnectAttempts}`);
           setTimeout(() => this.connect(), this.reconnectDelay * this.reconnectAttempts);
-        } else if (event.code === 1006) {
-          this.shouldReconnect = false;
         }
       };
     } catch (error) {
@@ -238,44 +219,24 @@ export class ZerodhaWebSocket {
 
   private parseBinary(buffer: ArrayBuffer): Tick[] {
     const ticks: Tick[] = [];
+    const view = new DataView(buffer);
+    let offset = 0;
 
-    try {
-      if (buffer.byteLength < 2) {
-        console.warn('[Zerodha WS] Buffer too small:', buffer.byteLength);
-        return ticks;
-      }
+    const packetCount = view.getUint16(offset, false);
+    offset += 2;
 
-      const view = new DataView(buffer);
-      let offset = 0;
-
-      const packetCount = view.getUint16(offset, false);
+    for (let i = 0; i < packetCount; i++) {
+      const packetLength = view.getUint16(offset, false);
       offset += 2;
 
-      for (let i = 0; i < packetCount; i++) {
-        if (offset + 2 > buffer.byteLength) {
-          console.warn('[Zerodha WS] Incomplete packet header at offset', offset);
-          break;
-        }
+      if (packetLength === 0) continue;
 
-        const packetLength = view.getUint16(offset, false);
-        offset += 2;
-
-        if (packetLength === 0) continue;
-
-        if (offset + packetLength > buffer.byteLength) {
-          console.warn('[Zerodha WS] Incomplete packet data at offset', offset);
-          break;
-        }
-
-        const tick = this.parsePacket(buffer.slice(offset, offset + packetLength));
-        if (tick) {
-          ticks.push(tick);
-        }
-
-        offset += packetLength;
+      const tick = this.parsePacket(buffer.slice(offset, offset + packetLength));
+      if (tick) {
+        ticks.push(tick);
       }
-    } catch (error) {
-      console.error('[Zerodha WS] Error parsing binary data:', error);
+
+      offset += packetLength;
     }
 
     return ticks;

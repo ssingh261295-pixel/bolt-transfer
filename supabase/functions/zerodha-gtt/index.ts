@@ -77,12 +77,6 @@ Deno.serve(async (req: Request) => {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Zerodha API error:', response.status, errorText);
-
-        if (response.status === 403 || errorText.includes('Invalid token') || errorText.includes('token')) {
-          const accountInfo = brokerConnection.account_holder_name || brokerConnection.client_id || brokerId;
-          throw new Error(`Access token expired for account: ${accountInfo}. Please reconnect this broker.`);
-        }
-
         throw new Error(`Failed to fetch GTT orders: ${response.status}`);
       }
 
