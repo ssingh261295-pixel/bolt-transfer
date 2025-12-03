@@ -82,6 +82,7 @@ export function GTTOrders() {
     if (!selectedBrokerId || brokers.length === 0) return;
 
     setLoading(true);
+    setDeleteError('');
     try {
       if (selectedBrokerId === 'all') {
         const fetchPromises = brokers.map(async (broker) => {
@@ -95,26 +96,40 @@ export function GTTOrders() {
             });
             const result = await response.json();
             if (result.success && result.data) {
-              return result.data.map((order: any) => ({
-                ...order,
-                broker_info: {
-                  id: broker.id,
-                  account_name: broker.account_name,
-                  account_holder_name: broker.account_holder_name,
-                  client_id: broker.client_id
-                }
-              }));
+              return {
+                success: true,
+                orders: result.data.map((order: any) => ({
+                  ...order,
+                  broker_info: {
+                    id: broker.id,
+                    account_name: broker.account_name,
+                    account_holder_name: broker.account_holder_name,
+                    client_id: broker.client_id
+                  }
+                }))
+              };
+            } else if (result.error && result.error.includes('token')) {
+              return { success: false, needsReconnect: true, broker };
             }
-            return [];
+            return { success: true, orders: [] };
           } catch (err) {
             console.error(`Failed to fetch GTT orders for broker ${broker.id}:`, err);
             if (throwOnError) throw err;
-            return [];
+            return { success: true, orders: [] };
           }
         });
 
         const results = await Promise.all(fetchPromises);
-        const allOrders = results.flat();
+        const allOrders = results.flatMap(r => r.orders || []);
+        const brokersNeedingReconnect = results.filter(r => r.needsReconnect).map(r => r.broker);
+
+        if (brokersNeedingReconnect.length > 0) {
+          const names = brokersNeedingReconnect.map(b =>
+            b.account_holder_name || b.account_name || b.client_id
+          ).join(', ');
+          setDeleteError(`Some accounts need reconnection: ${names}. Please reconnect them in the Brokers page.`);
+        }
+
         // Filter out triggered orders
         const activeOrders = allOrders.filter(order => order.status !== 'triggered');
         setGttOrders(sortGTTOrders(activeOrders));
@@ -141,6 +156,11 @@ export function GTTOrders() {
           // Filter out triggered orders
           const activeOrders = ordersWithBroker.filter((order: any) => order.status !== 'triggered');
           setGttOrders(sortGTTOrders(activeOrders));
+        } else if (result.error && result.error.includes('token')) {
+          const broker = brokers.find(b => b.id === selectedBrokerId);
+          const name = broker?.account_holder_name || broker?.account_name || broker?.client_id || 'Account';
+          setDeleteError(`${name} needs reconnection. Please reconnect it in the Brokers page.`);
+          setGttOrders([]);
         } else {
           setGttOrders([]);
         }
