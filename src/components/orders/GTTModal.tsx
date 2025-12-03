@@ -118,16 +118,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       if (editingGTT) {
         const tradingsymbol = editingGTT.condition?.tradingsymbol || '';
         const exchangeValue = editingGTT.condition?.exchange || 'NFO';
+        const transType = editingGTT.orders?.[0]?.transaction_type || 'BUY';
 
         setSymbol(tradingsymbol);
         setExchange(exchangeValue);
-        setTransactionType(editingGTT.orders?.[0]?.transaction_type || 'BUY');
+        setTransactionType(transType);
         setGttType(editingGTT.type || 'single');
-        setTriggerPrice1(editingGTT.condition?.trigger_values?.[0]?.toString() || '');
-        setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
-        setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
-        setPrice1(editingGTT.orders?.[0]?.price?.toString() || '');
-        setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
 
         if (editingGTT.condition?.instrument_token) {
           const instrument = {
@@ -144,11 +140,47 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         }
 
         if (editingGTT.type === 'two-leg') {
-          setTriggerPrice2(editingGTT.condition?.trigger_values?.[1]?.toString() || '');
-          setQuantity2(editingGTT.orders?.[1]?.quantity || 200);
-          setOrderType2(editingGTT.orders?.[1]?.order_type || 'LIMIT');
-          setPrice2(editingGTT.orders?.[1]?.price?.toString() || '');
-          setProduct2(editingGTT.orders?.[1]?.product || 'NRML');
+          const trigger0 = editingGTT.condition?.trigger_values?.[0];
+          const trigger1 = editingGTT.condition?.trigger_values?.[1];
+
+          // For BUY: Stoploss is higher, Target is lower
+          // For SELL: Stoploss is lower, Target is higher
+          // trigger_values are always sorted [lower, higher]
+
+          if (transType === 'BUY') {
+            // Stoploss = higher price = trigger1
+            setTriggerPrice1(trigger1?.toString() || '');
+            setPrice1(editingGTT.orders?.[1]?.price?.toString() || '');
+            setQuantity1(editingGTT.orders?.[1]?.quantity || 200);
+            setOrderType1(editingGTT.orders?.[1]?.order_type || 'LIMIT');
+            setProduct1(editingGTT.orders?.[1]?.product || 'NRML');
+
+            // Target = lower price = trigger0
+            setTriggerPrice2(trigger0?.toString() || '');
+            setPrice2(editingGTT.orders?.[0]?.price?.toString() || '');
+            setQuantity2(editingGTT.orders?.[0]?.quantity || 200);
+            setOrderType2(editingGTT.orders?.[0]?.order_type || 'LIMIT');
+            setProduct2(editingGTT.orders?.[0]?.product || 'NRML');
+          } else {
+            // SELL: Stoploss = lower, Target = higher
+            setTriggerPrice1(trigger0?.toString() || '');
+            setPrice1(editingGTT.orders?.[0]?.price?.toString() || '');
+            setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
+            setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
+            setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
+
+            setTriggerPrice2(trigger1?.toString() || '');
+            setPrice2(editingGTT.orders?.[1]?.price?.toString() || '');
+            setQuantity2(editingGTT.orders?.[1]?.quantity || 200);
+            setOrderType2(editingGTT.orders?.[1]?.order_type || 'LIMIT');
+            setProduct2(editingGTT.orders?.[1]?.product || 'NRML');
+          }
+        } else {
+          setTriggerPrice1(editingGTT.condition?.trigger_values?.[0]?.toString() || '');
+          setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
+          setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
+          setPrice1(editingGTT.orders?.[0]?.price?.toString() || '');
+          setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
         }
       } else if (isOpen) {
         setSymbol(initialSymbol || '');
@@ -223,6 +255,28 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     }
   }, [gttType, transactionType, currentLTP]);
 
+  // Calculate percentages for editing GTT when LTP becomes available
+  useEffect(() => {
+    if (editingGTT && currentLTP) {
+      if (triggerPrice1) {
+        const triggerPct = ((parseFloat(triggerPrice1) - currentLTP) / currentLTP * 100).toFixed(2);
+        setTriggerPercent1(triggerPct);
+      }
+      if (price1) {
+        const pricePct = ((parseFloat(price1) - currentLTP) / currentLTP * 100).toFixed(2);
+        setPricePercent1(pricePct);
+      }
+      if (triggerPrice2) {
+        const triggerPct = ((parseFloat(triggerPrice2) - currentLTP) / currentLTP * 100).toFixed(2);
+        setTriggerPercent2(triggerPct);
+      }
+      if (price2) {
+        const pricePct = ((parseFloat(price2) - currentLTP) / currentLTP * 100).toFixed(2);
+        setPricePercent2(pricePct);
+      }
+    }
+  }, [editingGTT, currentLTP, triggerPrice1, price1, triggerPrice2, price2]);
+
   const prefillPricesBasedOnLTP = (ltp: number) => {
     if (gttType === 'single') {
       // Single GTT: BUY = +2%, SELL = -2%
@@ -230,14 +284,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         const triggerValue = (ltp * 1.02).toFixed(2);
         setTriggerPrice1(triggerValue);
         setPrice1(triggerValue);
-        setTriggerPercent1('2');
-        setPricePercent1('2');
+        setTriggerPercent1('2.00');
+        setPricePercent1('2.00');
       } else {
         const triggerValue = (ltp * 0.98).toFixed(2);
         setTriggerPrice1(triggerValue);
         setPrice1(triggerValue);
-        setTriggerPercent1('-2');
-        setPricePercent1('-2');
+        setTriggerPercent1('-2.00');
+        setPricePercent1('-2.00');
       }
     } else if (gttType === 'two-leg') {
       // Check if this is from a position (closing) or new GTT (opening)
@@ -251,24 +305,24 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           const target = (ltp * 1.02).toFixed(2);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
-          setTriggerPercent1('-2');
-          setPricePercent1('-2');
+          setTriggerPercent1('-2.00');
+          setPricePercent1('-2.00');
           setTriggerPrice2(target);
           setPrice2(target);
-          setTriggerPercent2('2');
-          setPricePercent2('2');
+          setTriggerPercent2('2.00');
+          setPricePercent2('2.00');
         } else {
           // Buy OCO (closing a short position): Stoploss at +2% (above), Target at -2% (below)
           const stoploss = (ltp * 1.02).toFixed(2);
           const target = (ltp * 0.98).toFixed(2);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
-          setTriggerPercent1('2');
-          setPricePercent1('2');
+          setTriggerPercent1('2.00');
+          setPricePercent1('2.00');
           setTriggerPrice2(target);
           setPrice2(target);
-          setTriggerPercent2('-2');
-          setPricePercent2('-2');
+          setTriggerPercent2('-2.00');
+          setPricePercent2('-2.00');
         }
       } else {
         // Opening new position logic - Zerodha's GTT entry order logic
@@ -279,12 +333,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           const target = (ltp * 0.98).toFixed(2);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
-          setTriggerPercent1('2');
-          setPricePercent1('2');
+          setTriggerPercent1('2.00');
+          setPricePercent1('2.00');
           setTriggerPrice2(target);
           setPrice2(target);
-          setTriggerPercent2('-2');
-          setPricePercent2('-2');
+          setTriggerPercent2('-2.00');
+          setPricePercent2('-2.00');
         } else {
           // Sell OCO (entering short): Stoploss at -2% (lower), Target at +2% (higher)
           // This is for entry GTTs where you want to sell if price goes down OR up
@@ -292,12 +346,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           const target = (ltp * 1.02).toFixed(2);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
-          setTriggerPercent1('-2');
-          setPricePercent1('-2');
+          setTriggerPercent1('-2.00');
+          setPricePercent1('-2.00');
           setTriggerPrice2(target);
           setPrice2(target);
-          setTriggerPercent2('2');
-          setPricePercent2('2');
+          setTriggerPercent2('2.00');
+          setPricePercent2('2.00');
         }
       }
     }
@@ -447,51 +501,46 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         const trigger1 = parseFloat(triggerPrice1);
         const trigger2 = parseFloat(triggerPrice2);
 
+        if (!price1 || !price2) {
+          throw new Error('Please enter limit prices for both orders');
+        }
+
         // Zerodha requires trigger_values in ascending order (lower price first)
-        const sortedTriggers = [trigger1, trigger2].sort((a, b) => a - b);
+        // For BUY: trigger1 (stoploss) is higher, trigger2 (target) is lower
+        // For SELL: trigger1 (stoploss) is lower, trigger2 (target) is higher
 
-        gttData['condition[trigger_values][0]'] = sortedTriggers[0];
-        gttData['condition[trigger_values][1]'] = sortedTriggers[1];
+        if (transactionType === 'BUY') {
+          // trigger1 > trigger2, so sortedTriggers = [trigger2, trigger1]
+          gttData['condition[trigger_values][0]'] = trigger2;  // lower (target)
+          gttData['condition[trigger_values][1]'] = trigger1;  // higher (stoploss)
 
-        // Determine which order corresponds to which trigger
-        // If trigger1 is the lower value, order[0] triggers first, otherwise order[1] triggers first
-        const order1TriggersFirst = trigger1 === sortedTriggers[0];
-
-        if (order1TriggersFirst) {
-          // Order 0: First trigger (lower price)
-          gttData['orders[0][price]'] = parseFloat(price1);
-
-          // Order 1: Second trigger (higher price)
-          gttData['orders[1][exchange]'] = exchange;
-          gttData['orders[1][tradingsymbol]'] = symbol;
-          gttData['orders[1][transaction_type]'] = transactionType;
-          gttData['orders[1][quantity]'] = quantity2;
-          gttData['orders[1][order_type]'] = orderType2;
-          gttData['orders[1][product]'] = product2;
-
-          if (!price2) {
-            throw new Error('Please enter limit price for order 2');
-          }
-          gttData['orders[1][price]'] = parseFloat(price2);
-        } else {
-          // Order 0: Second trigger (higher price - using price2)
+          // Order 0 corresponds to lower trigger (target - leg 2)
           gttData['orders[0][price]'] = parseFloat(price2);
 
-          // Order 1: First trigger (lower price - using price1)
+          // Order 1 corresponds to higher trigger (stoploss - leg 1)
           gttData['orders[1][exchange]'] = exchange;
           gttData['orders[1][tradingsymbol]'] = symbol;
           gttData['orders[1][transaction_type]'] = transactionType;
           gttData['orders[1][quantity]'] = quantity1;
           gttData['orders[1][order_type]'] = orderType1;
           gttData['orders[1][product]'] = product1;
-
-          if (!price1) {
-            throw new Error('Please enter limit price for order 1');
-          }
           gttData['orders[1][price]'] = parseFloat(price1);
+        } else {
+          // SELL: trigger1 < trigger2, so sortedTriggers = [trigger1, trigger2]
+          gttData['condition[trigger_values][0]'] = trigger1;  // lower (stoploss)
+          gttData['condition[trigger_values][1]'] = trigger2;  // higher (target)
 
-          // Swap quantities if needed
-          gttData['orders[0][quantity]'] = quantity2;
+          // Order 0 corresponds to lower trigger (stoploss - leg 1)
+          gttData['orders[0][price]'] = parseFloat(price1);
+
+          // Order 1 corresponds to higher trigger (target - leg 2)
+          gttData['orders[1][exchange]'] = exchange;
+          gttData['orders[1][tradingsymbol]'] = symbol;
+          gttData['orders[1][transaction_type]'] = transactionType;
+          gttData['orders[1][quantity]'] = quantity2;
+          gttData['orders[1][order_type]'] = orderType2;
+          gttData['orders[1][product]'] = product2;
+          gttData['orders[1][price]'] = parseFloat(price2);
         }
       } else {
         gttData['condition[trigger_values][0]'] = parseFloat(triggerPrice1);
@@ -512,37 +561,39 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       gttData['condition[last_price]'] = lastPrice;
 
       const brokersToProcess = editingGTT ? [brokerConnectionId] : selectedBrokerIds;
-      const results = [];
 
-      for (const brokerId of brokersToProcess) {
-        try {
-          const method = editingGTT ? 'PUT' : 'POST';
-          const gttIdParam = editingGTT ? `&gtt_id=${editingGTT.id}` : '';
-          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerId}${gttIdParam}`;
+      // Process all brokers in parallel for better performance
+      const results = await Promise.all(
+        brokersToProcess.map(async (brokerId) => {
+          try {
+            const method = editingGTT ? 'PUT' : 'POST';
+            const gttIdParam = editingGTT ? `&gtt_id=${editingGTT.id}` : '';
+            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerId}${gttIdParam}`;
 
-          const response = await fetch(apiUrl, {
-            method: method,
-            headers: {
-              'Authorization': `Bearer ${session?.access_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(gttData),
-          });
+            const response = await fetch(apiUrl, {
+              method: method,
+              headers: {
+                'Authorization': `Bearer ${session?.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(gttData),
+            });
 
-          const result = await response.json();
-          console.log(`GTT creation result for broker ${brokerId}:`, result);
+            const result = await response.json();
+            console.log(`GTT creation result for broker ${brokerId}:`, result);
 
-          if (result.success) {
-            results.push({ brokerId, success: true });
-          } else {
-            console.error(`Failed for broker ${brokerId}:`, result.error);
-            results.push({ brokerId, success: false, error: result.error || 'Unknown error' });
+            if (result.success) {
+              return { brokerId, success: true };
+            } else {
+              console.error(`Failed for broker ${brokerId}:`, result.error);
+              return { brokerId, success: false, error: result.error || 'Unknown error' };
+            }
+          } catch (err: any) {
+            console.error(`Exception for broker ${brokerId}:`, err);
+            return { brokerId, success: false, error: err.message };
           }
-        } catch (err: any) {
-          console.error(`Exception for broker ${brokerId}:`, err);
-          results.push({ brokerId, success: false, error: err.message });
-        }
-      }
+        })
+      );
 
       console.log('All GTT creation results:', results);
 
@@ -573,16 +624,16 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-gray-900">
               {editingGTT ? 'Edit GTT Order' : 'New GTT Order'}
             </h2>
             {selectedInstrument && (
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-sm font-medium text-gray-900">{symbol}</span>
-                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{exchange}</span>
+                <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{exchange}</span>
                 {currentLTP && (
                   <span className="text-sm font-semibold text-gray-700">{currentLTP.toFixed(2)}</span>
                 )}
@@ -597,7 +648,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
               {error}
@@ -613,7 +664,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           {/* Multi-Account Selection */}
           {!editingGTT && allBrokers && allBrokers.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-gray-700">
                   Select Accounts ({selectedBrokerIds.length} selected)
                 </label>
@@ -626,18 +677,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                       setSelectedBrokerIds(allBrokers.map(b => b.id));
                     }
                   }}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                 >
                   {selectedBrokerIds.length === allBrokers.length ? 'Deselect All' : 'Select All'}
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 {allBrokers.map((broker) => {
                   const isSelected = selectedBrokerIds.includes(broker.id);
                   return (
                     <label
                       key={broker.id}
-                      className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition ${
+                      className={`flex items-center gap-2 p-2 border-2 rounded cursor-pointer transition ${
                         isSelected
                           ? 'border-blue-600 bg-blue-50'
                           : 'border-gray-200 hover:border-gray-300'
@@ -655,13 +706,13 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                         }}
                         className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                       />
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-gray-900">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-gray-900 truncate">
                           {broker.account_holder_name || broker.account_name || 'Account'}
+                          {broker.client_id && (
+                            <span className="text-gray-600"> ({broker.client_id})</span>
+                          )}
                         </div>
-                        {broker.client_id && (
-                          <div className="text-xs text-gray-600">ID: {broker.client_id}</div>
-                        )}
                       </div>
                     </label>
                   );
@@ -716,10 +767,10 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
 
           {/* Transaction and Trigger Type */}
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Transaction type</label>
-              <div className="flex gap-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Transaction type</label>
+              <div className="flex gap-3">
                 <label className="flex items-center cursor-pointer">
                   <input
                     type="radio"
@@ -728,7 +779,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     onChange={(e) => setTransactionType(e.target.value as 'BUY')}
                     className="w-4 h-4 text-blue-600"
                   />
-                  <span className="ml-2 text-sm text-gray-900">Buy</span>
+                  <span className="ml-1.5 text-sm text-gray-900">Buy</span>
                 </label>
                 <label className="flex items-center cursor-pointer">
                   <input
@@ -738,14 +789,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     onChange={(e) => setTransactionType(e.target.value as 'SELL')}
                     className="w-4 h-4 text-blue-600"
                   />
-                  <span className="ml-2 text-sm text-gray-900">Sell</span>
+                  <span className="ml-1.5 text-sm text-gray-900">Sell</span>
                 </label>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Trigger type</label>
-              <div className="flex gap-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Trigger type</label>
+              <div className="flex gap-3">
                 <label className="flex items-center cursor-pointer">
                   <input
                     type="radio"
@@ -754,7 +805,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     onChange={(e) => setGttType(e.target.value as 'single')}
                     className="w-4 h-4 text-blue-600"
                   />
-                  <span className="ml-2 text-sm text-gray-900">Single</span>
+                  <span className="ml-1.5 text-sm text-gray-900">Single</span>
                 </label>
                 <label className="flex items-center cursor-pointer">
                   <input
@@ -764,11 +815,11 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     onChange={(e) => setGttType(e.target.value as 'two-leg')}
                     className="w-4 h-4 text-blue-600"
                   />
-                  <span className="ml-2 text-sm text-gray-900">OCO</span>
+                  <span className="ml-1.5 text-sm text-gray-900">OCO</span>
                 </label>
               </div>
               {gttType === 'two-leg' && (
-                <div className="mt-2 text-xs text-gray-600 leading-relaxed">
+                <div className="mt-1.5 text-xs text-gray-600 leading-relaxed">
                   One Cancels Other: Either the stoploss or the target order is placed when the Last Traded Price (LTP) crosses the respective trigger. Can be used to set target and stoploss for a position/holding.
                 </div>
               )}
@@ -776,88 +827,68 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           </div>
 
           {/* Stoploss Leg */}
-          <div className="border border-gray-200 rounded-lg p-4">
-            <div className="mb-4">
-              <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
+          <div className="bg-gray-50 border border-gray-200 rounded p-3">
+            <div className="mb-3">
+              <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
                 {gttType === 'two-leg' ? 'Stoploss' : 'Order'}
               </span>
             </div>
 
-            <div className="flex gap-4 mb-3">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  checked={product1 === 'NRML'}
-                  onChange={() => setProduct1('NRML')}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <span className="ml-2 text-sm text-gray-900">NRML</span>
-              </label>
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  checked={product1 === 'MIS'}
-                  onChange={() => setProduct1('MIS')}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <span className="ml-2 text-sm text-gray-900">MIS</span>
-              </label>
-              <label className="flex items-center cursor-pointer ml-auto">
-                <input
-                  type="radio"
-                  checked={orderType1 === 'LIMIT'}
-                  onChange={() => setOrderType1('LIMIT')}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <span className="ml-2 text-sm text-gray-900">LIMIT</span>
-              </label>
+            <div className="flex items-center gap-4 mb-3">
+              <div className="flex gap-3">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={product1 === 'NRML'}
+                    onChange={() => setProduct1('NRML')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-1.5 text-sm text-gray-900">NRML</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={product1 === 'MIS'}
+                    onChange={() => setProduct1('MIS')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-1.5 text-sm text-gray-900">MIS</span>
+                </label>
+              </div>
+              <div className="ml-auto flex gap-3">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={orderType1 === 'LIMIT'}
+                    onChange={() => setOrderType1('LIMIT')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="ml-1.5 text-sm text-gray-900">LIMIT</span>
+                </label>
+              </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-3 items-start">
               {/* Trigger Price */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-700">Trigger price</label>
-                  <div className="flex gap-2">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={!useTriggerPercent1}
-                        onChange={() => setUseTriggerPercent1(false)}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="ml-1 text-xs text-gray-700">Price</span>
-                    </label>
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={useTriggerPercent1}
-                        onChange={() => setUseTriggerPercent1(true)}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="ml-1 text-xs text-gray-700">%</span>
-                    </label>
-                  </div>
-                </div>
-                {!useTriggerPercent1 ? (
-                  <div>
-                    <input
-                      type="number"
-                      step="0.05"
-                      value={triggerPrice1}
-                      onChange={(e) => setTriggerPrice1(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      placeholder="0.00"
-                      required
-                    />
-                    {currentLTP && triggerPrice1 && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {calculatePercentFromLTP(triggerPrice1)}% of LTP
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div>
+                <label className="block text-sm text-gray-700 mb-1.5">Trigger price</label>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={triggerPrice1}
+                  onChange={(e) => {
+                    setTriggerPrice1(e.target.value);
+                    if (currentLTP && e.target.value) {
+                      const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
+                      setTriggerPercent1(percent);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="0.00"
+                  required
+                />
+                {currentLTP && (
+                  <div className="flex items-center gap-1 mt-1">
                     <input
                       type="number"
                       step="0.01"
@@ -865,87 +896,62 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                       onChange={(e) => {
                         setTriggerPercent1(e.target.value);
                         if (currentLTP && e.target.value) {
-                          const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
-                          setTriggerPrice1(calculatedPrice.toFixed(2));
+                          const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
+                          setTriggerPrice1(price);
                         }
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      placeholder="2.5"
-                      required
+                      className="w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder="0"
                     />
-                    {triggerPercent1 && currentLTP && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        = ₹{(currentLTP * (1 + parseFloat(triggerPercent1) / 100)).toFixed(2)}
-                      </div>
-                    )}
+                    <span className="text-xs text-gray-500">% of LTP</span>
                   </div>
                 )}
               </div>
 
+              {/* Arrow */}
+              <div className="flex items-center pt-7 text-gray-400 text-sm">
+                →
+              </div>
+
               {/* Quantity */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Qty. {selectedInstrument?.lot_size && (
-                    <span className="text-xs text-gray-500 font-normal">
-                      (Lot size: {selectedInstrument.lot_size})
-                    </span>
-                  )}
-                </label>
+                <label className="block text-sm text-gray-700 mb-1.5">Qty.</label>
                 <input
                   type="number"
                   value={quantity1}
                   onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   min={selectedInstrument?.lot_size || 1}
                   step={selectedInstrument?.lot_size || 1}
                   required
                 />
               </div>
 
+              {/* Arrow */}
+              <div className="flex items-center pt-7 text-gray-400 text-sm">
+                →
+              </div>
+
               {/* Price */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-700">Price</label>
-                  <div className="flex gap-2">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={!usePricePercent1}
-                        onChange={() => setUsePricePercent1(false)}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="ml-1 text-xs text-gray-700">Price</span>
-                    </label>
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={usePricePercent1}
-                        onChange={() => setUsePricePercent1(true)}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="ml-1 text-xs text-gray-700">%</span>
-                    </label>
-                  </div>
-                </div>
-                {!usePricePercent1 ? (
-                  <div>
-                    <input
-                      type="number"
-                      step="0.05"
-                      value={price1}
-                      onChange={(e) => setPrice1(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      placeholder="0.00"
-                      required
-                    />
-                    {currentLTP && price1 && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {calculatePercentFromLTP(price1)}% of LTP
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div>
+                <label className="block text-sm text-gray-700 mb-1.5">Price</label>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={price1}
+                  onChange={(e) => {
+                    setPrice1(e.target.value);
+                    if (currentLTP && e.target.value) {
+                      const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
+                      setPricePercent1(percent);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="0.00"
+                  required
+                />
+                {currentLTP && (
+                  <div className="flex items-center gap-1 mt-1">
                     <input
                       type="number"
                       step="0.01"
@@ -953,19 +959,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                       onChange={(e) => {
                         setPricePercent1(e.target.value);
                         if (currentLTP && e.target.value) {
-                          const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
-                          setPrice1(calculatedPrice.toFixed(2));
+                          const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
+                          setPrice1(price);
                         }
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      placeholder="2.5"
-                      required
+                      className="w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder="0"
                     />
-                    {pricePercent1 && currentLTP && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        = ₹{(currentLTP * (1 + parseFloat(pricePercent1) / 100)).toFixed(2)}
-                      </div>
-                    )}
+                    <span className="text-xs text-gray-500">% of LTP</span>
                   </div>
                 )}
               </div>
@@ -974,88 +975,68 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
           {/* Target Leg (Only for OCO) */}
           {gttType === 'two-leg' && (
-            <div className="border border-gray-200 rounded-lg p-4">
-              <div className="mb-4">
-                <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
+            <div className="bg-gray-50 border border-gray-200 rounded p-3">
+              <div className="mb-3">
+                <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
                   Target
                 </span>
               </div>
 
-              <div className="flex gap-4 mb-3">
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={product2 === 'NRML'}
-                    onChange={() => setProduct2('NRML')}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="ml-2 text-sm text-gray-900">NRML</span>
-                </label>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={product2 === 'MIS'}
-                    onChange={() => setProduct2('MIS')}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="ml-2 text-sm text-gray-900">MIS</span>
-                </label>
-                <label className="flex items-center cursor-pointer ml-auto">
-                  <input
-                    type="radio"
-                    checked={orderType2 === 'LIMIT'}
-                    onChange={() => setOrderType2('LIMIT')}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="ml-2 text-sm text-gray-900">LIMIT</span>
-                </label>
+              <div className="flex items-center gap-4 mb-3">
+                <div className="flex gap-3">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={product2 === 'NRML'}
+                      onChange={() => setProduct2('NRML')}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="ml-1.5 text-sm text-gray-900">NRML</span>
+                  </label>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={product2 === 'MIS'}
+                      onChange={() => setProduct2('MIS')}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="ml-1.5 text-sm text-gray-900">MIS</span>
+                  </label>
+                </div>
+                <div className="ml-auto flex gap-3">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={orderType2 === 'LIMIT'}
+                      onChange={() => setOrderType2('LIMIT')}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="ml-1.5 text-sm text-gray-900">LIMIT</span>
+                  </label>
+                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-3 items-start">
                 {/* Trigger Price */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-700">Trigger price</label>
-                    <div className="flex gap-2">
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={!useTriggerPercent2}
-                          onChange={() => setUseTriggerPercent2(false)}
-                          className="w-4 h-4 text-blue-600"
-                        />
-                        <span className="ml-1 text-xs text-gray-700">Price</span>
-                      </label>
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={useTriggerPercent2}
-                          onChange={() => setUseTriggerPercent2(true)}
-                          className="w-4 h-4 text-blue-600"
-                        />
-                        <span className="ml-1 text-xs text-gray-700">%</span>
-                      </label>
-                    </div>
-                  </div>
-                  {!useTriggerPercent2 ? (
-                    <div>
-                      <input
-                        type="number"
-                        step="0.05"
-                        value={triggerPrice2}
-                        onChange={(e) => setTriggerPrice2(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                        placeholder="0.00"
-                        required
-                      />
-                      {currentLTP && triggerPrice2 && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          {calculatePercentFromLTP(triggerPrice2)}% of LTP
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div>
+                  <label className="block text-sm text-gray-700 mb-1.5">Trigger price</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={triggerPrice2}
+                    onChange={(e) => {
+                      setTriggerPrice2(e.target.value);
+                      if (currentLTP && e.target.value) {
+                        const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
+                        setTriggerPercent2(percent);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="0.00"
+                    required
+                  />
+                  {currentLTP && (
+                    <div className="flex items-center gap-1 mt-1">
                       <input
                         type="number"
                         step="0.01"
@@ -1063,87 +1044,62 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                         onChange={(e) => {
                           setTriggerPercent2(e.target.value);
                           if (currentLTP && e.target.value) {
-                            const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
-                            setTriggerPrice2(calculatedPrice.toFixed(2));
+                            const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
+                            setTriggerPrice2(price);
                           }
                         }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                        placeholder="2.5"
-                        required
+                        className="w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="0"
                       />
-                      {triggerPercent2 && currentLTP && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          = ₹{(currentLTP * (1 + parseFloat(triggerPercent2) / 100)).toFixed(2)}
-                        </div>
-                      )}
+                      <span className="text-xs text-gray-500">% of LTP</span>
                     </div>
                   )}
                 </div>
 
+                {/* Arrow */}
+                <div className="flex items-center pt-7 text-gray-400 text-sm">
+                  →
+                </div>
+
                 {/* Quantity */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Qty. {selectedInstrument?.lot_size && (
-                      <span className="text-xs text-gray-500 font-normal">
-                        (Lot size: {selectedInstrument.lot_size})
-                      </span>
-                    )}
-                  </label>
+                  <label className="block text-sm text-gray-700 mb-1.5">Qty.</label>
                   <input
                     type="number"
                     value={quantity2}
                     onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     min={selectedInstrument?.lot_size || 1}
                     step={selectedInstrument?.lot_size || 1}
                     required
                   />
                 </div>
 
+                {/* Arrow */}
+                <div className="flex items-center pt-7 text-gray-400 text-sm">
+                  →
+                </div>
+
                 {/* Price */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-700">Price</label>
-                    <div className="flex gap-2">
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={!usePricePercent2}
-                          onChange={() => setUsePricePercent2(false)}
-                          className="w-4 h-4 text-blue-600"
-                        />
-                        <span className="ml-1 text-xs text-gray-700">Price</span>
-                      </label>
-                      <label className="flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={usePricePercent2}
-                          onChange={() => setUsePricePercent2(true)}
-                          className="w-4 h-4 text-blue-600"
-                        />
-                        <span className="ml-1 text-xs text-gray-700">%</span>
-                      </label>
-                    </div>
-                  </div>
-                  {!usePricePercent2 ? (
-                    <div>
-                      <input
-                        type="number"
-                        step="0.05"
-                        value={price2}
-                        onChange={(e) => setPrice2(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                        placeholder="0.00"
-                        required
-                      />
-                      {currentLTP && price2 && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          {calculatePercentFromLTP(price2)}% of LTP
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div>
+                  <label className="block text-sm text-gray-700 mb-1.5">Price</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={price2}
+                    onChange={(e) => {
+                      setPrice2(e.target.value);
+                      if (currentLTP && e.target.value) {
+                        const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
+                        setPricePercent2(percent);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="0.00"
+                    required
+                  />
+                  {currentLTP && (
+                    <div className="flex items-center gap-1 mt-1">
                       <input
                         type="number"
                         step="0.01"
@@ -1151,19 +1107,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                         onChange={(e) => {
                           setPricePercent2(e.target.value);
                           if (currentLTP && e.target.value) {
-                            const calculatedPrice = currentLTP * (1 + parseFloat(e.target.value) / 100);
-                            setPrice2(calculatedPrice.toFixed(2));
+                            const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
+                            setPrice2(price);
                           }
                         }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                        placeholder="2.5"
-                        required
+                        className="w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="0"
                       />
-                      {pricePercent2 && currentLTP && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          = ₹{(currentLTP * (1 + parseFloat(pricePercent2) / 100)).toFixed(2)}
-                        </div>
-                      )}
+                      <span className="text-xs text-gray-500">% of LTP</span>
                     </div>
                   )}
                 </div>
@@ -1172,22 +1123,22 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           )}
 
           {/* Footer */}
-          <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-between pt-3 border-t border-gray-200">
             <div className="text-xs text-gray-600">
               By {editingGTT ? 'modifying' : 'creating'}, I agree that trigger executions are not guaranteed.
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
+                className="px-5 py-2 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50 transition"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading || !selectedInstrument}
-                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-5 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Processing...' : editingGTT ? 'Modify' : 'Create'}
               </button>
