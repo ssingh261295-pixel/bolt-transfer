@@ -81,18 +81,28 @@ export function Dashboard() {
             ),
           ]);
 
-          if (!positionsResponse.ok || !gttResponse.ok) {
-            console.error(`Failed to fetch data for broker ${broker.id}:`, {
-              positions: positionsResponse.status,
-              gtt: gttResponse.status
-            });
-            return null;
-          }
-
           const [result, gttResult] = await Promise.all([
             positionsResponse.json(),
             gttResponse.json(),
           ]);
+
+          if (!positionsResponse.ok || !gttResponse.ok) {
+            console.error(`Failed to fetch data for broker ${broker.id}:`, {
+              positions: {
+                status: positionsResponse.status,
+                error: result?.error,
+                details: result?.details,
+                fullResponse: result
+              },
+              gtt: {
+                status: gttResponse.status,
+                error: gttResult?.error,
+                details: gttResult?.details,
+                fullResponse: gttResult
+              }
+            });
+            return null;
+          }
 
           if (result.success) {
             const equity = result.margins?.equity || {};
@@ -135,7 +145,8 @@ export function Dashboard() {
       setAccountsData(accountResults);
 
       if (accountResults.length < brokersToFetch.length) {
-        setError(`Failed to fetch data for some accounts`);
+        const failedCount = brokersToFetch.length - accountResults.length;
+        setError(`Failed to fetch data for ${failedCount} account${failedCount > 1 ? 's' : ''}. This may be due to network restrictions in preview mode.`);
       }
     } catch (err) {
       console.error('Error fetching accounts data:', err);
