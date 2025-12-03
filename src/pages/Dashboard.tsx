@@ -62,59 +62,38 @@ export function Dashboard() {
         return;
       }
 
-      const accessToken = freshSession.access_token;
       // Fetch all brokers' data in parallel instead of sequentially
       const accountPromises = brokersToFetch.map(async (broker) => {
         if (broker.broker_name !== 'zerodha') return null;
 
         try {
-          const [positionsResponse, gttResponse] = await Promise.all([
-            fetch(
-              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions?broker_id=${broker.id}`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${accessToken}`,
-                  'Content-Type': 'application/json',
-                  'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-                },
-              }
-            ),
-            fetch(
-              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${broker.id}`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${accessToken}`,
-                  'Content-Type': 'application/json',
-                  'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-                },
-              }
-            ),
+          const [positionsResult, gttResult] = await Promise.all([
+            supabase.functions.invoke('zerodha-positions', {
+              body: { broker_id: broker.id },
+            }),
+            supabase.functions.invoke('zerodha-gtt', {
+              body: { broker_id: broker.id },
+            }),
           ]);
 
-          const [result, gttResult] = await Promise.all([
-            positionsResponse.json(),
-            gttResponse.json(),
-          ]);
-
-          if (!positionsResponse.ok || !gttResponse.ok) {
+          if (positionsResult.error || gttResult.error) {
             console.error(`Failed to fetch data for broker ${broker.id}:`, {
               positions: {
-                status: positionsResponse.status,
-                error: result?.error,
-                details: result?.details,
-                fullResponse: result
+                error: positionsResult.error?.message,
+                fullResponse: positionsResult
               },
               gtt: {
-                status: gttResponse.status,
-                error: gttResult?.error,
-                details: gttResult?.details,
+                error: gttResult.error?.message,
                 fullResponse: gttResult
               }
             });
             return null;
           }
 
-          if (result.success) {
+          const result = positionsResult.data;
+          const gttData = gttResult.data;
+
+          if (result?.success) {
             const equity = result.margins?.equity || {};
             const positions = result.positions || [];
 
@@ -123,7 +102,7 @@ export function Dashboard() {
             }, 0);
 
             const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;
-            const gttOrders = gttResult.success ? (gttResult.data || []) : [];
+            const gttOrders = gttData?.success ? (gttData.data || []) : [];
             const activeGtt = gttOrders.filter((gtt: any) => gtt.status === 'active').length;
 
             return {

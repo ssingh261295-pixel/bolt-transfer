@@ -34,7 +34,15 @@ Deno.serve(async (req: Request) => {
     }
 
     const url = new URL(req.url);
-    const brokerId = url.searchParams.get('broker_id');
+
+    let requestBody: any = {};
+    try {
+      requestBody = await req.json();
+    } catch (e) {
+      // Body might be empty or invalid
+    }
+
+    const brokerId = url.searchParams.get('broker_id') || requestBody.broker_id;
 
     if (!brokerId) {
       throw new Error('Missing broker_id parameter');
@@ -63,7 +71,7 @@ Deno.serve(async (req: Request) => {
 
     const authToken = `token ${brokerConnection.api_key}:${brokerConnection.access_token}`;
 
-    if (req.method === 'GET') {
+    if ((req.method === 'GET') || (req.method === 'POST' && requestBody.broker_id && Object.keys(requestBody).length === 1)) {
       const kiteUrl = 'https://api.kite.trade/gtt/triggers';
 
       console.log('Fetching GTT orders from Zerodha...');
@@ -99,7 +107,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (req.method === 'POST') {
-      const body = await req.json();
+      const body = requestBody;
       const kiteUrl = 'https://api.kite.trade/gtt/triggers';
 
       console.log('Creating GTT order - raw body:', JSON.stringify(body, null, 2));
@@ -214,7 +222,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (req.method === 'PUT') {
-      const body = await req.json();
+      const body = requestBody;
       const gttId = url.searchParams.get('gtt_id');
 
       if (!gttId) {
