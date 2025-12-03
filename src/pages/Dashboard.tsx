@@ -53,6 +53,16 @@ export function Dashboard() {
     setError('');
 
     try {
+      // Refresh session to get a fresh access token
+      const { data: { session: freshSession }, error: refreshError } = await supabase.auth.getSession();
+
+      if (refreshError || !freshSession?.access_token) {
+        setError('Session expired. Please sign in again.');
+        setLoading(false);
+        return;
+      }
+
+      const accessToken = freshSession.access_token;
       // Fetch all brokers' data in parallel instead of sequentially
       const accountPromises = brokersToFetch.map(async (broker) => {
         if (broker.broker_name !== 'zerodha') return null;
@@ -63,7 +73,7 @@ export function Dashboard() {
               `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions?broker_id=${broker.id}`,
               {
                 headers: {
-                  'Authorization': `Bearer ${session?.access_token}`,
+                  'Authorization': `Bearer ${accessToken}`,
                   'Content-Type': 'application/json',
                   'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
                 },
@@ -73,7 +83,7 @@ export function Dashboard() {
               `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${broker.id}`,
               {
                 headers: {
-                  'Authorization': `Bearer ${session?.access_token}`,
+                  'Authorization': `Bearer ${accessToken}`,
                   'Content-Type': 'application/json',
                   'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
                 },
