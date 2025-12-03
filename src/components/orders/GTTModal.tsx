@@ -561,37 +561,39 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       gttData['condition[last_price]'] = lastPrice;
 
       const brokersToProcess = editingGTT ? [brokerConnectionId] : selectedBrokerIds;
-      const results = [];
 
-      for (const brokerId of brokersToProcess) {
-        try {
-          const method = editingGTT ? 'PUT' : 'POST';
-          const gttIdParam = editingGTT ? `&gtt_id=${editingGTT.id}` : '';
-          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerId}${gttIdParam}`;
+      // Process all brokers in parallel for better performance
+      const results = await Promise.all(
+        brokersToProcess.map(async (brokerId) => {
+          try {
+            const method = editingGTT ? 'PUT' : 'POST';
+            const gttIdParam = editingGTT ? `&gtt_id=${editingGTT.id}` : '';
+            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerId}${gttIdParam}`;
 
-          const response = await fetch(apiUrl, {
-            method: method,
-            headers: {
-              'Authorization': `Bearer ${session?.access_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(gttData),
-          });
+            const response = await fetch(apiUrl, {
+              method: method,
+              headers: {
+                'Authorization': `Bearer ${session?.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(gttData),
+            });
 
-          const result = await response.json();
-          console.log(`GTT creation result for broker ${brokerId}:`, result);
+            const result = await response.json();
+            console.log(`GTT creation result for broker ${brokerId}:`, result);
 
-          if (result.success) {
-            results.push({ brokerId, success: true });
-          } else {
-            console.error(`Failed for broker ${brokerId}:`, result.error);
-            results.push({ brokerId, success: false, error: result.error || 'Unknown error' });
+            if (result.success) {
+              return { brokerId, success: true };
+            } else {
+              console.error(`Failed for broker ${brokerId}:`, result.error);
+              return { brokerId, success: false, error: result.error || 'Unknown error' };
+            }
+          } catch (err: any) {
+            console.error(`Exception for broker ${brokerId}:`, err);
+            return { brokerId, success: false, error: err.message };
           }
-        } catch (err: any) {
-          console.error(`Exception for broker ${brokerId}:`, err);
-          results.push({ brokerId, success: false, error: err.message });
-        }
-      }
+        })
+      );
 
       console.log('All GTT creation results:', results);
 
