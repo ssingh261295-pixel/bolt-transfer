@@ -91,7 +91,6 @@ export function GTTOrders() {
               headers: {
                 'Authorization': `Bearer ${session?.access_token}`,
                 'Content-Type': 'application/json',
-                'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
               },
             });
             const result = await response.json();
@@ -125,7 +124,6 @@ export function GTTOrders() {
           headers: {
             'Authorization': `Bearer ${session?.access_token}`,
             'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
           },
         });
         const result = await response.json();

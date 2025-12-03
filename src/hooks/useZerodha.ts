@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
 
 interface PlaceOrderParams {
   broker_connection_id: string;
@@ -26,19 +25,13 @@ export function useZerodha() {
     setError(null);
 
     try {
-      const { data: { session: freshSession } } = await supabase.auth.getSession();
-      if (!freshSession?.access_token) {
-        throw new Error('Session expired. Please sign in again.');
-      }
-
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/place`;
 
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${freshSession.access_token}`,
+          'Authorization': `Bearer ${session?.access_token}`,
           'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
         body: JSON.stringify(params),
       });
@@ -64,18 +57,12 @@ export function useZerodha() {
     setError(null);
 
     try {
-      const { data: { session: freshSession } } = await supabase.auth.getSession();
-      if (!freshSession?.access_token) {
-        throw new Error('Session expired. Please sign in again.');
-      }
-
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/sync?broker_id=${brokerId}`;
 
       const response = await fetch(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${freshSession.access_token}`,
+          'Authorization': `Bearer ${session?.access_token}`,
           'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
       });
 
@@ -100,18 +87,12 @@ export function useZerodha() {
     setError(null);
 
     try {
-      const { data: { session: freshSession } } = await supabase.auth.getSession();
-      if (!freshSession?.access_token) {
-        throw new Error('Session expired. Please sign in again.');
-      }
-
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions/sync?broker_id=${brokerId}`;
 
       const response = await fetch(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${freshSession.access_token}`,
+          'Authorization': `Bearer ${session?.access_token}`,
           'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
       });
 
@@ -136,18 +117,12 @@ export function useZerodha() {
     setError(null);
 
     try {
-      const { data: { session: freshSession } } = await supabase.auth.getSession();
-      if (!freshSession?.access_token) {
-        throw new Error('Session expired. Please sign in again.');
-      }
-
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions/holdings?broker_id=${brokerId}`;
 
       const response = await fetch(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${freshSession.access_token}`,
+          'Authorization': `Bearer ${session?.access_token}`,
           'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
       });
 

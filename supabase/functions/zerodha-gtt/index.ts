@@ -16,7 +16,8 @@ Deno.serve(async (req: Request) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -24,25 +25,14 @@ Deno.serve(async (req: Request) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      console.error('Auth error:', authError?.message || 'No user found');
       throw new Error('Unauthorized');
     }
 
     const url = new URL(req.url);
-
-    let requestBody: any = {};
-    try {
-      requestBody = await req.json();
-    } catch (e) {
-      // Body might be empty or invalid
-    }
-
-    const brokerId = url.searchParams.get('broker_id') || requestBody.broker_id;
+    const brokerId = url.searchParams.get('broker_id');
 
     if (!brokerId) {
       throw new Error('Missing broker_id parameter');
@@ -71,7 +61,7 @@ Deno.serve(async (req: Request) => {
 
     const authToken = `token ${brokerConnection.api_key}:${brokerConnection.access_token}`;
 
-    if ((req.method === 'GET') || (req.method === 'POST' && requestBody.broker_id && Object.keys(requestBody).length === 1)) {
+    if (req.method === 'GET') {
       const kiteUrl = 'https://api.kite.trade/gtt/triggers';
 
       console.log('Fetching GTT orders from Zerodha...');
@@ -107,7 +97,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (req.method === 'POST') {
-      const body = requestBody;
+      const body = await req.json();
       const kiteUrl = 'https://api.kite.trade/gtt/triggers';
 
       console.log('Creating GTT order - raw body:', JSON.stringify(body, null, 2));
@@ -222,7 +212,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (req.method === 'PUT') {
-      const body = requestBody;
+      const body = await req.json();
       const gttId = url.searchParams.get('gtt_id');
 
       if (!gttId) {

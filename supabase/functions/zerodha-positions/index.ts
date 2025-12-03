@@ -16,7 +16,8 @@ Deno.serve(async (req: Request) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -24,28 +25,16 @@ Deno.serve(async (req: Request) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      console.error('Auth error:', authError?.message || 'No user found');
       throw new Error('Unauthorized');
     }
 
     const url = new URL(req.url);
 
-    let requestBody: any = {};
-    if (req.method === 'POST') {
-      try {
-        requestBody = await req.json();
-      } catch (e) {
-        // Body might be empty or invalid
-      }
-    }
-
-    if ((req.method === 'GET' || req.method === 'POST') && url.pathname.endsWith('/sync')) {
-      const brokerId = url.searchParams.get('broker_id') || requestBody.broker_id;
+    if (req.method === 'GET' && url.pathname.endsWith('/sync')) {
+      const brokerId = url.searchParams.get('broker_id');
 
       if (!brokerId) {
         throw new Error('Missing broker_id');
@@ -83,6 +72,7 @@ Deno.serve(async (req: Request) => {
 
         const positions = result.data.net || [];
 
+        // Bulk insert all positions at once
         const positionRecords = positions
           .filter((position: any) => position.quantity !== 0)
           .map((position: any) => {
@@ -122,8 +112,8 @@ Deno.serve(async (req: Request) => {
       throw new Error('Failed to sync positions');
     }
 
-    if ((req.method === 'GET' || req.method === 'POST') && url.pathname.endsWith('/margins')) {
-      const brokerId = url.searchParams.get('broker_id') || requestBody.broker_id;
+    if (req.method === 'GET' && url.pathname.endsWith('/margins')) {
+      const brokerId = url.searchParams.get('broker_id');
 
       if (!brokerId) {
         throw new Error('Missing broker_id');
@@ -168,8 +158,8 @@ Deno.serve(async (req: Request) => {
       throw new Error('Failed to fetch margins');
     }
 
-    if ((req.method === 'GET' || req.method === 'POST') && url.pathname.endsWith('/holdings')) {
-      const brokerId = url.searchParams.get('broker_id') || requestBody.broker_id;
+    if (req.method === 'GET' && url.pathname.endsWith('/holdings')) {
+      const brokerId = url.searchParams.get('broker_id');
 
       if (!brokerId) {
         throw new Error('Missing broker_id');
@@ -214,7 +204,7 @@ Deno.serve(async (req: Request) => {
       throw new Error('Failed to fetch holdings');
     }
 
-    const brokerId = url.searchParams.get('broker_id') || requestBody.broker_id;
+    const brokerId = url.searchParams.get('broker_id');
 
     if (!brokerId) {
       throw new Error('Missing broker_id');

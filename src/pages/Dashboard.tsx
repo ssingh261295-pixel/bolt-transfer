@@ -53,47 +53,36 @@ export function Dashboard() {
     setError('');
 
     try {
-      // Refresh session to get a fresh access token
-      const { data: { session: freshSession }, error: refreshError } = await supabase.auth.getSession();
-
-      if (refreshError || !freshSession?.access_token) {
-        setError('Session expired. Please sign in again.');
-        setLoading(false);
-        return;
-      }
-
       // Fetch all brokers' data in parallel instead of sequentially
       const accountPromises = brokersToFetch.map(async (broker) => {
         if (broker.broker_name !== 'zerodha') return null;
 
         try {
-          const [positionsResult, gttResult] = await Promise.all([
-            supabase.functions.invoke('zerodha-positions', {
-              body: { broker_id: broker.id },
-            }),
-            supabase.functions.invoke('zerodha-gtt', {
-              body: { broker_id: broker.id },
-            }),
+          const [positionsResponse, gttResponse] = await Promise.all([
+            fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions?broker_id=${broker.id}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${session?.access_token}`,
+                },
+              }
+            ),
+            fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${broker.id}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${session?.access_token}`,
+                },
+              }
+            ),
           ]);
 
-          if (positionsResult.error || gttResult.error) {
-            console.error(`Failed to fetch data for broker ${broker.id}:`, {
-              positions: {
-                error: positionsResult.error?.message,
-                fullResponse: positionsResult
-              },
-              gtt: {
-                error: gttResult.error?.message,
-                fullResponse: gttResult
-              }
-            });
-            return null;
-          }
+          const [result, gttResult] = await Promise.all([
+            positionsResponse.json(),
+            gttResponse.json(),
+          ]);
 
-          const result = positionsResult.data;
-          const gttData = gttResult.data;
-
-          if (result?.success) {
+          if (result.success) {
             const equity = result.margins?.equity || {};
             const positions = result.positions || [];
 
@@ -102,7 +91,7 @@ export function Dashboard() {
             }, 0);
 
             const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;
-            const gttOrders = gttData?.success ? (gttData.data || []) : [];
+            const gttOrders = gttResult.success ? (gttResult.data || []) : [];
             const activeGtt = gttOrders.filter((gtt: any) => gtt.status === 'active').length;
 
             return {
@@ -134,8 +123,7 @@ export function Dashboard() {
       setAccountsData(accountResults);
 
       if (accountResults.length < brokersToFetch.length) {
-        const failedCount = brokersToFetch.length - accountResults.length;
-        setError(`Failed to fetch data for ${failedCount} account${failedCount > 1 ? 's' : ''}. This may be due to network restrictions in preview mode.`);
+        setError(`Failed to fetch data for some accounts`);
       }
     } catch (err) {
       console.error('Error fetching accounts data:', err);

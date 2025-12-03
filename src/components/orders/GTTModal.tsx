@@ -255,28 +255,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     }
   }, [gttType, transactionType, currentLTP]);
 
-  // Calculate percentages for editing GTT when LTP becomes available
-  useEffect(() => {
-    if (editingGTT && currentLTP) {
-      if (triggerPrice1) {
-        const triggerPct = ((parseFloat(triggerPrice1) - currentLTP) / currentLTP * 100).toFixed(2);
-        setTriggerPercent1(triggerPct);
-      }
-      if (price1) {
-        const pricePct = ((parseFloat(price1) - currentLTP) / currentLTP * 100).toFixed(2);
-        setPricePercent1(pricePct);
-      }
-      if (triggerPrice2) {
-        const triggerPct = ((parseFloat(triggerPrice2) - currentLTP) / currentLTP * 100).toFixed(2);
-        setTriggerPercent2(triggerPct);
-      }
-      if (price2) {
-        const pricePct = ((parseFloat(price2) - currentLTP) / currentLTP * 100).toFixed(2);
-        setPricePercent2(pricePct);
-      }
-    }
-  }, [editingGTT, currentLTP, triggerPrice1, price1, triggerPrice2, price2]);
-
   const prefillPricesBasedOnLTP = (ltp: number) => {
     if (gttType === 'single') {
       // Single GTT: BUY = +2%, SELL = -2%
@@ -284,14 +262,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         const triggerValue = (ltp * 1.02).toFixed(2);
         setTriggerPrice1(triggerValue);
         setPrice1(triggerValue);
-        setTriggerPercent1('2.00');
-        setPricePercent1('2.00');
+        setTriggerPercent1('2');
+        setPricePercent1('2');
       } else {
         const triggerValue = (ltp * 0.98).toFixed(2);
         setTriggerPrice1(triggerValue);
         setPrice1(triggerValue);
-        setTriggerPercent1('-2.00');
-        setPricePercent1('-2.00');
+        setTriggerPercent1('-2');
+        setPricePercent1('-2');
       }
     } else if (gttType === 'two-leg') {
       // Check if this is from a position (closing) or new GTT (opening)
@@ -305,24 +283,24 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           const target = (ltp * 1.02).toFixed(2);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
-          setTriggerPercent1('-2.00');
-          setPricePercent1('-2.00');
+          setTriggerPercent1('-2');
+          setPricePercent1('-2');
           setTriggerPrice2(target);
           setPrice2(target);
-          setTriggerPercent2('2.00');
-          setPricePercent2('2.00');
+          setTriggerPercent2('2');
+          setPricePercent2('2');
         } else {
           // Buy OCO (closing a short position): Stoploss at +2% (above), Target at -2% (below)
           const stoploss = (ltp * 1.02).toFixed(2);
           const target = (ltp * 0.98).toFixed(2);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
-          setTriggerPercent1('2.00');
-          setPricePercent1('2.00');
+          setTriggerPercent1('2');
+          setPricePercent1('2');
           setTriggerPrice2(target);
           setPrice2(target);
-          setTriggerPercent2('-2.00');
-          setPricePercent2('-2.00');
+          setTriggerPercent2('-2');
+          setPricePercent2('-2');
         }
       } else {
         // Opening new position logic - Zerodha's GTT entry order logic
@@ -333,12 +311,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           const target = (ltp * 0.98).toFixed(2);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
-          setTriggerPercent1('2.00');
-          setPricePercent1('2.00');
+          setTriggerPercent1('2');
+          setPricePercent1('2');
           setTriggerPrice2(target);
           setPrice2(target);
-          setTriggerPercent2('-2.00');
-          setPricePercent2('-2.00');
+          setTriggerPercent2('-2');
+          setPricePercent2('-2');
         } else {
           // Sell OCO (entering short): Stoploss at -2% (lower), Target at +2% (higher)
           // This is for entry GTTs where you want to sell if price goes down OR up
@@ -346,12 +324,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           const target = (ltp * 1.02).toFixed(2);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
-          setTriggerPercent1('-2.00');
-          setPricePercent1('-2.00');
+          setTriggerPercent1('-2');
+          setPricePercent1('-2');
           setTriggerPrice2(target);
           setPrice2(target);
-          setTriggerPercent2('2.00');
-          setPricePercent2('2.00');
+          setTriggerPercent2('2');
+          setPricePercent2('2');
         }
       }
     }
@@ -365,7 +343,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         headers: {
           'Authorization': `Bearer ${session?.access_token}`,
           'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
       });
 
@@ -415,7 +392,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         headers: {
           'Authorization': `Bearer ${session?.access_token}`,
           'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
       });
 
@@ -576,7 +552,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
             headers: {
               'Authorization': `Bearer ${session?.access_token}`,
               'Content-Type': 'application/json',
-              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
             },
             body: JSON.stringify(gttData),
           });
@@ -877,34 +852,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   type="number"
                   step="0.05"
                   value={triggerPrice1}
-                  onChange={(e) => {
-                    setTriggerPrice1(e.target.value);
-                    if (currentLTP && e.target.value) {
-                      const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
-                      setTriggerPercent1(percent);
-                    }
-                  }}
+                  onChange={(e) => setTriggerPrice1(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="0.00"
                   required
                 />
-                {currentLTP && (
-                  <div className="flex items-center gap-1 mt-1">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={triggerPercent1}
-                      onChange={(e) => {
-                        setTriggerPercent1(e.target.value);
-                        if (currentLTP && e.target.value) {
-                          const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
-                          setTriggerPrice1(price);
-                        }
-                      }}
-                      className="w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      placeholder="0"
-                    />
-                    <span className="text-xs text-gray-500">% of LTP</span>
+                {currentLTP && triggerPrice1 && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {calculatePercentFromLTP(triggerPrice1)} % of LTP
                   </div>
                 )}
               </div>
@@ -940,34 +895,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   type="number"
                   step="0.05"
                   value={price1}
-                  onChange={(e) => {
-                    setPrice1(e.target.value);
-                    if (currentLTP && e.target.value) {
-                      const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
-                      setPricePercent1(percent);
-                    }
-                  }}
+                  onChange={(e) => setPrice1(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="0.00"
                   required
                 />
-                {currentLTP && (
-                  <div className="flex items-center gap-1 mt-1">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={pricePercent1}
-                      onChange={(e) => {
-                        setPricePercent1(e.target.value);
-                        if (currentLTP && e.target.value) {
-                          const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
-                          setPrice1(price);
-                        }
-                      }}
-                      className="w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      placeholder="0"
-                    />
-                    <span className="text-xs text-gray-500">% of LTP</span>
+                {currentLTP && price1 && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {calculatePercentFromLTP(price1)} % of LTP
                   </div>
                 )}
               </div>
@@ -1025,34 +960,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     type="number"
                     step="0.05"
                     value={triggerPrice2}
-                    onChange={(e) => {
-                      setTriggerPrice2(e.target.value);
-                      if (currentLTP && e.target.value) {
-                        const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
-                        setTriggerPercent2(percent);
-                      }
-                    }}
+                    onChange={(e) => setTriggerPrice2(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     placeholder="0.00"
                     required
                   />
-                  {currentLTP && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={triggerPercent2}
-                        onChange={(e) => {
-                          setTriggerPercent2(e.target.value);
-                          if (currentLTP && e.target.value) {
-                            const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
-                            setTriggerPrice2(price);
-                          }
-                        }}
-                        className="w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                        placeholder="0"
-                      />
-                      <span className="text-xs text-gray-500">% of LTP</span>
+                  {currentLTP && triggerPrice2 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {calculatePercentFromLTP(triggerPrice2)} % of LTP
                     </div>
                   )}
                 </div>
@@ -1088,34 +1003,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     type="number"
                     step="0.05"
                     value={price2}
-                    onChange={(e) => {
-                      setPrice2(e.target.value);
-                      if (currentLTP && e.target.value) {
-                        const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
-                        setPricePercent2(percent);
-                      }
-                    }}
+                    onChange={(e) => setPrice2(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     placeholder="0.00"
                     required
                   />
-                  {currentLTP && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={pricePercent2}
-                        onChange={(e) => {
-                          setPricePercent2(e.target.value);
-                          if (currentLTP && e.target.value) {
-                            const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
-                            setPrice2(price);
-                          }
-                        }}
-                        className="w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                        placeholder="0"
-                      />
-                      <span className="text-xs text-gray-500">% of LTP</span>
+                  {currentLTP && price2 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {calculatePercentFromLTP(price2)} % of LTP
                     </div>
                   )}
                 </div>
