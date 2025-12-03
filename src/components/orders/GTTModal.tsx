@@ -149,94 +149,38 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
           if (transType === 'BUY') {
             // Stoploss = higher price = trigger1
-            const triggerVal1 = trigger1?.toString() || '';
-            const priceVal1 = editingGTT.orders?.[1]?.price?.toString() || '';
-            setTriggerPrice1(triggerVal1);
-            setPrice1(priceVal1);
+            setTriggerPrice1(trigger1?.toString() || '');
+            setPrice1(editingGTT.orders?.[1]?.price?.toString() || '');
             setQuantity1(editingGTT.orders?.[1]?.quantity || 200);
             setOrderType1(editingGTT.orders?.[1]?.order_type || 'LIMIT');
             setProduct1(editingGTT.orders?.[1]?.product || 'NRML');
 
-            // Calculate percentages after LTP is fetched
-            if (currentLTP && triggerVal1) {
-              const triggerPct = ((parseFloat(triggerVal1) - currentLTP) / currentLTP * 100).toFixed(2);
-              setTriggerPercent1(triggerPct);
-            }
-            if (currentLTP && priceVal1) {
-              const pricePct = ((parseFloat(priceVal1) - currentLTP) / currentLTP * 100).toFixed(2);
-              setPricePercent1(pricePct);
-            }
-
             // Target = lower price = trigger0
-            const triggerVal2 = trigger0?.toString() || '';
-            const priceVal2 = editingGTT.orders?.[0]?.price?.toString() || '';
-            setTriggerPrice2(triggerVal2);
-            setPrice2(priceVal2);
+            setTriggerPrice2(trigger0?.toString() || '');
+            setPrice2(editingGTT.orders?.[0]?.price?.toString() || '');
             setQuantity2(editingGTT.orders?.[0]?.quantity || 200);
             setOrderType2(editingGTT.orders?.[0]?.order_type || 'LIMIT');
             setProduct2(editingGTT.orders?.[0]?.product || 'NRML');
-
-            if (currentLTP && triggerVal2) {
-              const triggerPct = ((parseFloat(triggerVal2) - currentLTP) / currentLTP * 100).toFixed(2);
-              setTriggerPercent2(triggerPct);
-            }
-            if (currentLTP && priceVal2) {
-              const pricePct = ((parseFloat(priceVal2) - currentLTP) / currentLTP * 100).toFixed(2);
-              setPricePercent2(pricePct);
-            }
           } else {
             // SELL: Stoploss = lower, Target = higher
-            const triggerVal1 = trigger0?.toString() || '';
-            const priceVal1 = editingGTT.orders?.[0]?.price?.toString() || '';
-            setTriggerPrice1(triggerVal1);
-            setPrice1(priceVal1);
+            setTriggerPrice1(trigger0?.toString() || '');
+            setPrice1(editingGTT.orders?.[0]?.price?.toString() || '');
             setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
             setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
             setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
 
-            if (currentLTP && triggerVal1) {
-              const triggerPct = ((parseFloat(triggerVal1) - currentLTP) / currentLTP * 100).toFixed(2);
-              setTriggerPercent1(triggerPct);
-            }
-            if (currentLTP && priceVal1) {
-              const pricePct = ((parseFloat(priceVal1) - currentLTP) / currentLTP * 100).toFixed(2);
-              setPricePercent1(pricePct);
-            }
-
-            const triggerVal2 = trigger1?.toString() || '';
-            const priceVal2 = editingGTT.orders?.[1]?.price?.toString() || '';
-            setTriggerPrice2(triggerVal2);
-            setPrice2(priceVal2);
+            setTriggerPrice2(trigger1?.toString() || '');
+            setPrice2(editingGTT.orders?.[1]?.price?.toString() || '');
             setQuantity2(editingGTT.orders?.[1]?.quantity || 200);
             setOrderType2(editingGTT.orders?.[1]?.order_type || 'LIMIT');
             setProduct2(editingGTT.orders?.[1]?.product || 'NRML');
-
-            if (currentLTP && triggerVal2) {
-              const triggerPct = ((parseFloat(triggerVal2) - currentLTP) / currentLTP * 100).toFixed(2);
-              setTriggerPercent2(triggerPct);
-            }
-            if (currentLTP && priceVal2) {
-              const pricePct = ((parseFloat(priceVal2) - currentLTP) / currentLTP * 100).toFixed(2);
-              setPricePercent2(pricePct);
-            }
           }
         } else {
-          const triggerVal = editingGTT.condition?.trigger_values?.[0]?.toString() || '';
-          const priceVal = editingGTT.orders?.[0]?.price?.toString() || '';
-          setTriggerPrice1(triggerVal);
+          setTriggerPrice1(editingGTT.condition?.trigger_values?.[0]?.toString() || '');
           setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
           setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
-          setPrice1(priceVal);
+          setPrice1(editingGTT.orders?.[0]?.price?.toString() || '');
           setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
-
-          if (currentLTP && triggerVal) {
-            const triggerPct = ((parseFloat(triggerVal) - currentLTP) / currentLTP * 100).toFixed(2);
-            setTriggerPercent1(triggerPct);
-          }
-          if (currentLTP && priceVal) {
-            const pricePct = ((parseFloat(priceVal) - currentLTP) / currentLTP * 100).toFixed(2);
-            setPricePercent1(pricePct);
-          }
         }
       } else if (isOpen) {
         setSymbol(initialSymbol || '');
@@ -310,6 +254,28 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       prefillPricesBasedOnLTP(currentLTP);
     }
   }, [gttType, transactionType, currentLTP]);
+
+  // Calculate percentages for editing GTT when LTP becomes available
+  useEffect(() => {
+    if (editingGTT && currentLTP) {
+      if (triggerPrice1) {
+        const triggerPct = ((parseFloat(triggerPrice1) - currentLTP) / currentLTP * 100).toFixed(2);
+        setTriggerPercent1(triggerPct);
+      }
+      if (price1) {
+        const pricePct = ((parseFloat(price1) - currentLTP) / currentLTP * 100).toFixed(2);
+        setPricePercent1(pricePct);
+      }
+      if (triggerPrice2) {
+        const triggerPct = ((parseFloat(triggerPrice2) - currentLTP) / currentLTP * 100).toFixed(2);
+        setTriggerPercent2(triggerPct);
+      }
+      if (price2) {
+        const pricePct = ((parseFloat(price2) - currentLTP) / currentLTP * 100).toFixed(2);
+        setPricePercent2(pricePct);
+      }
+    }
+  }, [editingGTT, currentLTP, triggerPrice1, price1, triggerPrice2, price2]);
 
   const prefillPricesBasedOnLTP = (ltp: number) => {
     if (gttType === 'single') {
