@@ -190,7 +190,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick }: WatchlistS
               return (
                 <div
                   key={item.id}
-                  className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer relative group transition-colors border-b border-gray-100"
+                  className="px-3 py-2 hover:bg-blue-50 cursor-pointer relative group transition-colors border-b border-gray-100"
                   onMouseEnter={() => setHoveredItem(item.id)}
                   onMouseLeave={() => setHoveredItem(null)}
                 >
@@ -229,30 +229,30 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick }: WatchlistS
                     </div>
                   ) : (
                     // Normal state: Show price info (Zerodha style)
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-gray-900 truncate">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex-1 min-w-0 pr-1">
+                        <div className="font-medium text-[13px] text-gray-900 truncate leading-tight">
                           {item.tradingsymbol}
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <div className={`flex items-center gap-0.5 text-xs font-medium ${getPriceColor(change)}`}>
-                          {change !== 0 && (
-                            <>
-                              {change > 0 ? (
-                                <TrendingUp className="w-3 h-3" />
-                              ) : (
-                                <TrendingDown className="w-3 h-3" />
-                              )}
-                              <span>
-                                {change > 0 ? '+' : ''}
-                                {changePercent.toFixed(2)}%
-                              </span>
-                            </>
-                          )}
-                        </div>
-                        <div className={`font-semibold text-sm ${getPriceColor(change)} text-right min-w-[60px]`}>
-                          {lastPrice.toFixed(2)}
+                      <div className="flex items-center gap-2.5 flex-shrink-0">
+                        {change !== 0 ? (
+                          <div className={`flex items-center gap-0.5 text-[11px] font-semibold ${getPriceColor(change)} min-w-[50px]`}>
+                            {change > 0 ? (
+                              <TrendingUp className="w-3 h-3 flex-shrink-0" />
+                            ) : (
+                              <TrendingDown className="w-3 h-3 flex-shrink-0" />
+                            )}
+                            <span className="whitespace-nowrap">
+                              {change > 0 ? '+' : ''}
+                              {changePercent.toFixed(2)}%
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="w-[50px]" />
+                        )}
+                        <div className={`font-bold text-[13px] ${getPriceColor(change)} text-right min-w-[55px]`}>
+                          {lastPrice > 0 ? lastPrice.toFixed(2) : '0.00'}
                         </div>
                       </div>
                     </div>
