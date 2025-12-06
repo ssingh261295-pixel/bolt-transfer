@@ -480,6 +480,25 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         throw new Error('Please enter both trigger prices for OCO');
       }
 
+      // Validate and round all prices to proper tick sizes before submission
+      const roundedTriggerPrice1 = validatePriceInput(triggerPrice1);
+      setTriggerPrice1(roundedTriggerPrice1);
+
+      if (price1) {
+        const roundedPrice1 = validatePriceInput(price1);
+        setPrice1(roundedPrice1);
+      }
+
+      if (gttType === 'two-leg') {
+        const roundedTriggerPrice2 = validatePriceInput(triggerPrice2);
+        setTriggerPrice2(roundedTriggerPrice2);
+
+        if (price2) {
+          const roundedPrice2 = validatePriceInput(price2);
+          setPrice2(roundedPrice2);
+        }
+      }
+
       const ltp = await fetchLTP(selectedInstrument.instrument_token);
 
       const gttData: any = {
@@ -496,12 +515,16 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       };
 
       if (gttType === 'two-leg') {
-        const trigger1 = parseFloat(triggerPrice1);
-        const trigger2 = parseFloat(triggerPrice2);
+        // Round all prices to proper tick size before submission
+        const trigger1 = parseFloat(roundToTickSize(parseFloat(triggerPrice1)));
+        const trigger2 = parseFloat(roundToTickSize(parseFloat(triggerPrice2)));
 
         if (!price1 || !price2) {
           throw new Error('Please enter limit prices for both orders');
         }
+
+        const limitPrice1 = parseFloat(roundToTickSize(parseFloat(price1)));
+        const limitPrice2 = parseFloat(roundToTickSize(parseFloat(price2)));
 
         // Zerodha requires trigger_values in ascending order (lower price first)
         // For BUY: trigger1 (stoploss) is higher, trigger2 (target) is lower
@@ -513,7 +536,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           gttData['condition[trigger_values][1]'] = trigger1;  // higher (stoploss)
 
           // Order 0 corresponds to lower trigger (target - leg 2)
-          gttData['orders[0][price]'] = parseFloat(price2);
+          gttData['orders[0][price]'] = limitPrice2;
 
           // Order 1 corresponds to higher trigger (stoploss - leg 1)
           gttData['orders[1][exchange]'] = exchange;
@@ -522,14 +545,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           gttData['orders[1][quantity]'] = quantity1;
           gttData['orders[1][order_type]'] = orderType1;
           gttData['orders[1][product]'] = product1;
-          gttData['orders[1][price]'] = parseFloat(price1);
+          gttData['orders[1][price]'] = limitPrice1;
         } else {
           // SELL: trigger1 < trigger2, so sortedTriggers = [trigger1, trigger2]
           gttData['condition[trigger_values][0]'] = trigger1;  // lower (stoploss)
           gttData['condition[trigger_values][1]'] = trigger2;  // higher (target)
 
           // Order 0 corresponds to lower trigger (stoploss - leg 1)
-          gttData['orders[0][price]'] = parseFloat(price1);
+          gttData['orders[0][price]'] = limitPrice1;
 
           // Order 1 corresponds to higher trigger (target - leg 2)
           gttData['orders[1][exchange]'] = exchange;
@@ -538,17 +561,19 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           gttData['orders[1][quantity]'] = quantity2;
           gttData['orders[1][order_type]'] = orderType2;
           gttData['orders[1][product]'] = product2;
-          gttData['orders[1][price]'] = parseFloat(price2);
+          gttData['orders[1][price]'] = limitPrice2;
         }
       } else {
-        gttData['condition[trigger_values][0]'] = parseFloat(triggerPrice1);
+        const trigger1 = parseFloat(roundToTickSize(parseFloat(triggerPrice1)));
+        gttData['condition[trigger_values][0]'] = trigger1;
       }
 
       if (gttType !== 'two-leg') {
         if (!price1) {
           throw new Error('Please enter limit price for order 1');
         }
-        gttData['orders[0][price]'] = parseFloat(price1);
+        const limitPrice1 = parseFloat(roundToTickSize(parseFloat(price1)));
+        gttData['orders[0][price]'] = limitPrice1;
       }
 
       const firstTriggerValue = gttData['condition[trigger_values][0]'];
