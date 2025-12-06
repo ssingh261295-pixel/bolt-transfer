@@ -190,68 +190,64 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick }: WatchlistS
               return (
                 <div
                   key={item.id}
-                  className={`px-4 py-3 hover:bg-gray-50 cursor-pointer relative group ${
-                    getPriceBgColor(change)
-                  }`}
+                  className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer relative group transition-colors border-b border-gray-100"
                   onMouseEnter={() => setHoveredItem(item.id)}
                   onMouseLeave={() => setHoveredItem(null)}
                 >
-                  {/* Symbol and Exchange */}
-                  <div className="flex items-start justify-between mb-1">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm text-gray-900 truncate">
+                  {hoveredItem === item.id ? (
+                    // Hover state: Show action buttons in single row (Zerodha style)
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium text-sm text-gray-900 truncate flex-1 min-w-0">
                         {item.tradingsymbol}
                       </div>
-                      <div className="text-xs text-gray-500">{item.exchange}</div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => onBuyClick(item.tradingsymbol, item.exchange, item.instrument_token)}
+                          className="px-2.5 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors"
+                        >
+                          B
+                        </button>
+                        <button
+                          onClick={() => onSellClick(item.tradingsymbol, item.exchange, item.instrument_token)}
+                          className="px-2.5 py-1 bg-red-600 text-white text-xs font-semibold rounded hover:bg-red-700 transition-colors"
+                        >
+                          S
+                        </button>
+                        <button
+                          className="px-2 py-1 hover:bg-gray-200 rounded transition-colors"
+                          title="GTT"
+                        >
+                          <span className="text-xs font-medium text-gray-700">GTT</span>
+                        </button>
+                        <button
+                          onClick={() => removeFromWatchlist(item.id)}
+                          className="p-1 hover:bg-gray-200 rounded transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5 text-gray-600" />
+                        </button>
+                      </div>
                     </div>
-
-                    {hoveredItem === item.id && (
-                      <button
-                        onClick={() => removeFromWatchlist(item.id)}
-                        className="p-1 hover:bg-gray-200 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="w-3 h-3 text-gray-600" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Price and Change */}
-                  <div className="flex items-center justify-between">
-                    <div className={`font-semibold text-sm ${getPriceColor(change)}`}>
-                      ₹{lastPrice.toFixed(2)}
-                    </div>
-                    <div className={`flex items-center gap-1 text-xs ${getPriceColor(change)}`}>
-                      {change !== 0 && (
-                        <>
-                          {change > 0 ? (
-                            <TrendingUp className="w-3 h-3" />
-                          ) : (
-                            <TrendingDown className="w-3 h-3" />
+                  ) : (
+                    // Normal state: Show price info (Zerodha style)
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm text-gray-900 truncate">
+                          {item.tradingsymbol}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className={`text-xs font-medium ${getPriceColor(change)}`}>
+                          {change !== 0 && (
+                            <span>
+                              {change > 0 ? '+' : ''}
+                              {changePercent.toFixed(2)}%
+                            </span>
                           )}
-                          <span>
-                            {change > 0 ? '+' : ''}
-                            {changePercent.toFixed(2)}%
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Quick Action Buttons */}
-                  {hoveredItem === item.id && (
-                    <div className="flex gap-2 mt-2">
-                      <button
-                        onClick={() => onBuyClick(item.tradingsymbol, item.exchange, item.instrument_token)}
-                        className="flex-1 px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
-                      >
-                        B
-                      </button>
-                      <button
-                        onClick={() => onSellClick(item.tradingsymbol, item.exchange, item.instrument_token)}
-                        className="flex-1 px-3 py-1 bg-red-600 text-white text-xs font-medium rounded hover:bg-red-700 transition-colors"
-                      >
-                        S
-                      </button>
+                        </div>
+                        <div className={`font-semibold text-sm ${getPriceColor(change)} text-right min-w-[60px]`}>
+                          {lastPrice.toFixed(2)}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
