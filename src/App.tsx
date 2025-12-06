@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AuthPage } from './pages/AuthPage';
 import { Dashboard } from './pages/Dashboard';
@@ -11,20 +12,15 @@ import { Watchlist } from './pages/Watchlist';
 import { Settings } from './pages/Settings';
 import { ZerodhaCallback } from './pages/ZerodhaCallback';
 import { AdminPanel } from './pages/AdminPanel';
-import { Sidebar } from './components/layout/Sidebar';
-import { Header } from './components/layout/Header';
+import TopNavigation from './components/layout/TopNavigation';
+import WatchlistSidebar from './components/layout/WatchlistSidebar';
+import { PlaceOrderModal } from './components/orders/PlaceOrderModal';
 
-function AppContent() {
+function ProtectedLayout() {
   const { user, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [isCallbackPage, setIsCallbackPage] = useState(false);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('request_token') && params.get('status')) {
-      setIsCallbackPage(true);
-    }
-  }, []);
+  const location = useLocation();
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [orderDefaults, setOrderDefaults] = useState<any>({});
 
   if (loading) {
     return (
@@ -35,55 +31,89 @@ function AppContent() {
   }
 
   if (!user) {
-    return isCallbackPage ? <ZerodhaCallback /> : <AuthPage />;
+    return <Navigate to="/auth" replace />;
   }
+
+  const handleBuyClick = (symbol: string, exchange: string, token: number) => {
+    setOrderDefaults({
+      symbol,
+      exchange,
+      instrumentToken: token,
+      transactionType: 'BUY'
+    });
+    setShowOrderModal(true);
+  };
+
+  const handleSellClick = (symbol: string, exchange: string, token: number) => {
+    setOrderDefaults({
+      symbol,
+      exchange,
+      instrumentToken: token,
+      transactionType: 'SELL'
+    });
+    setShowOrderModal(true);
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-gray-50">
+      <TopNavigation />
+      <div className="flex flex-1 overflow-hidden">
+        <WatchlistSidebar onBuyClick={handleBuyClick} onSellClick={handleSellClick} />
+        <main className="flex-1 overflow-y-auto p-6">
+          <Routes>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/brokers" element={<Brokers />} />
+            <Route path="/strategies" element={<Strategies />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/gtt" element={<GTTOrders />} />
+            <Route path="/positions" element={<Positions />} />
+            <Route path="/watchlist" element={<Watchlist />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/admin" element={<AdminPanel />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </main>
+      </div>
+
+      {showOrderModal && (
+        <PlaceOrderModal
+          isOpen={showOrderModal}
+          onClose={() => {
+            setShowOrderModal(false);
+            setOrderDefaults({});
+          }}
+          initialSymbol={orderDefaults.symbol}
+          initialExchange={orderDefaults.exchange}
+          initialTransactionType={orderDefaults.transactionType}
+        />
+      )}
+    </div>
+  );
+}
+
+function AppContent() {
+  const location = useLocation();
+  const isCallbackPage = location.pathname === '/zerodha-callback';
 
   if (isCallbackPage) {
     return <ZerodhaCallback />;
   }
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard':
-        return <Dashboard />;
-      case 'brokers':
-        return <Brokers />;
-      case 'strategies':
-        return <Strategies />;
-      case 'orders':
-        return <Orders />;
-      case 'gtt':
-        return <GTTOrders />;
-      case 'positions':
-        return <Positions />;
-      case 'watchlist':
-        return <Watchlist />;
-      case 'admin':
-        return <AdminPanel />;
-      case 'settings':
-        return <Settings />;
-      default:
-        return <Dashboard />;
-    }
-  };
-
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-8">
-          {renderContent()}
-        </main>
-      </div>
-    </div>
+    <Routes>
+      <Route path="/auth" element={<AuthPage />} />
+      <Route path="/zerodha-callback" element={<ZerodhaCallback />} />
+      <Route path="/*" element={<ProtectedLayout />} />
+    </Routes>
   );
 }
 
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <BrowserRouter>
+        <AppContent />
+      </BrowserRouter>
     </AuthProvider>
   );
 }
