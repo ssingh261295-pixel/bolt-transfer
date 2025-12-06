@@ -236,12 +236,19 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick }: WatchlistS
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className={`text-xs font-medium ${getPriceColor(change)}`}>
+                        <div className={`flex items-center gap-0.5 text-xs font-medium ${getPriceColor(change)}`}>
                           {change !== 0 && (
-                            <span>
-                              {change > 0 ? '+' : ''}
-                              {changePercent.toFixed(2)}%
-                            </span>
+                            <>
+                              {change > 0 ? (
+                                <TrendingUp className="w-3 h-3" />
+                              ) : (
+                                <TrendingDown className="w-3 h-3" />
+                              )}
+                              <span>
+                                {change > 0 ? '+' : ''}
+                                {changePercent.toFixed(2)}%
+                              </span>
+                            </>
                           )}
                         </div>
                         <div className={`font-semibold text-sm ${getPriceColor(change)} text-right min-w-[60px]`}>
