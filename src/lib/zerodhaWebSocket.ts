@@ -219,45 +219,71 @@ export class ZerodhaWebSocket {
 
   private parseBinary(buffer: ArrayBuffer): Tick[] {
     const ticks: Tick[] = [];
-    const view = new DataView(buffer);
-    let offset = 0;
 
-    const packetCount = view.getUint16(offset, false);
-    offset += 2;
+    try {
+      const view = new DataView(buffer);
+      let offset = 0;
 
-    for (let i = 0; i < packetCount; i++) {
-      const packetLength = view.getUint16(offset, false);
-      offset += 2;
-
-      if (packetLength === 0) continue;
-
-      const tick = this.parsePacket(buffer.slice(offset, offset + packetLength));
-      if (tick) {
-        ticks.push(tick);
+      if (buffer.byteLength < 2) {
+        console.warn('[Zerodha WS] Invalid buffer size:', buffer.byteLength);
+        return ticks;
       }
 
-      offset += packetLength;
+      const packetCount = view.getUint16(offset, false);
+      offset += 2;
+
+      for (let i = 0; i < packetCount; i++) {
+        if (offset + 2 > buffer.byteLength) {
+          console.warn('[Zerodha WS] Buffer overflow reading packet length');
+          break;
+        }
+
+        const packetLength = view.getUint16(offset, false);
+        offset += 2;
+
+        if (packetLength === 0) continue;
+
+        if (offset + packetLength > buffer.byteLength) {
+          console.warn('[Zerodha WS] Buffer overflow reading packet data');
+          break;
+        }
+
+        const tick = this.parsePacket(buffer.slice(offset, offset + packetLength));
+        if (tick) {
+          ticks.push(tick);
+        }
+
+        offset += packetLength;
+      }
+    } catch (error) {
+      console.error('[Zerodha WS] Error parsing binary data:', error);
     }
 
     return ticks;
   }
 
   private parsePacket(buffer: ArrayBuffer): Tick | null {
-    const view = new DataView(buffer);
-    let offset = 0;
+    try {
+      const view = new DataView(buffer);
+      let offset = 0;
 
-    const instrumentToken = view.getUint32(offset, false);
-    offset += 4;
+      if (buffer.byteLength < 4) {
+        console.warn('[Zerodha WS] Packet too small:', buffer.byteLength);
+        return null;
+      }
 
-    const segment = instrumentToken & 0xff;
-    const tick: Tick = {
-      instrument_token: instrumentToken,
-      mode: '',
-      tradable: segment !== 9,
-      last_price: 0,
-    };
+      const instrumentToken = view.getUint32(offset, false);
+      offset += 4;
 
-    const packetLength = buffer.byteLength;
+      const segment = instrumentToken & 0xff;
+      const tick: Tick = {
+        instrument_token: instrumentToken,
+        mode: '',
+        tradable: segment !== 9,
+        last_price: 0,
+      };
+
+      const packetLength = buffer.byteLength;
 
     if (packetLength === 8) {
       tick.mode = 'ltp';
@@ -386,5 +412,9 @@ export class ZerodhaWebSocket {
     }
 
     return null;
+    } catch (error) {
+      console.error('[Zerodha WS] Error parsing packet:', error);
+      return null;
+    }
   }
 }

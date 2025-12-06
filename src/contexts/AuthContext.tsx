@@ -63,52 +63,100 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      (async () => {
+    let mounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error('Error getting session:', error);
+          await supabase.auth.signOut();
+          if (mounted) {
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+            setLoading(false);
+          }
+          return;
+        }
+
         console.log('=== INITIAL SESSION CHECK ===', session ? 'Has session' : 'No session');
         console.log('User ID:', session?.user?.id);
         console.log('User Email:', session?.user?.email);
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          const profileData = await fetchProfile(session.user.id);
-          console.log('Profile set to:', profileData);
-          setProfile(profileData);
-        }
-        setLoading(false);
-      })();
-    });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      (async () => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          let profileData = await fetchProfile(session.user.id);
+        if (mounted) {
+          setSession(session);
+          setUser(session?.user ?? null);
 
-          if (!profileData && event === 'SIGNED_IN') {
-            const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || null;
-            const { error: insertError } = await supabase
-              .from('profiles')
-              .insert({
-                id: session.user.id,
-                full_name: userName,
-                plan_type: 'pro',
-              });
-
-            if (!insertError) {
-              profileData = await fetchProfile(session.user.id);
+          if (session?.user) {
+            const profileData = await fetchProfile(session.user.id);
+            console.log('Profile set to:', profileData);
+            if (mounted) {
+              setProfile(profileData);
             }
           }
-
-          setProfile(profileData);
-        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Exception during auth initialization:', error);
+        if (mounted) {
+          setSession(null);
+          setUser(null);
           setProfile(null);
+          setLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      (async () => {
+        try {
+          console.log('=== AUTH STATE CHANGE ===', _event, session?.user?.id);
+
+          if (!mounted) return;
+
+          setSession(session);
+          setUser(session?.user ?? null);
+
+          if (session?.user) {
+            let profileData = await fetchProfile(session.user.id);
+
+            if (!profileData && _event === 'SIGNED_IN') {
+              const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || null;
+              const { error: insertError } = await supabase
+                .from('profiles')
+                .insert({
+                  id: session.user.id,
+                  full_name: userName,
+                  plan_type: 'pro',
+                });
+
+              if (!insertError) {
+                profileData = await fetchProfile(session.user.id);
+              }
+            }
+
+            if (mounted) {
+              setProfile(profileData);
+            }
+          } else {
+            if (mounted) {
+              setProfile(null);
+            }
+          }
+        } catch (error) {
+          console.error('Error in auth state change:', error);
         }
       })();
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -176,7 +224,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    } finally {
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+    }
   };
 
   return (
