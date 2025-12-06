@@ -65,6 +65,24 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
   const [fetchingLTP, setFetchingLTP] = useState(false);
   const [initialLTPCaptured, setInitialLTPCaptured] = useState(false);
 
+  // Round price to proper tick size (0.05)
+  const roundToTickSize = (price: number): string => {
+    const tickSize = 0.05;
+    const rounded = Math.round(price / tickSize) * tickSize;
+    return rounded.toFixed(2);
+  };
+
+  // Validate price input to only allow valid tick sizes
+  const validatePriceInput = (value: string): string => {
+    if (!value || value === '') return value;
+
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return value;
+
+    // Round to nearest 0.05
+    return roundToTickSize(numValue);
+  };
+
   useEffect(() => {
     if (isOpen && exchange) {
       loadInstruments();
@@ -97,9 +115,9 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           };
           setSelectedInstrument(instrument);
 
-          // Fetch LTP for the instrument
+          // Fetch LTP for the instrument (non-blocking)
           if (instrument.instrument_token) {
-            await fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange);
+            fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange).catch(console.error);
           }
         }
 
@@ -113,37 +131,37 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
           if (transType === 'BUY') {
             // Stoploss = higher price = trigger1
-            setTriggerPrice1(trigger1?.toString() || '');
-            setPrice1(editingGTT.orders?.[1]?.price?.toString() || '');
+            setTriggerPrice1(trigger1 ? roundToTickSize(trigger1) : '');
+            setPrice1(editingGTT.orders?.[1]?.price ? roundToTickSize(editingGTT.orders[1].price) : '');
             setQuantity1(editingGTT.orders?.[1]?.quantity || 200);
             setOrderType1(editingGTT.orders?.[1]?.order_type || 'LIMIT');
             setProduct1(editingGTT.orders?.[1]?.product || 'NRML');
 
             // Target = lower price = trigger0
-            setTriggerPrice2(trigger0?.toString() || '');
-            setPrice2(editingGTT.orders?.[0]?.price?.toString() || '');
+            setTriggerPrice2(trigger0 ? roundToTickSize(trigger0) : '');
+            setPrice2(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
             setQuantity2(editingGTT.orders?.[0]?.quantity || 200);
             setOrderType2(editingGTT.orders?.[0]?.order_type || 'LIMIT');
             setProduct2(editingGTT.orders?.[0]?.product || 'NRML');
           } else {
             // SELL: Stoploss = lower, Target = higher
-            setTriggerPrice1(trigger0?.toString() || '');
-            setPrice1(editingGTT.orders?.[0]?.price?.toString() || '');
+            setTriggerPrice1(trigger0 ? roundToTickSize(trigger0) : '');
+            setPrice1(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
             setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
             setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
             setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
 
-            setTriggerPrice2(trigger1?.toString() || '');
-            setPrice2(editingGTT.orders?.[1]?.price?.toString() || '');
+            setTriggerPrice2(trigger1 ? roundToTickSize(trigger1) : '');
+            setPrice2(editingGTT.orders?.[1]?.price ? roundToTickSize(editingGTT.orders[1].price) : '');
             setQuantity2(editingGTT.orders?.[1]?.quantity || 200);
             setOrderType2(editingGTT.orders?.[1]?.order_type || 'LIMIT');
             setProduct2(editingGTT.orders?.[1]?.product || 'NRML');
           }
         } else {
-          setTriggerPrice1(editingGTT.condition?.trigger_values?.[0]?.toString() || '');
+          setTriggerPrice1(editingGTT.condition?.trigger_values?.[0] ? roundToTickSize(editingGTT.condition.trigger_values[0]) : '');
           setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
           setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
-          setPrice1(editingGTT.orders?.[0]?.price?.toString() || '');
+          setPrice1(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
           setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
         }
       } else if (isOpen) {
@@ -188,29 +206,28 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
   // Fetch LTP when symbol is pre-filled from position
   useEffect(() => {
-    const fetchInitialLTP = async () => {
-      if (isOpen && initialSymbol && !editingGTT && instruments.length > 0) {
-        const instrument = instruments.find(
-          (i) => i.tradingsymbol === initialSymbol
-        );
-        if (instrument) {
-          setSelectedInstrument(instrument);
+    if (isOpen && initialSymbol && !editingGTT && instruments.length > 0) {
+      const instrument = instruments.find(
+        (i) => i.tradingsymbol === initialSymbol
+      );
+      if (instrument) {
+        setSelectedInstrument(instrument);
 
-          const lotSize = parseInt(instrument.lot_size) || 1;
-          const qty = positionData?.quantity || lotSize;
-          setQuantity1(qty);
-          setQuantity2(qty);
+        const lotSize = parseInt(instrument.lot_size) || 1;
+        const qty = positionData?.quantity || lotSize;
+        setQuantity1(qty);
+        setQuantity2(qty);
 
-          if (instrument.instrument_token) {
-            const ltp = await fetchLTP(instrument.instrument_token, instrument.tradingsymbol, initialExchange || exchange);
+        if (instrument.instrument_token) {
+          // Fetch LTP and prefill immediately without blocking
+          fetchLTP(instrument.instrument_token, instrument.tradingsymbol, initialExchange || exchange).then(ltp => {
             if (ltp) {
               prefillPricesBasedOnLTP(ltp);
             }
-          }
+          }).catch(console.error);
         }
       }
-    };
-    fetchInitialLTP();
+    }
   }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT, positionData]);
 
   // Re-calculate prefilled values when GTT type or transaction type changes (only if no prices are set yet)
@@ -243,13 +260,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       setInitialLTPCaptured(true);
     }
   }, [editingGTT, currentLTP, initialLTPCaptured]);
-
-  // Round price to proper tick size (0.05)
-  const roundToTickSize = (price: number): string => {
-    const tickSize = 0.05;
-    const rounded = Math.round(price / tickSize) * tickSize;
-    return rounded.toFixed(2);
-  };
 
   const prefillPricesBasedOnLTP = (ltp: number) => {
     if (gttType === 'single') {
@@ -418,7 +428,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     }
   };
 
-  const selectInstrument = async (instrument: any) => {
+  const selectInstrument = (instrument: any) => {
     setSymbol(instrument.tradingsymbol);
     setSelectedInstrument(instrument);
     const lotSize = parseInt(instrument.lot_size) || 1;
@@ -428,10 +438,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     setFilteredInstruments([]);
 
     if (instrument.instrument_token) {
-      const ltp = await fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange);
-      if (ltp) {
-        prefillPricesBasedOnLTP(ltp);
-      }
+      // Fetch LTP immediately without blocking UI
+      fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange).then(ltp => {
+        if (ltp) {
+          prefillPricesBasedOnLTP(ltp);
+        }
+      }).catch(console.error);
     }
   };
 
@@ -883,13 +895,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   }}
                   onBlur={(e) => {
                     const value = e.target.value;
-                    if (value) {
-                      const rounded = roundToTickSize(parseFloat(value));
+                    if (value && value !== '') {
+                      const rounded = validatePriceInput(value);
                       setTriggerPrice1(rounded);
                       if (currentLTP) {
                         const percent = ((parseFloat(rounded) - currentLTP) / currentLTP * 100).toFixed(2);
                         setTriggerPercent1(percent);
                       }
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
                     }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -958,13 +975,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   }}
                   onBlur={(e) => {
                     const value = e.target.value;
-                    if (value) {
-                      const rounded = roundToTickSize(parseFloat(value));
+                    if (value && value !== '') {
+                      const rounded = validatePriceInput(value);
                       setPrice1(rounded);
                       if (currentLTP) {
                         const percent = ((parseFloat(rounded) - currentLTP) / currentLTP * 100).toFixed(2);
                         setPricePercent1(percent);
                       }
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
                     }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -1055,13 +1077,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     }}
                     onBlur={(e) => {
                       const value = e.target.value;
-                      if (value) {
-                        const rounded = roundToTickSize(parseFloat(value));
+                      if (value && value !== '') {
+                        const rounded = validatePriceInput(value);
                         setTriggerPrice2(rounded);
                         if (currentLTP) {
                           const percent = ((parseFloat(rounded) - currentLTP) / currentLTP * 100).toFixed(2);
                           setTriggerPercent2(percent);
                         }
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.currentTarget.blur();
                       }
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -1130,13 +1157,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     }}
                     onBlur={(e) => {
                       const value = e.target.value;
-                      if (value) {
-                        const rounded = roundToTickSize(parseFloat(value));
+                      if (value && value !== '') {
+                        const rounded = validatePriceInput(value);
                         setPrice2(rounded);
                         if (currentLTP) {
                           const percent = ((parseFloat(rounded) - currentLTP) / currentLTP * 100).toFixed(2);
                           setPricePercent2(percent);
                         }
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.currentTarget.blur();
                       }
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
