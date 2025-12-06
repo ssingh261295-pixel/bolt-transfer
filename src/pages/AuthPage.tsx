@@ -7,14 +7,16 @@ import { useAuth } from '../contexts/AuthContext';
 
 export function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
-  const { user, loading } = useAuth();
+  const { user, loading, profile } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
+    console.log('AuthPage useEffect - loading:', loading, 'user:', user?.id, 'profile:', profile);
     if (!loading && user) {
+      console.log('Redirecting to dashboard from AuthPage...');
       navigate('/dashboard', { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, profile]);
 
   if (loading) {
     return (

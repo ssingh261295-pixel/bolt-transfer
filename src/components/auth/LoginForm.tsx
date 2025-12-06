@@ -20,12 +20,17 @@ export function LoginForm({ onToggleForm }: LoginFormProps) {
     setError('');
     setLoading(true);
 
+    console.log('LoginForm: Starting sign in...');
     const { error } = await signIn(email, password);
 
+    console.log('LoginForm: Sign in completed. Error:', error);
+
     if (error) {
+      console.log('LoginForm: Setting error:', error.message);
       setError(error.message || 'Failed to sign in');
       setLoading(false);
     } else {
+      console.log('LoginForm: Navigating to dashboard...');
       navigate('/dashboard');
     }
   };
