@@ -1,13 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { TrendingUp, User, Bell, ShoppingCart, LogOut, Settings as SettingsIcon } from 'lucide-react';
+import { TrendingUp, User, Bell, ShoppingCart, LogOut, Settings as SettingsIcon, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 
 export default function TopNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, signOut } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      checkAdminStatus();
+    }
+  }, [user]);
+
+  const checkAdminStatus = async () => {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user?.id)
+        .maybeSingle();
+
+      if (data) {
+        setIsAdmin(data.is_admin || false);
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+    }
+  };
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard' },
@@ -80,6 +104,21 @@ export default function TopNavigation() {
                   onClick={() => setShowProfileMenu(false)}
                 ></div>
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  {isAdmin && (
+                    <>
+                      <button
+                        onClick={() => {
+                          navigate('/admin');
+                          setShowProfileMenu(false);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                      >
+                        <Shield className="w-4 h-4" />
+                        Admin Panel
+                      </button>
+                      <hr className="my-1" />
+                    </>
+                  )}
                   <button
                     onClick={() => {
                       navigate('/settings');
