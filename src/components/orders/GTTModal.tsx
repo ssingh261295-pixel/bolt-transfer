@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Search, Info } from 'lucide-react';
+import { X, Search, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -63,49 +63,13 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
   const [selectedInstrument, setSelectedInstrument] = useState<any>(null);
   const [currentLTP, setCurrentLTP] = useState<number | null>(null);
   const [fetchingLTP, setFetchingLTP] = useState(false);
-  const [ltpRefreshInterval, setLtpRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const [initialLTPCaptured, setInitialLTPCaptured] = useState(false);
 
   useEffect(() => {
     if (isOpen && exchange) {
       loadInstruments();
     }
   }, [isOpen, exchange]);
-
-  // Auto-refresh LTP during market hours (9:15 AM to 3:30 PM IST)
-  useEffect(() => {
-    if (!isOpen || !selectedInstrument || !selectedBrokerIds[0]) {
-      if (ltpRefreshInterval) {
-        clearInterval(ltpRefreshInterval);
-        setLtpRefreshInterval(null);
-      }
-      return;
-    }
-
-    const checkAndRefreshLTP = () => {
-      const now = new Date();
-      const istOffset = 5.5 * 60 * 60 * 1000;
-      const istTime = new Date(now.getTime() + istOffset);
-      const hours = istTime.getUTCHours();
-      const minutes = istTime.getUTCMinutes();
-      const currentMinutes = hours * 60 + minutes;
-      const marketStart = 9 * 60 + 15;
-      const marketEnd = 15 * 60 + 30;
-
-      if (currentMinutes >= marketStart && currentMinutes <= marketEnd) {
-        if (selectedInstrument.instrument_token) {
-          fetchLTP(selectedInstrument.instrument_token, selectedInstrument.tradingsymbol, selectedInstrument.exchange || exchange);
-        }
-      }
-    };
-
-    checkAndRefreshLTP();
-    const interval = setInterval(checkAndRefreshLTP, 3000);
-    setLtpRefreshInterval(interval);
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isOpen, selectedInstrument, selectedBrokerIds]);
 
   useEffect(() => {
     if (!editingGTT && allBrokers && allBrokers.length > 0 && selectedBrokerIds.length === 0) {
@@ -215,6 +179,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         setSuccess(false);
         setSelectedInstrument(null);
         setCurrentLTP(null);
+        setInitialLTPCaptured(false);
       }
     };
 
@@ -248,16 +213,17 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     fetchInitialLTP();
   }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT, positionData]);
 
-  // Re-calculate prefilled values when GTT type or transaction type changes
+  // Re-calculate prefilled values when GTT type or transaction type changes (only if no prices are set yet)
   useEffect(() => {
-    if (currentLTP && !editingGTT && gttType === 'two-leg') {
+    if (currentLTP && !editingGTT && !initialLTPCaptured && !triggerPrice1 && !triggerPrice2) {
       prefillPricesBasedOnLTP(currentLTP);
+      setInitialLTPCaptured(true);
     }
-  }, [gttType, transactionType, currentLTP]);
+  }, [gttType, transactionType, currentLTP, editingGTT, initialLTPCaptured, triggerPrice1, triggerPrice2]);
 
-  // Calculate percentages for editing GTT when LTP becomes available
+  // Calculate percentages for editing GTT when LTP becomes available (one time only)
   useEffect(() => {
-    if (editingGTT && currentLTP) {
+    if (editingGTT && currentLTP && !initialLTPCaptured) {
       if (triggerPrice1) {
         const triggerPct = ((parseFloat(triggerPrice1) - currentLTP) / currentLTP * 100).toFixed(2);
         setTriggerPercent1(triggerPct);
@@ -274,20 +240,28 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         const pricePct = ((parseFloat(price2) - currentLTP) / currentLTP * 100).toFixed(2);
         setPricePercent2(pricePct);
       }
+      setInitialLTPCaptured(true);
     }
-  }, [editingGTT, currentLTP, triggerPrice1, price1, triggerPrice2, price2]);
+  }, [editingGTT, currentLTP, initialLTPCaptured]);
+
+  // Round price to proper tick size (0.05)
+  const roundToTickSize = (price: number): string => {
+    const tickSize = 0.05;
+    const rounded = Math.round(price / tickSize) * tickSize;
+    return rounded.toFixed(2);
+  };
 
   const prefillPricesBasedOnLTP = (ltp: number) => {
     if (gttType === 'single') {
       // Single GTT: BUY = +2%, SELL = -2%
       if (transactionType === 'BUY') {
-        const triggerValue = (ltp * 1.02).toFixed(2);
+        const triggerValue = roundToTickSize(ltp * 1.02);
         setTriggerPrice1(triggerValue);
         setPrice1(triggerValue);
         setTriggerPercent1('2.00');
         setPricePercent1('2.00');
       } else {
-        const triggerValue = (ltp * 0.98).toFixed(2);
+        const triggerValue = roundToTickSize(ltp * 0.98);
         setTriggerPrice1(triggerValue);
         setPrice1(triggerValue);
         setTriggerPercent1('-2.00');
@@ -301,8 +275,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         // Closing position logic
         if (transactionType === 'SELL') {
           // Sell OCO (closing a long position): Stoploss at -2% (below), Target at +2% (above)
-          const stoploss = (ltp * 0.98).toFixed(2);
-          const target = (ltp * 1.02).toFixed(2);
+          const stoploss = roundToTickSize(ltp * 0.98);
+          const target = roundToTickSize(ltp * 1.02);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
           setTriggerPercent1('-2.00');
@@ -313,8 +287,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           setPricePercent2('2.00');
         } else {
           // Buy OCO (closing a short position): Stoploss at +2% (above), Target at -2% (below)
-          const stoploss = (ltp * 1.02).toFixed(2);
-          const target = (ltp * 0.98).toFixed(2);
+          const stoploss = roundToTickSize(ltp * 1.02);
+          const target = roundToTickSize(ltp * 0.98);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
           setTriggerPercent1('2.00');
@@ -329,8 +303,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         if (transactionType === 'BUY') {
           // Buy OCO (entering long): Stoploss at +2% (higher), Target at -2% (lower)
           // This is for entry GTTs where you want to buy if price goes up OR down
-          const stoploss = (ltp * 1.02).toFixed(2);
-          const target = (ltp * 0.98).toFixed(2);
+          const stoploss = roundToTickSize(ltp * 1.02);
+          const target = roundToTickSize(ltp * 0.98);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
           setTriggerPercent1('2.00');
@@ -342,8 +316,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         } else {
           // Sell OCO (entering short): Stoploss at -2% (lower), Target at +2% (higher)
           // This is for entry GTTs where you want to sell if price goes down OR up
-          const stoploss = (ltp * 0.98).toFixed(2);
-          const target = (ltp * 1.02).toFixed(2);
+          const stoploss = roundToTickSize(ltp * 0.98);
+          const target = roundToTickSize(ltp * 1.02);
           setTriggerPrice1(stoploss);
           setPrice1(stoploss);
           setTriggerPercent1('-2.00');
@@ -401,7 +375,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     setShowSuggestions(filtered.length > 0);
   };
 
-  const fetchLTP = async (instrumentToken: string, tradingsymbol?: string, exchangeValue?: string) => {
+  const fetchLTP = async (instrumentToken: string, tradingsymbol?: string, exchangeValue?: string, manualRefresh = false) => {
     try {
       setFetchingLTP(true);
       const symbolToUse = tradingsymbol || symbol;
@@ -422,6 +396,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       if (data.success && data.data && data.data[instrumentKey]) {
         const ltp = data.data[instrumentKey].last_price;
         setCurrentLTP(ltp);
+
+        // Only update prices if this is a manual refresh
+        if (manualRefresh && ltp) {
+          prefillPricesBasedOnLTP(ltp);
+        }
+
         return ltp;
       }
     } catch (err) {
@@ -430,6 +410,12 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       setFetchingLTP(false);
     }
     return null;
+  };
+
+  const handleManualLTPRefresh = async () => {
+    if (selectedInstrument?.instrument_token) {
+      await fetchLTP(selectedInstrument.instrument_token, selectedInstrument.tradingsymbol, selectedInstrument.exchange || exchange, true);
+    }
   };
 
   const selectInstrument = async (instrument: any) => {
@@ -635,7 +621,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                 <span className="text-sm font-medium text-gray-900">{symbol}</span>
                 <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{exchange}</span>
                 {currentLTP && (
-                  <span className="text-sm font-semibold text-gray-700">{currentLTP.toFixed(2)}</span>
+                  <>
+                    <span className="text-sm font-semibold text-gray-700">LTP: {currentLTP.toFixed(2)}</span>
+                    <button
+                      type="button"
+                      onClick={handleManualLTPRefresh}
+                      disabled={fetchingLTP}
+                      className="p-1 hover:bg-gray-100 rounded transition disabled:opacity-50"
+                      title="Refresh LTP"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${fetchingLTP ? 'animate-spin' : ''}`} />
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -877,10 +874,22 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   step="0.05"
                   value={triggerPrice1}
                   onChange={(e) => {
-                    setTriggerPrice1(e.target.value);
-                    if (currentLTP && e.target.value) {
-                      const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
+                    const value = e.target.value;
+                    setTriggerPrice1(value);
+                    if (currentLTP && value) {
+                      const percent = ((parseFloat(value) - currentLTP) / currentLTP * 100).toFixed(2);
                       setTriggerPercent1(percent);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const value = e.target.value;
+                    if (value) {
+                      const rounded = roundToTickSize(parseFloat(value));
+                      setTriggerPrice1(rounded);
+                      if (currentLTP) {
+                        const percent = ((parseFloat(rounded) - currentLTP) / currentLTP * 100).toFixed(2);
+                        setTriggerPercent1(percent);
+                      }
                     }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -896,7 +905,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                       onChange={(e) => {
                         setTriggerPercent1(e.target.value);
                         if (currentLTP && e.target.value) {
-                          const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
+                          const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
                           setTriggerPrice1(price);
                         }
                       }}
@@ -940,10 +949,22 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   step="0.05"
                   value={price1}
                   onChange={(e) => {
-                    setPrice1(e.target.value);
-                    if (currentLTP && e.target.value) {
-                      const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
+                    const value = e.target.value;
+                    setPrice1(value);
+                    if (currentLTP && value) {
+                      const percent = ((parseFloat(value) - currentLTP) / currentLTP * 100).toFixed(2);
                       setPricePercent1(percent);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const value = e.target.value;
+                    if (value) {
+                      const rounded = roundToTickSize(parseFloat(value));
+                      setPrice1(rounded);
+                      if (currentLTP) {
+                        const percent = ((parseFloat(rounded) - currentLTP) / currentLTP * 100).toFixed(2);
+                        setPricePercent1(percent);
+                      }
                     }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -959,7 +980,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                       onChange={(e) => {
                         setPricePercent1(e.target.value);
                         if (currentLTP && e.target.value) {
-                          const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
+                          const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
                           setPrice1(price);
                         }
                       }}
@@ -1025,10 +1046,22 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     step="0.05"
                     value={triggerPrice2}
                     onChange={(e) => {
-                      setTriggerPrice2(e.target.value);
-                      if (currentLTP && e.target.value) {
-                        const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
+                      const value = e.target.value;
+                      setTriggerPrice2(value);
+                      if (currentLTP && value) {
+                        const percent = ((parseFloat(value) - currentLTP) / currentLTP * 100).toFixed(2);
                         setTriggerPercent2(percent);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const value = e.target.value;
+                      if (value) {
+                        const rounded = roundToTickSize(parseFloat(value));
+                        setTriggerPrice2(rounded);
+                        if (currentLTP) {
+                          const percent = ((parseFloat(rounded) - currentLTP) / currentLTP * 100).toFixed(2);
+                          setTriggerPercent2(percent);
+                        }
                       }
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -1044,7 +1077,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                         onChange={(e) => {
                           setTriggerPercent2(e.target.value);
                           if (currentLTP && e.target.value) {
-                            const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
+                            const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
                             setTriggerPrice2(price);
                           }
                         }}
@@ -1088,10 +1121,22 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     step="0.05"
                     value={price2}
                     onChange={(e) => {
-                      setPrice2(e.target.value);
-                      if (currentLTP && e.target.value) {
-                        const percent = ((parseFloat(e.target.value) - currentLTP) / currentLTP * 100).toFixed(2);
+                      const value = e.target.value;
+                      setPrice2(value);
+                      if (currentLTP && value) {
+                        const percent = ((parseFloat(value) - currentLTP) / currentLTP * 100).toFixed(2);
                         setPricePercent2(percent);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const value = e.target.value;
+                      if (value) {
+                        const rounded = roundToTickSize(parseFloat(value));
+                        setPrice2(rounded);
+                        if (currentLTP) {
+                          const percent = ((parseFloat(rounded) - currentLTP) / currentLTP * 100).toFixed(2);
+                          setPricePercent2(percent);
+                        }
                       }
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -1107,7 +1152,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                         onChange={(e) => {
                           setPricePercent2(e.target.value);
                           if (currentLTP && e.target.value) {
-                            const price = (currentLTP * (1 + parseFloat(e.target.value) / 100)).toFixed(2);
+                            const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
                             setPrice2(price);
                           }
                         }}
