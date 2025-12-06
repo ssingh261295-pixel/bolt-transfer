@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useZerodhaWebSocket } from '../../hooks/useZerodhaWebSocket';
 import AddToWatchlistModal from '../watchlist/AddToWatchlistModal';
 
 interface WatchlistItem {
@@ -22,19 +23,55 @@ interface WatchlistSidebarProps {
 export default function WatchlistSidebar({ onBuyClick, onSellClick }: WatchlistSidebarProps) {
   const { user } = useAuth();
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
-  const [prices, setPrices] = useState<Record<number, any>>({});
   const [loading, setLoading] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [brokerId, setBrokerId] = useState<string | null>(null);
+
+  const { isConnected, connect, subscribe, unsubscribe, getTick } = useZerodhaWebSocket(brokerId || undefined);
 
   useEffect(() => {
     if (user) {
       loadWatchlist();
-      const interval = setInterval(updatePrices, 3000);
-      return () => clearInterval(interval);
+      loadBrokerConnection();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (brokerId && !isConnected) {
+      connect();
+    }
+  }, [brokerId, isConnected, connect]);
+
+  useEffect(() => {
+    if (isConnected && watchlistItems.length > 0) {
+      const tokens = watchlistItems.map(item => item.instrument_token);
+      subscribe(tokens, 'full');
+
+      return () => {
+        unsubscribe(tokens);
+      };
+    }
+  }, [isConnected, watchlistItems, subscribe, unsubscribe]);
+
+  const loadBrokerConnection = async () => {
+    try {
+      const { data: broker } = await supabase
+        .from('broker_connections')
+        .select('id')
+        .eq('user_id', user?.id)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+      if (broker) {
+        setBrokerId(broker.id);
+      }
+    } catch (error) {
+      console.error('Error loading broker:', error);
+    }
+  };
 
   const loadWatchlist = async () => {
     try {
@@ -66,45 +103,11 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick }: WatchlistS
 
       if (items) {
         setWatchlistItems(items);
-        updatePrices();
       }
     } catch (error) {
       console.error('Error loading watchlist:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const updatePrices = async () => {
-    const tokens = watchlistItems.map(item => item.instrument_token);
-    if (tokens.length === 0) return;
-
-    try {
-      const session = await supabase.auth.getSession();
-      const { data: brokers } = await supabase
-        .from('broker_connections')
-        .select('id')
-        .eq('user_id', user?.id)
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle();
-
-      if (!brokers) return;
-
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${brokers.id}&instruments=${tokens.join(',')}`;
-
-      const response = await fetch(apiUrl, {
-        headers: {
-          'Authorization': `Bearer ${session.data.session?.access_token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPrices(data);
-      }
-    } catch (error) {
-      console.error('Error fetching prices:', error);
     }
   };
 
@@ -147,14 +150,24 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick }: WatchlistS
   return (
     <div className="w-72 bg-white border-r border-gray-200 flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="font-semibold text-gray-900">Watchlist</h2>
-        <button
-          onClick={() => setIsCollapsed(true)}
-          className="p-1 hover:bg-gray-100 rounded"
-        >
-          <ChevronUp className="w-4 h-4 rotate-90" />
-        </button>
+      <div className="p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-semibold text-gray-900">Watchlist</h2>
+          <button
+            onClick={() => setIsCollapsed(true)}
+            className="p-1 hover:bg-gray-100 rounded"
+          >
+            <ChevronUp className="w-4 h-4 rotate-90" />
+          </button>
+        </div>
+        {brokerId && (
+          <div className="flex items-center gap-2 text-xs">
+            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+            <span className="text-gray-600">
+              {isConnected ? 'Live' : 'Connecting...'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Items List */}
@@ -169,10 +182,10 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick }: WatchlistS
         ) : (
           <div className="divide-y divide-gray-100">
             {watchlistItems.map((item) => {
-              const priceData = prices[item.instrument_token];
-              const lastPrice = priceData?.last_price || 0;
-              const change = priceData?.change || 0;
-              const changePercent = priceData?.change_percent || 0;
+              const tick = getTick(item.instrument_token);
+              const lastPrice = tick?.last_price || 0;
+              const change = tick?.change || 0;
+              const changePercent = tick ? ((change / (lastPrice - change)) * 100) : 0;
 
               return (
                 <div

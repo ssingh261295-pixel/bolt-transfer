@@ -12,41 +12,43 @@ interface AddToWatchlistModalProps {
 export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToWatchlistModalProps) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
-  const [instruments, setInstruments] = useState<any[]>([]);
   const [filteredInstruments, setFilteredInstruments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      loadInstruments();
-    }
-  }, [isOpen]);
+    const delaySearch = setTimeout(() => {
+      if (search.trim() && search.length >= 2) {
+        loadInstruments(search.trim());
+      } else {
+        setFilteredInstruments([]);
+      }
+    }, 300);
 
-  useEffect(() => {
-    if (search.trim()) {
-      const filtered = instruments.filter(
-        (inst) =>
-          inst.tradingsymbol.toLowerCase().includes(search.toLowerCase()) ||
-          (inst.name && inst.name.toLowerCase().includes(search.toLowerCase()))
-      );
-      setFilteredInstruments(filtered.slice(0, 50));
-    } else {
-      setFilteredInstruments([]);
-    }
-  }, [search, instruments]);
+    return () => clearTimeout(delaySearch);
+  }, [search]);
 
-  const loadInstruments = async () => {
+  const loadInstruments = async (searchTerm: string) => {
     setLoading(true);
     try {
-      const { data } = await supabase
-        .from('nfo_instruments')
-        .select('instrument_token, tradingsymbol, name, exchange, last_price')
-        .order('tradingsymbol')
-        .limit(1000);
+      const session = await supabase.auth.getSession();
 
-      if (data) {
-        setInstruments(data);
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NFO&search=${encodeURIComponent(searchTerm)}`;
+
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${session.data.session?.access_token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.instruments) {
+          const sortedInstruments = data.instruments.sort((a: any, b: any) => {
+            return a.tradingsymbol.localeCompare(b.tradingsymbol);
+          });
+          setFilteredInstruments(sortedInstruments.slice(0, 50));
+        }
       }
     } catch (error) {
       console.error('Error loading instruments:', error);
@@ -126,7 +128,7 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search instruments (e.g., NIFTY, BANKNIFTY)"
+              placeholder="Search instruments (min 2 chars, e.g., NIFTY, BANKNIFTY)"
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               autoFocus
             />
@@ -135,14 +137,14 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
 
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
-            <div className="text-center py-8 text-gray-500">Loading instruments...</div>
-          ) : filteredInstruments.length === 0 && search ? (
+            <div className="text-center py-8 text-gray-500">Searching instruments...</div>
+          ) : filteredInstruments.length === 0 && search.length >= 2 ? (
             <div className="text-center py-8 text-gray-500">
               No instruments found for "{search}"
             </div>
           ) : filteredInstruments.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              Start typing to search instruments
+              Start typing to search FNO instruments (minimum 2 characters)
             </div>
           ) : (
             <div className="space-y-2">
