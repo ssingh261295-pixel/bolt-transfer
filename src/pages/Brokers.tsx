@@ -189,12 +189,10 @@ export function Brokers() {
 
       if (data.login_url) {
         console.log('Redirecting to:', data.login_url);
-        console.log('About to redirect using window.location.href');
+        console.log('Attempting redirect with window.location.assign');
 
-        // Use a small delay to ensure state updates complete
-        setTimeout(() => {
-          window.location.href = data.login_url;
-        }, 100);
+        // Force full page navigation to Zerodha login
+        window.location.assign(data.login_url);
       } else {
         throw new Error('Failed to get login URL');
       }
