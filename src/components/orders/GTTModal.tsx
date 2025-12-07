@@ -229,9 +229,45 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
   // Re-calculate prefilled values when GTT type or transaction type changes
   useEffect(() => {
     if (currentLTP && !editingGTT) {
-      // For two-leg, if target fields are empty but stoploss has value, fill target
-      if (gttType === 'two-leg' && !triggerPrice2) {
-        prefillPricesBasedOnLTP(currentLTP);
+      // For two-leg, if target fields are empty but stoploss has value, fill ONLY target
+      if (gttType === 'two-leg' && !triggerPrice2 && triggerPrice1) {
+        // Only populate target fields, don't touch stoploss fields
+        const isClosingPosition = positionData !== undefined;
+
+        if (isClosingPosition) {
+          if (transactionType === 'SELL') {
+            // Closing long: Target at +2%
+            const target = roundToTickSize(currentLTP * 1.02);
+            setTriggerPrice2(target);
+            setPrice2(target);
+            setTriggerPercent2('2.00');
+            setPricePercent2('2.00');
+          } else {
+            // Closing short: Target at -2%
+            const target = roundToTickSize(currentLTP * 0.98);
+            setTriggerPrice2(target);
+            setPrice2(target);
+            setTriggerPercent2('-2.00');
+            setPricePercent2('-2.00');
+          }
+        } else {
+          // Opening new position
+          if (transactionType === 'BUY') {
+            // Buy OCO: Target at -2%
+            const target = roundToTickSize(currentLTP * 0.98);
+            setTriggerPrice2(target);
+            setPrice2(target);
+            setTriggerPercent2('-2.00');
+            setPricePercent2('-2.00');
+          } else {
+            // Sell OCO: Target at +2%
+            const target = roundToTickSize(currentLTP * 1.02);
+            setTriggerPrice2(target);
+            setPrice2(target);
+            setTriggerPercent2('2.00');
+            setPricePercent2('2.00');
+          }
+        }
       }
       // For initial load when nothing is filled yet
       else if (!initialLTPCaptured && !triggerPrice1 && !triggerPrice2) {
@@ -239,7 +275,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         setInitialLTPCaptured(true);
       }
     }
-  }, [gttType, transactionType, currentLTP, editingGTT, initialLTPCaptured, triggerPrice1, triggerPrice2]);
+  }, [gttType, transactionType, currentLTP, editingGTT, initialLTPCaptured, triggerPrice1, triggerPrice2, positionData]);
 
   // Calculate percentages for editing GTT when LTP becomes available (one time only)
   useEffect(() => {
