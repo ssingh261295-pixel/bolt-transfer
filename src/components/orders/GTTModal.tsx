@@ -430,7 +430,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       const symbolToUse = tradingsymbol || symbol;
       const exchangeToUse = exchangeValue || exchange;
       const instrumentKey = `${exchangeToUse}:${symbolToUse}`;
-      const brokerId = selectedBrokerIds[0] || brokerConnectionId;
+
+      // Use selected broker, or fallback to first available broker for LTP fetch
+      let brokerId = selectedBrokerIds[0] || brokerConnectionId;
+      if (!brokerId || brokerId === 'all') {
+        brokerId = allBrokers && allBrokers.length > 0 ? allBrokers[0].id : null;
+      }
+
+      if (!brokerId) {
+        console.error('No broker available for LTP fetch');
+        return null;
+      }
+
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${brokerId}&instruments=${instrumentKey}`;
 
       const response = await fetch(apiUrl, {
