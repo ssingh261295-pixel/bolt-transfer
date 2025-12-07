@@ -300,6 +300,13 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     }
   }, [editingGTT, currentLTP, initialLTPCaptured]);
 
+  // Recalculate prices when transaction type or GTT type changes
+  useEffect(() => {
+    if (currentLTP && !editingGTT) {
+      prefillPricesBasedOnLTP(currentLTP);
+    }
+  }, [transactionType, gttType]);
+
   const prefillPricesBasedOnLTP = (ltp: number) => {
     if (gttType === 'single') {
       // Single GTT: BUY = +2%, SELL = -2%
@@ -317,65 +324,31 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
         setPricePercent1('-2.00');
       }
     } else if (gttType === 'two-leg') {
-      // Check if this is from a position (closing) or new GTT (opening)
-      const isClosingPosition = positionData !== undefined;
-
-      if (isClosingPosition) {
-        // Closing position logic
-        if (transactionType === 'SELL') {
-          // Sell OCO (closing a long position): Stoploss at -2% (below), Target at +2% (above)
-          const stoploss = roundToTickSize(ltp * 0.98);
-          const target = roundToTickSize(ltp * 1.02);
-          setTriggerPrice1(stoploss);
-          setPrice1(stoploss);
-          setTriggerPercent1('-2.00');
-          setPricePercent1('-2.00');
-          setTriggerPrice2(target);
-          setPrice2(target);
-          setTriggerPercent2('2.00');
-          setPricePercent2('2.00');
-        } else {
-          // Buy OCO (closing a short position): Stoploss at +2% (above), Target at -2% (below)
-          const stoploss = roundToTickSize(ltp * 1.02);
-          const target = roundToTickSize(ltp * 0.98);
-          setTriggerPrice1(stoploss);
-          setPrice1(stoploss);
-          setTriggerPercent1('2.00');
-          setPricePercent1('2.00');
-          setTriggerPrice2(target);
-          setPrice2(target);
-          setTriggerPercent2('-2.00');
-          setPricePercent2('-2.00');
-        }
+      // OCO GTT: Consistent logic for all cases
+      if (transactionType === 'BUY') {
+        // Buy OCO: Stoploss at +2% (above), Target at -2% (below)
+        const stoploss = roundToTickSize(ltp * 1.02);
+        const target = roundToTickSize(ltp * 0.98);
+        setTriggerPrice1(stoploss);
+        setPrice1(stoploss);
+        setTriggerPercent1('2.00');
+        setPricePercent1('2.00');
+        setTriggerPrice2(target);
+        setPrice2(target);
+        setTriggerPercent2('-2.00');
+        setPricePercent2('-2.00');
       } else {
-        // Opening new position logic - Zerodha's GTT entry order logic
-        if (transactionType === 'BUY') {
-          // Buy OCO (entering long): Stoploss at +2% (higher), Target at -2% (lower)
-          // This is for entry GTTs where you want to buy if price goes up OR down
-          const stoploss = roundToTickSize(ltp * 1.02);
-          const target = roundToTickSize(ltp * 0.98);
-          setTriggerPrice1(stoploss);
-          setPrice1(stoploss);
-          setTriggerPercent1('2.00');
-          setPricePercent1('2.00');
-          setTriggerPrice2(target);
-          setPrice2(target);
-          setTriggerPercent2('-2.00');
-          setPricePercent2('-2.00');
-        } else {
-          // Sell OCO (entering short): Stoploss at -2% (lower), Target at +2% (higher)
-          // This is for entry GTTs where you want to sell if price goes down OR up
-          const stoploss = roundToTickSize(ltp * 0.98);
-          const target = roundToTickSize(ltp * 1.02);
-          setTriggerPrice1(stoploss);
-          setPrice1(stoploss);
-          setTriggerPercent1('-2.00');
-          setPricePercent1('-2.00');
-          setTriggerPrice2(target);
-          setPrice2(target);
-          setTriggerPercent2('2.00');
-          setPricePercent2('2.00');
-        }
+        // Sell OCO: Stoploss at -2% (below), Target at +2% (above)
+        const stoploss = roundToTickSize(ltp * 0.98);
+        const target = roundToTickSize(ltp * 1.02);
+        setTriggerPrice1(stoploss);
+        setPrice1(stoploss);
+        setTriggerPercent1('-2.00');
+        setPricePercent1('-2.00');
+        setTriggerPrice2(target);
+        setPrice2(target);
+        setTriggerPercent2('2.00');
+        setPricePercent2('2.00');
       }
     }
   };
