@@ -179,14 +179,16 @@ export function Dashboard() {
 
       {brokers.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <Wallet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No broker connections</h3>
-          <p className="text-gray-600 mb-4">Connect a broker to view your account details</p>
+          <RefreshCw className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No active broker connections</h3>
+          <p className="text-gray-600 mb-1">Your broker tokens may have expired</p>
+          <p className="text-sm text-gray-500 mb-4">Zerodha tokens expire daily and need to be reconnected</p>
           <a
             href="/brokers"
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
           >
-            Connect Broker
+            <RefreshCw className="w-4 h-4" />
+            Go to Brokers Page
           </a>
         </div>
       ) : (
