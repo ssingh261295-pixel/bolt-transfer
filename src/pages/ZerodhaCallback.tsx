@@ -2,21 +2,44 @@ import { useEffect, useState } from 'react';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 export function ZerodhaCallback() {
-  const { session } = useAuth();
+  const { session, loading } = useAuth();
+  const navigate = useNavigate();
   const [status, setStatus] = useState('Processing Zerodha connection...');
   const [isSuccess, setIsSuccess] = useState<boolean | null>(null);
 
   useEffect(() => {
     const handleCallback = async () => {
       try {
+        console.log('ZerodhaCallback: Starting callback processing');
+        console.log('Session available:', !!session);
+        console.log('Auth loading:', loading);
+
+        if (loading) {
+          console.log('Waiting for auth to complete...');
+          setStatus('Waiting for authentication...');
+          return;
+        }
+
+        if (!session?.access_token) {
+          console.error('No session available after auth loading completed');
+          setStatus('Session expired. Please login again and reconnect your broker.');
+          setIsSuccess(false);
+          redirectToBrokers(4000);
+          return;
+        }
+
         const params = new URLSearchParams(window.location.search);
         const requestToken = params.get('request_token');
         const authStatus = params.get('status');
         const state = params.get('state');
 
+        console.log('Callback params:', { requestToken: !!requestToken, authStatus, state });
+
         if (authStatus !== 'success' || !requestToken) {
+          console.error('Invalid callback params:', { authStatus, hasRequestToken: !!requestToken });
           setStatus('Connection failed. Zerodha authorization was not successful.');
           setIsSuccess(false);
           redirectToBrokers(3000);
@@ -26,12 +49,14 @@ export function ZerodhaCallback() {
         const brokerConnectionId = state || localStorage.getItem('zerodha_broker_id');
 
         if (!brokerConnectionId) {
+          console.error('Missing broker connection ID');
           setStatus('Connection failed. Missing broker connection ID.');
           setIsSuccess(false);
           redirectToBrokers(3000);
           return;
         }
 
+        console.log('Exchanging token for broker:', brokerConnectionId);
         setStatus('Exchanging authorization token...');
 
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-auth/exchange-token`;
@@ -39,7 +64,7 @@ export function ZerodhaCallback() {
         const response = await fetch(apiUrl, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
+            'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -48,7 +73,9 @@ export function ZerodhaCallback() {
           }),
         });
 
+        console.log('Token exchange response status:', response.status);
         const data = await response.json();
+        console.log('Token exchange response data:', data);
 
         if (data.success) {
           setStatus('Successfully connected to Zerodha!');
@@ -61,8 +88,9 @@ export function ZerodhaCallback() {
           localStorage.removeItem('zerodha_broker_id');
           redirectToBrokers(3000);
         }
-      } catch (error) {
-        setStatus('An error occurred while connecting to Zerodha');
+      } catch (error: any) {
+        console.error('Callback error:', error);
+        setStatus(`An error occurred: ${error.message || 'Unknown error'}`);
         setIsSuccess(false);
         localStorage.removeItem('zerodha_broker_id');
         redirectToBrokers(3000);
@@ -71,12 +99,12 @@ export function ZerodhaCallback() {
 
     const redirectToBrokers = (delay: number) => {
       setTimeout(() => {
-        window.location.href = window.location.origin;
+        navigate('/brokers', { replace: true });
       }, delay);
     };
 
     handleCallback();
-  }, [session]);
+  }, [session, loading, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">

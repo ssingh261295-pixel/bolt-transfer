@@ -152,7 +152,12 @@ Deno.serve(async (req: Request) => {
         throw new Error('Broker connection not found');
       }
 
+      console.log('Generating login URL for broker:', brokerId);
+      console.log('API Key:', brokerConnection.api_key);
+
       const loginUrl = `https://kite.zerodha.com/connect/login?v=3&api_key=${brokerConnection.api_key}&state=${brokerId}`;
+
+      console.log('Login URL generated:', loginUrl);
 
       return new Response(
         JSON.stringify({ login_url: loginUrl }),

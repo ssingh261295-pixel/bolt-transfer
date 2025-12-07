@@ -33,20 +33,7 @@ export function Brokers() {
     if (user) {
       loadBrokers();
     }
-
-    const params = new URLSearchParams(window.location.search);
-    const requestToken = params.get('request_token');
-    const status = params.get('status');
-
-    if (requestToken && status === 'success' && user && session) {
-      const brokerId = localStorage.getItem('zerodha_broker_id');
-      if (brokerId) {
-        handleTokenExchange(requestToken, brokerId);
-        localStorage.removeItem('zerodha_broker_id');
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    }
-  }, [user, session]);
+  }, [user]);
 
   const loadBrokers = async () => {
     const { data } = await supabase
@@ -218,47 +205,6 @@ export function Brokers() {
     }
   };
 
-  const handleTokenExchange = async (requestToken: string, brokerId: string) => {
-    try {
-      setConnecting(true);
-
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-auth/exchange-token`;
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          request_token: requestToken,
-          broker_connection_id: brokerId,
-        }),
-      });
-
-      const data = await response.json();
-
-      console.log('Exchange token response:', data);
-
-      if (data.success) {
-        setShowAddForm(false);
-        setFormData({ broker_name: 'zerodha', api_key: '', api_secret: '' });
-        await loadBrokers();
-        setError('');
-      } else {
-        const errorMsg = data.error || 'Token exchange failed';
-        console.error('Token exchange failed:', errorMsg);
-        throw new Error(errorMsg);
-      }
-    } catch (err: any) {
-      console.error('Token exchange error:', err);
-      const errorMessage = err.message || 'Failed to complete connection';
-      setError(`Connection failed: ${errorMessage}. Please check your API credentials and try again.`);
-    } finally {
-      setConnecting(false);
-    }
-  };
-
   const handleReconnect = async (brokerId: string, brokerName: string) => {
     console.log('handleReconnect called with brokerId:', brokerId, 'brokerName:', brokerName);
     if (brokerName === 'zerodha') {
@@ -328,34 +274,35 @@ export function Brokers() {
                     <div>
                       <p className="text-xs font-medium mb-1">Option A: Production URL (Recommended)</p>
                       <div className="bg-white border border-blue-300 rounded px-3 py-2 font-mono text-xs break-all">
-                        https://your-domain.com
+                        https://your-domain.com/zerodha-callback
                       </div>
-                      <p className="text-xs mt-1 text-blue-700">Use your deployed domain (Vercel, Netlify, etc.)</p>
+                      <p className="text-xs mt-1 text-blue-700">Use your deployed domain with /zerodha-callback path</p>
                     </div>
 
                     <div>
                       <p className="text-xs font-medium mb-1">Option B: Local Development (127.0.0.1)</p>
                       <div className="bg-white border border-blue-300 rounded px-3 py-2 font-mono text-xs break-all">
-                        http://127.0.0.1:5173
+                        http://127.0.0.1:5173/zerodha-callback
                       </div>
                       <p className="text-xs mt-1 text-blue-700">For local testing only. Must use 127.0.0.1, NOT localhost</p>
                     </div>
 
                     <div>
-                      <p className="text-xs font-medium mb-1">Current App URL (May not work):</p>
-                      <div className="bg-gray-100 border border-gray-300 rounded px-3 py-2 font-mono text-xs break-all text-gray-600">
-                        {window.location.origin}
+                      <p className="text-xs font-medium mb-1">Your Current Redirect URL Should Be:</p>
+                      <div className="bg-white border border-blue-300 rounded px-3 py-2 font-mono text-xs break-all text-blue-900">
+                        {window.location.origin}/zerodha-callback
                       </div>
-                      <p className="text-xs mt-1 text-red-600">Preview/staging URLs are NOT supported by Zerodha</p>
+                      <p className="text-xs mt-1 text-green-700">Copy this exact URL to your Kite Connect app settings</p>
                     </div>
                   </div>
 
-                  <div className="bg-red-50 border border-red-300 rounded p-3 mt-3">
-                    <p className="font-medium text-red-900 text-xs mb-1">Critical Information:</p>
-                    <ul className="text-red-800 text-xs space-y-1 list-disc list-inside">
+                  <div className="bg-amber-50 border border-amber-300 rounded p-3 mt-3">
+                    <p className="font-medium text-amber-900 text-xs mb-1">Important Notes:</p>
+                    <ul className="text-amber-800 text-xs space-y-1 list-disc list-inside">
+                      <li>The redirect URL must end with <span className="font-mono font-bold">/zerodha-callback</span></li>
                       <li>Zerodha does NOT accept preview/temporary URLs</li>
-                      <li>The redirect URL must be exactly as registered in Kite Connect</li>
-                      <li>For testing, deploy to a real domain or use http://127.0.0.1:5173</li>
+                      <li>The redirect URL must match EXACTLY what's registered in Kite Connect</li>
+                      <li>After changing the redirect URL in Kite Connect, wait a few minutes before testing</li>
                     </ul>
                   </div>
                 </div>
