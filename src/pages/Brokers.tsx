@@ -9,6 +9,7 @@ export function Brokers() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [reconnectingBrokerId, setReconnectingBrokerId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [editingBroker, setEditingBroker] = useState<any>(null);
   const [formData, setFormData] = useState({
@@ -159,10 +160,19 @@ export function Brokers() {
     });
   };
 
-  const handleZerodhaLogin = async (brokerId: string) => {
+  const handleZerodhaLogin = async (brokerId: string, isReconnect: boolean = false) => {
     try {
-      setConnecting(true);
+      if (isReconnect) {
+        setReconnectingBrokerId(brokerId);
+      } else {
+        setConnecting(true);
+      }
       setError('');
+
+      if (!session?.access_token) {
+        throw new Error('Session expired. Please refresh the page and try again.');
+      }
+
       localStorage.setItem('zerodha_broker_id', brokerId);
 
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-auth/login-url?broker_id=${brokerId}`;
@@ -171,12 +181,17 @@ export function Brokers() {
 
       const response = await fetch(apiUrl, {
         headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
       });
 
       console.log('Response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
 
       const data = await response.json();
       console.log('Response data:', data);
@@ -194,7 +209,11 @@ export function Brokers() {
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'Failed to connect to Zerodha');
-      setConnecting(false);
+      if (isReconnect) {
+        setReconnectingBrokerId(null);
+      } else {
+        setConnecting(false);
+      }
       localStorage.removeItem('zerodha_broker_id');
     }
   };
@@ -243,7 +262,7 @@ export function Brokers() {
   const handleReconnect = async (brokerId: string, brokerName: string) => {
     console.log('handleReconnect called with brokerId:', brokerId, 'brokerName:', brokerName);
     if (brokerName === 'zerodha') {
-      await handleZerodhaLogin(brokerId);
+      await handleZerodhaLogin(brokerId, true);
     }
   };
 
@@ -640,10 +659,20 @@ export function Brokers() {
                   </p>
                   <button
                     onClick={() => handleReconnect(broker.id, broker.broker_name)}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition text-sm"
+                    disabled={reconnectingBrokerId === broker.id}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <ExternalLink className="w-4 h-4" />
-                    Reconnect
+                    {reconnectingBrokerId === broker.id ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Connecting...
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink className="w-4 h-4" />
+                        Reconnect
+                      </>
+                    )}
                   </button>
                 </div>
               )}
@@ -652,15 +681,25 @@ export function Brokers() {
                 <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-xs text-red-800 mb-2 font-medium">
                     {isTokenExpired
-                      ? 'Zerodha tokens expire daily. Reconnect if you experience authentication issues.'
+                      ? 'Token expired. Please reconnect to continue trading.'
                       : 'Session expired. Please reconnect to continue trading.'}
                   </p>
                   <button
                     onClick={() => handleReconnect(broker.id, broker.broker_name)}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
+                    disabled={reconnectingBrokerId === broker.id}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <ExternalLink className="w-4 h-4" />
-                    Reconnect
+                    {reconnectingBrokerId === broker.id ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Connecting...
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink className="w-4 h-4" />
+                        Reconnect
+                      </>
+                    )}
                   </button>
                 </div>
               )}
