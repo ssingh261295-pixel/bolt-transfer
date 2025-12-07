@@ -93,7 +93,9 @@ function ProtectedLayout() {
 
 function AppContent() {
   const location = useLocation();
-  const isCallbackPage = location.pathname === '/zerodha-callback';
+  const searchParams = new URLSearchParams(location.search);
+  const hasRequestToken = searchParams.has('request_token');
+  const isCallbackPage = location.pathname === '/zerodha-callback' || (hasRequestToken && searchParams.get('status') === 'success');
 
   if (isCallbackPage) {
     return <ZerodhaCallback />;

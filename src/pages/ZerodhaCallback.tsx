@@ -91,7 +91,7 @@ export function ZerodhaCallback() {
           if (errorMsg.includes('Invalid checksum') || errorMsg.includes('Invalid API credentials')) {
             userFriendlyError = 'Invalid API credentials. Please verify your API Key and API Secret are correct.';
           } else if (errorMsg.includes('Token is invalid') || errorMsg.includes('request_token')) {
-            userFriendlyError = 'Authorization token expired or invalid. Please make sure your redirect URL in Kite Connect matches exactly: ' + window.location.origin + '/zerodha-callback';
+            userFriendlyError = 'Authorization token expired or invalid. Please make sure your redirect URL in Kite Connect matches exactly: ' + window.location.origin + '/';
           } else if (errorMsg.includes('missing') || errorMsg.includes('Missing')) {
             userFriendlyError = errorMsg;
           }
@@ -153,7 +153,7 @@ export function ZerodhaCallback() {
               <li>
                 <strong>Verify Redirect URL:</strong> In your Kite Connect app settings, the redirect URL must be exactly:
                 <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2 mt-1 font-mono text-xs break-all">
-                  {window.location.origin}/zerodha-callback
+                  {window.location.origin}/
                 </div>
               </li>
               <li>

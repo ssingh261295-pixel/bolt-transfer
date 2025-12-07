@@ -274,15 +274,15 @@ export function Brokers() {
                     <div>
                       <p className="text-xs font-medium mb-1">Option A: Production URL (Recommended)</p>
                       <div className="bg-white border border-blue-300 rounded px-3 py-2 font-mono text-xs break-all">
-                        https://your-domain.com/zerodha-callback
+                        https://your-domain.com/
                       </div>
-                      <p className="text-xs mt-1 text-blue-700">Use your deployed domain with /zerodha-callback path</p>
+                      <p className="text-xs mt-1 text-blue-700">Use your deployed domain with trailing slash</p>
                     </div>
 
                     <div>
                       <p className="text-xs font-medium mb-1">Option B: Local Development (127.0.0.1)</p>
                       <div className="bg-white border border-blue-300 rounded px-3 py-2 font-mono text-xs break-all">
-                        http://127.0.0.1:5173/zerodha-callback
+                        http://127.0.0.1:5173/
                       </div>
                       <p className="text-xs mt-1 text-blue-700">For local testing only. Must use 127.0.0.1, NOT localhost</p>
                     </div>
@@ -290,7 +290,7 @@ export function Brokers() {
                     <div>
                       <p className="text-xs font-medium mb-1">Your Current Redirect URL Should Be:</p>
                       <div className="bg-white border border-blue-300 rounded px-3 py-2 font-mono text-xs break-all text-blue-900">
-                        {window.location.origin}/zerodha-callback
+                        {window.location.origin}/
                       </div>
                       <p className="text-xs mt-1 text-green-700">Copy this exact URL to your Kite Connect app settings</p>
                     </div>
@@ -299,7 +299,7 @@ export function Brokers() {
                   <div className="bg-amber-50 border border-amber-300 rounded p-3 mt-3">
                     <p className="font-medium text-amber-900 text-xs mb-1">Important Notes:</p>
                     <ul className="text-amber-800 text-xs space-y-1 list-disc list-inside">
-                      <li>The redirect URL must end with <span className="font-mono font-bold">/zerodha-callback</span></li>
+                      <li>The redirect URL should be just your domain with a trailing slash <span className="font-mono font-bold">/</span></li>
                       <li>Zerodha does NOT accept preview/temporary URLs</li>
                       <li>The redirect URL must match EXACTLY what's registered in Kite Connect</li>
                       <li>After changing the redirect URL in Kite Connect, wait a few minutes before testing</li>
