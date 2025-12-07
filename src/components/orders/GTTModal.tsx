@@ -89,11 +89,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     }
   }, [isOpen, exchange]);
 
-  useEffect(() => {
-    if (!editingGTT && allBrokers && allBrokers.length > 0 && selectedBrokerIds.length === 0) {
-      setSelectedBrokerIds([allBrokers[0].id]);
-    }
-  }, [allBrokers]);
+  // Don't auto-select any account - let user choose
 
   useEffect(() => {
     const setupGTT = async () => {
@@ -230,11 +226,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     }
   }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT, positionData]);
 
-  // Re-calculate prefilled values when GTT type or transaction type changes (only if no prices are set yet)
+  // Re-calculate prefilled values when GTT type or transaction type changes
   useEffect(() => {
-    if (currentLTP && !editingGTT && !initialLTPCaptured && !triggerPrice1 && !triggerPrice2) {
-      prefillPricesBasedOnLTP(currentLTP);
-      setInitialLTPCaptured(true);
+    if (currentLTP && !editingGTT) {
+      // For two-leg, if target fields are empty but stoploss has value, fill target
+      if (gttType === 'two-leg' && !triggerPrice2) {
+        prefillPricesBasedOnLTP(currentLTP);
+      }
+      // For initial load when nothing is filled yet
+      else if (!initialLTPCaptured && !triggerPrice1 && !triggerPrice2) {
+        prefillPricesBasedOnLTP(currentLTP);
+        setInitialLTPCaptured(true);
+      }
     }
   }, [gttType, transactionType, currentLTP, editingGTT, initialLTPCaptured, triggerPrice1, triggerPrice2]);
 
