@@ -192,17 +192,14 @@ export function Brokers() {
         console.log('Full login URL:', data.login_url);
         console.log('URL length:', data.login_url.length);
         console.log('Current location:', window.location.href);
+        console.log('Attempting immediate redirect with window.location.replace()...');
 
-        try {
-          console.log('Attempting redirect...');
-          // Try multiple redirect methods as fallback
-          window.location.href = data.login_url;
-          console.log('window.location.href set successfully');
-        } catch (redirectError) {
-          console.error('Redirect error:', redirectError);
-          // Fallback: try window.open
-          window.open(data.login_url, '_self');
-        }
+        // Use replace() for immediate navigation without history entry
+        window.location.replace(data.login_url);
+
+        // This line should never execute due to navigation
+        console.log('WARNING: Code after redirect executed - this should not happen!');
+        return; // Explicit return to prevent any further execution
       } else {
         throw new Error('Failed to get login URL');
       }
