@@ -189,7 +189,12 @@ export function Brokers() {
 
       if (data.login_url) {
         console.log('Redirecting to:', data.login_url);
-        window.location.href = data.login_url;
+        console.log('About to redirect using window.location.href');
+
+        // Use a small delay to ensure state updates complete
+        setTimeout(() => {
+          window.location.href = data.login_url;
+        }, 100);
       } else {
         throw new Error('Failed to get login URL');
       }
@@ -206,9 +211,18 @@ export function Brokers() {
   };
 
   const handleReconnect = async (brokerId: string, brokerName: string) => {
-    console.log('handleReconnect called with brokerId:', brokerId, 'brokerName:', brokerName);
+    console.log('=== RECONNECT CLICKED ===');
+    console.log('Broker ID:', brokerId);
+    console.log('Broker Name:', brokerName);
+    console.log('Session available:', !!session);
+    console.log('Session access token:', !!session?.access_token);
+
     if (brokerName === 'zerodha') {
+      console.log('Calling handleZerodhaLogin...');
       await handleZerodhaLogin(brokerId, true);
+      console.log('handleZerodhaLogin completed');
+    } else {
+      console.log('Not a Zerodha broker, skipping');
     }
   };
 
@@ -517,6 +531,12 @@ export function Brokers() {
         </div>
       )}
 
+      {error && !showAddForm && !editingBroker && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {brokers.map((broker) => {
           const brokerInfo = brokerOptions.find((b) => b.value === broker.broker_name);
@@ -605,7 +625,11 @@ export function Brokers() {
                     Zerodha tokens expire daily. Reconnect if you experience authentication issues.
                   </p>
                   <button
-                    onClick={() => handleReconnect(broker.id, broker.broker_name)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleReconnect(broker.id, broker.broker_name);
+                    }}
                     disabled={reconnectingBrokerId === broker.id}
                     className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -632,7 +656,11 @@ export function Brokers() {
                       : 'Session expired. Please reconnect to continue trading.'}
                   </p>
                   <button
-                    onClick={() => handleReconnect(broker.id, broker.broker_name)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleReconnect(broker.id, broker.broker_name);
+                    }}
                     disabled={reconnectingBrokerId === broker.id}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
