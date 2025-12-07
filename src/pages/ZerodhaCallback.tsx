@@ -83,10 +83,23 @@ export function ZerodhaCallback() {
           localStorage.removeItem('zerodha_broker_id');
           redirectToBrokers(2000);
         } else {
-          setStatus(data.error || 'Failed to complete connection');
+          const errorMsg = data.error || 'Failed to complete connection';
+          console.error('Connection failed with error:', errorMsg);
+          console.error('Full response:', data);
+
+          let userFriendlyError = errorMsg;
+          if (errorMsg.includes('Invalid checksum') || errorMsg.includes('Invalid API credentials')) {
+            userFriendlyError = 'Invalid API credentials. Please verify your API Key and API Secret are correct.';
+          } else if (errorMsg.includes('Token is invalid') || errorMsg.includes('request_token')) {
+            userFriendlyError = 'Authorization token expired or invalid. Please make sure your redirect URL in Kite Connect matches exactly: ' + window.location.origin + '/zerodha-callback';
+          } else if (errorMsg.includes('missing') || errorMsg.includes('Missing')) {
+            userFriendlyError = errorMsg;
+          }
+
+          setStatus(userFriendlyError);
           setIsSuccess(false);
           localStorage.removeItem('zerodha_broker_id');
-          redirectToBrokers(3000);
+          redirectToBrokers(5000);
         }
       } catch (error: any) {
         console.error('Callback error:', error);
@@ -107,29 +120,54 @@ export function ZerodhaCallback() {
   }, [session, loading, navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
-        {isSuccess === null && (
-          <Loader2 className="w-16 h-16 text-blue-600 animate-spin mx-auto mb-4" />
-        )}
-        {isSuccess === true && (
-          <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-        )}
-        {isSuccess === false && (
-          <XCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
-        )}
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="bg-white rounded-xl shadow-lg p-8 max-w-2xl w-full">
+        <div className="text-center">
+          {isSuccess === null && (
+            <Loader2 className="w-16 h-16 text-blue-600 animate-spin mx-auto mb-4" />
+          )}
+          {isSuccess === true && (
+            <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+          )}
+          {isSuccess === false && (
+            <XCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
+          )}
 
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          {isSuccess === null && 'Connecting to Zerodha'}
-          {isSuccess === true && 'Connection Successful'}
-          {isSuccess === false && 'Connection Failed'}
-        </h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            {isSuccess === null && 'Connecting to Zerodha'}
+            {isSuccess === true && 'Connection Successful'}
+            {isSuccess === false && 'Connection Failed'}
+          </h2>
 
-        <p className="text-gray-600 mb-4">{status}</p>
+          <p className="text-gray-600 mb-4">{status}</p>
 
-        <div className="text-sm text-gray-500">
-          Redirecting to brokers page...
+          <div className="text-sm text-gray-500">
+            Redirecting to brokers page...
+          </div>
         </div>
+
+        {isSuccess === false && (
+          <div className="mt-6 pt-6 border-t border-gray-200 text-left">
+            <h3 className="font-semibold text-gray-900 mb-3">Troubleshooting Steps:</h3>
+            <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
+              <li>
+                <strong>Verify Redirect URL:</strong> In your Kite Connect app settings, the redirect URL must be exactly:
+                <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2 mt-1 font-mono text-xs break-all">
+                  {window.location.origin}/zerodha-callback
+                </div>
+              </li>
+              <li>
+                <strong>Check API Credentials:</strong> Make sure your API Key and API Secret from Kite Connect are entered correctly (no extra spaces).
+              </li>
+              <li>
+                <strong>Token Expiry:</strong> If you took too long to authorize, the request token may have expired. Try reconnecting again.
+              </li>
+              <li>
+                <strong>Console Logs:</strong> Open browser console (F12) to see detailed error messages.
+              </li>
+            </ol>
+          </div>
+        )}
       </div>
     </div>
   );
