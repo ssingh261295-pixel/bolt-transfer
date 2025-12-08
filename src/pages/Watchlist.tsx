@@ -13,6 +13,7 @@ export function Watchlist() {
   const [selectedWatchlist, setSelectedWatchlist] = useState<any>(null);
   const [formData, setFormData] = useState({ name: '' });
   const [brokerId, setBrokerId] = useState<string>('');
+  const [brokers, setBrokers] = useState<any[]>([]);
   const [showAddInstrument, setShowAddInstrument] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -57,13 +58,14 @@ export function Watchlist() {
   const loadBrokerConnection = async () => {
     const { data } = await supabase
       .from('broker_connections')
-      .select('id')
+      .select('*')
       .eq('user_id', user?.id)
       .eq('is_active', true)
-      .single();
+      .eq('broker_name', 'zerodha');
 
-    if (data) {
-      setBrokerId(data.id);
+    if (data && data.length > 0) {
+      setBrokers(data);
+      setBrokerId(data[0].id);
     }
   };
 
@@ -624,10 +626,10 @@ export function Watchlist() {
             setShowGTTModal(false);
             setGttDefaults({});
           }}
-          brokerConnectionId="all"
+          brokerConnectionId={brokerId || 'all'}
           initialSymbol={gttDefaults.symbol}
           initialExchange={gttDefaults.exchange}
-          allBrokers={[]}
+          allBrokers={brokers}
         />
       )}
     </div>

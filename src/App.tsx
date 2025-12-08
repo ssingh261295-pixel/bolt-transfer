@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { supabase } from './lib/supabase';
 import { AuthPage } from './pages/AuthPage';
 import { Dashboard } from './pages/Dashboard';
 import { Brokers } from './pages/Brokers';
@@ -24,6 +25,28 @@ function ProtectedLayout() {
   const [showGTTModal, setShowGTTModal] = useState(false);
   const [orderDefaults, setOrderDefaults] = useState<any>({});
   const [gttDefaults, setGttDefaults] = useState<any>({});
+  const [brokers, setBrokers] = useState<any[]>([]);
+  const [brokerId, setBrokerId] = useState<string>('');
+
+  useEffect(() => {
+    if (user) {
+      loadBrokers();
+    }
+  }, [user]);
+
+  const loadBrokers = async () => {
+    const { data } = await supabase
+      .from('broker_connections')
+      .select('*')
+      .eq('user_id', user?.id)
+      .eq('is_active', true)
+      .eq('broker_name', 'zerodha');
+
+    if (data && data.length > 0) {
+      setBrokers(data);
+      setBrokerId(data[0].id);
+    }
+  };
 
   if (loading) {
     return (
@@ -111,10 +134,10 @@ function ProtectedLayout() {
             setShowGTTModal(false);
             setGttDefaults({});
           }}
-          brokerConnectionId="all"
+          brokerConnectionId={brokerId || 'all'}
           initialSymbol={gttDefaults.symbol}
           initialExchange={gttDefaults.exchange}
-          allBrokers={[]}
+          allBrokers={brokers}
         />
       )}
     </div>
