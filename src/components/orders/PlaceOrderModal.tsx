@@ -8,10 +8,13 @@ import { GTTModal } from './GTTModal';
 interface PlaceOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess?: () => void;
+  initialSymbol?: string;
+  initialExchange?: string;
+  initialTransactionType?: 'BUY' | 'SELL';
 }
 
-export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalProps) {
+export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, initialExchange, initialTransactionType }: PlaceOrderModalProps) {
   const { user, session } = useAuth();
   const { placeOrder, loading, error } = useZerodha();
   const [brokers, setBrokers] = useState<any[]>([]);
@@ -40,9 +43,9 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
     if (isOpen && user) {
       loadBrokers();
       setFormData({
-        symbol: '',
-        exchange: 'NFO',
-        transaction_type: 'BUY',
+        symbol: initialSymbol || '',
+        exchange: initialExchange || 'NFO',
+        transaction_type: initialTransactionType || 'BUY',
         quantity: 1,
         order_type: 'MARKET',
         product: 'NRML',
@@ -55,7 +58,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess }: PlaceOrderModalP
       setSelectedInstrument(null);
       setOrderErrors([]);
     }
-  }, [isOpen, user]);
+  }, [isOpen, user, initialSymbol, initialExchange, initialTransactionType]);
 
   useEffect(() => {
     if (formData.exchange && selectedBrokerIds.length > 0 && !searchLoading) {

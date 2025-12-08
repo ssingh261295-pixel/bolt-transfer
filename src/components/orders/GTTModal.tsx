@@ -202,31 +202,25 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     setupGTT();
   }, [editingGTT, isOpen, initialSymbol, initialExchange, positionData]);
 
-  // Fetch LTP when symbol is pre-filled from position
+  // Fetch LTP when symbol is pre-filled from position or watchlist
   useEffect(() => {
-    if (isOpen && initialSymbol && !editingGTT && instruments.length > 0) {
+    if (isOpen && initialSymbol && !editingGTT && instruments.length > 0 && !selectedInstrument) {
       const instrument = instruments.find(
         (i) => i.tradingsymbol === initialSymbol
       );
       if (instrument) {
-        setSelectedInstrument(instrument);
+        // Use selectInstrument to properly set tick_size and other data
+        selectInstrument(instrument);
 
-        const lotSize = parseInt(instrument.lot_size) || 1;
-        const qty = positionData?.quantity || lotSize;
-        setQuantity1(qty);
-        setQuantity2(qty);
-
-        if (instrument.instrument_token) {
-          // Fetch LTP and prefill immediately without blocking
-          fetchLTP(instrument.instrument_token, instrument.tradingsymbol, initialExchange || exchange).then(ltp => {
-            if (ltp) {
-              prefillPricesBasedOnLTP(ltp);
-            }
-          }).catch(console.error);
+        // Set quantity based on position data if available
+        if (positionData?.quantity) {
+          const qty = positionData.quantity;
+          setQuantity1(qty);
+          setQuantity2(qty);
         }
       }
     }
-  }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT, positionData]);
+  }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT, positionData, selectedInstrument]);
 
   // Re-calculate prefilled values when GTT type or transaction type changes
   useEffect(() => {

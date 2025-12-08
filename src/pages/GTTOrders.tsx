@@ -448,7 +448,11 @@ export function GTTOrders() {
 
       {loading ? (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <div className="text-gray-600">Loading GTT orders...</div>
+          <div className="flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className="text-gray-600 font-medium">Loading GTT orders...</div>
+            <div className="text-sm text-gray-500">Fetching data from Zerodha</div>
+          </div>
         </div>
       ) : !selectedBrokerId ? (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
