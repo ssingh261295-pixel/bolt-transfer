@@ -3,6 +3,8 @@ import { Plus, List, Trash2, Eye, Activity, Search, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
+import { PlaceOrderModal } from '../components/orders/PlaceOrderModal';
+import { GTTModal } from '../components/orders/GTTModal';
 
 export function Watchlist() {
   const { user } = useAuth();
@@ -19,6 +21,10 @@ export function Watchlist() {
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [showGTTModal, setShowGTTModal] = useState(false);
+  const [orderDefaults, setOrderDefaults] = useState<any>({});
+  const [gttDefaults, setGttDefaults] = useState<any>({});
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(brokerId);
 
@@ -240,6 +246,35 @@ export function Watchlist() {
     if (!error) {
       loadWatchlists();
     }
+  };
+
+  const handleBuyClick = (symbol: string, exchange: string, token: number) => {
+    setOrderDefaults({
+      symbol,
+      exchange,
+      instrumentToken: token,
+      transactionType: 'BUY'
+    });
+    setShowOrderModal(true);
+  };
+
+  const handleSellClick = (symbol: string, exchange: string, token: number) => {
+    setOrderDefaults({
+      symbol,
+      exchange,
+      instrumentToken: token,
+      transactionType: 'SELL'
+    });
+    setShowOrderModal(true);
+  };
+
+  const handleGTTClick = (symbol: string, exchange: string, token: number) => {
+    setGttDefaults({
+      symbol,
+      exchange,
+      instrumentToken: token
+    });
+    setShowGTTModal(true);
   };
 
   return (
@@ -470,7 +505,7 @@ export function Watchlist() {
                           <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">High</th>
                           <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Low</th>
                           <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Volume</th>
-                          <th className="py-2 px-3"></th>
+                          <th className="text-center py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -519,14 +554,37 @@ export function Watchlist() {
                             <td className="py-3 px-3 text-right">
                               <p className="text-sm text-gray-600">{tick?.volume_traded ? tick.volume_traded.toLocaleString() : '-'}</p>
                             </td>
-                            <td className="py-3 px-3 text-right">
-                              <button
-                                onClick={() => removeInstrumentFromWatchlist(symbol.instrument_token)}
-                                className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
-                                title="Remove"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
+                            <td className="py-3 px-3">
+                              <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition">
+                                <button
+                                  onClick={() => handleBuyClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
+                                  className="px-3 py-1 text-xs font-semibold bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                                  title="Buy"
+                                >
+                                  B
+                                </button>
+                                <button
+                                  onClick={() => handleSellClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
+                                  className="px-3 py-1 text-xs font-semibold bg-red-600 text-white rounded hover:bg-red-700 transition"
+                                  title="Sell"
+                                >
+                                  S
+                                </button>
+                                <button
+                                  onClick={() => handleGTTClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
+                                  className="px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 rounded transition"
+                                  title="GTT"
+                                >
+                                  GTT
+                                </button>
+                                <button
+                                  onClick={() => removeInstrumentFromWatchlist(symbol.instrument_token)}
+                                  className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                  title="Remove"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -544,6 +602,33 @@ export function Watchlist() {
             </div>
           ) : null}
         </div>
+      )}
+
+      {showOrderModal && (
+        <PlaceOrderModal
+          isOpen={showOrderModal}
+          onClose={() => {
+            setShowOrderModal(false);
+            setOrderDefaults({});
+          }}
+          initialSymbol={orderDefaults.symbol}
+          initialExchange={orderDefaults.exchange}
+          initialTransactionType={orderDefaults.transactionType}
+        />
+      )}
+
+      {showGTTModal && (
+        <GTTModal
+          isOpen={showGTTModal}
+          onClose={() => {
+            setShowGTTModal(false);
+            setGttDefaults({});
+          }}
+          brokerConnectionId="all"
+          initialSymbol={gttDefaults.symbol}
+          initialExchange={gttDefaults.exchange}
+          allBrokers={[]}
+        />
       )}
     </div>
   );

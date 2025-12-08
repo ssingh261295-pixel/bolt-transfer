@@ -18,9 +18,10 @@ interface WatchlistItem {
 interface WatchlistSidebarProps {
   onBuyClick: (symbol: string, exchange: string, token: number) => void;
   onSellClick: (symbol: string, exchange: string, token: number) => void;
+  onGTTClick: (symbol: string, exchange: string, token: number) => void;
 }
 
-export default function WatchlistSidebar({ onBuyClick, onSellClick }: WatchlistSidebarProps) {
+export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }: WatchlistSidebarProps) {
   const { user } = useAuth();
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -214,6 +215,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick }: WatchlistS
                           S
                         </button>
                         <button
+                          onClick={() => onGTTClick(item.tradingsymbol, item.exchange, item.instrument_token)}
                           className="px-2 py-1 hover:bg-gray-200 rounded transition-colors"
                           title="GTT"
                         >

@@ -64,12 +64,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
   const [currentLTP, setCurrentLTP] = useState<number | null>(null);
   const [fetchingLTP, setFetchingLTP] = useState(false);
   const [initialLTPCaptured, setInitialLTPCaptured] = useState(false);
+  const [tickSize, setTickSize] = useState<number>(0.05);
 
-  // Round price to proper tick size (0.05)
+  // Round price to proper tick size based on instrument
   const roundToTickSize = (price: number): string => {
-    const tickSize = 0.05;
     const rounded = Math.round(price / tickSize) * tickSize;
-    return rounded.toFixed(2);
+    // Calculate decimal places based on tick size
+    const decimalPlaces = tickSize < 1 ? Math.max(0, -Math.floor(Math.log10(tickSize))) : 0;
+    return rounded.toFixed(decimalPlaces);
   };
 
   // Validate price input to only allow valid tick sizes
@@ -457,6 +459,15 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
     const lotSize = parseInt(instrument.lot_size) || 1;
     setQuantity1(lotSize);
     setQuantity2(lotSize);
+
+    // Set tick size from instrument data
+    const instrumentTickSize = parseFloat(instrument.tick_size);
+    if (!isNaN(instrumentTickSize) && instrumentTickSize > 0) {
+      setTickSize(instrumentTickSize);
+    } else {
+      setTickSize(0.05); // Default fallback
+    }
+
     setShowSuggestions(false);
     setFilteredInstruments([]);
 

@@ -15,12 +15,15 @@ import { AdminPanel } from './pages/AdminPanel';
 import TopNavigation from './components/layout/TopNavigation';
 import WatchlistSidebar from './components/layout/WatchlistSidebar';
 import { PlaceOrderModal } from './components/orders/PlaceOrderModal';
+import { GTTModal } from './components/orders/GTTModal';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
   const location = useLocation();
   const [showOrderModal, setShowOrderModal] = useState(false);
+  const [showGTTModal, setShowGTTModal] = useState(false);
   const [orderDefaults, setOrderDefaults] = useState<any>({});
+  const [gttDefaults, setGttDefaults] = useState<any>({});
 
   if (loading) {
     return (
@@ -54,11 +57,24 @@ function ProtectedLayout() {
     setShowOrderModal(true);
   };
 
+  const handleGTTClick = (symbol: string, exchange: string, token: number) => {
+    setGttDefaults({
+      symbol,
+      exchange,
+      instrumentToken: token
+    });
+    setShowGTTModal(true);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <TopNavigation />
       <div className="flex flex-1 overflow-hidden">
-        <WatchlistSidebar onBuyClick={handleBuyClick} onSellClick={handleSellClick} />
+        <WatchlistSidebar
+          onBuyClick={handleBuyClick}
+          onSellClick={handleSellClick}
+          onGTTClick={handleGTTClick}
+        />
         <main className="flex-1 overflow-y-auto p-6">
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
@@ -85,6 +101,20 @@ function ProtectedLayout() {
           initialSymbol={orderDefaults.symbol}
           initialExchange={orderDefaults.exchange}
           initialTransactionType={orderDefaults.transactionType}
+        />
+      )}
+
+      {showGTTModal && (
+        <GTTModal
+          isOpen={showGTTModal}
+          onClose={() => {
+            setShowGTTModal(false);
+            setGttDefaults({});
+          }}
+          brokerConnectionId="all"
+          initialSymbol={gttDefaults.symbol}
+          initialExchange={gttDefaults.exchange}
+          allBrokers={[]}
         />
       )}
     </div>
