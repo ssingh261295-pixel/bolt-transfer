@@ -31,12 +31,12 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
   const baseMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'brokers', label: 'Brokers', icon: LinkIcon },
     { id: 'strategies', label: 'Strategies', icon: TrendingUp },
     { id: 'orders', label: 'Orders', icon: ShoppingCart },
     { id: 'gtt', label: 'GTT Orders', icon: Target },
     { id: 'positions', label: 'Positions', icon: LineChart },
     { id: 'watchlist', label: 'Watchlist', icon: List },
+    { id: 'brokers', label: 'Brokers', icon: LinkIcon },
   ];
 
   const adminMenuItem = { id: 'admin', label: 'Admin Panel', icon: Shield };

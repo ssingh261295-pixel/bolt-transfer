@@ -13,6 +13,7 @@ export function GTTOrders() {
   const [gttOrders, setGttOrders] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
   const [selectedBrokerId, setSelectedBrokerId] = useState<string>('all');
+  const [selectedInstrument, setSelectedInstrument] = useState<string>('all');
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBrokerId !== 'all' ? selectedBrokerId : brokers[0]?.id);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -219,11 +220,19 @@ export function GTTOrders() {
     });
   };
 
+  const uniqueInstruments = Array.from(
+    new Set(gttOrders.map(order => order.condition?.tradingsymbol).filter(Boolean))
+  ).sort();
+
+  const filteredGttOrders = selectedInstrument === 'all'
+    ? gttOrders
+    : gttOrders.filter(order => order.condition?.tradingsymbol === selectedInstrument);
+
   const toggleSelectAll = () => {
-    if (selectedOrders.size === gttOrders.length) {
+    if (selectedOrders.size === filteredGttOrders.length) {
       setSelectedOrders(new Set());
     } else {
-      setSelectedOrders(new Set(gttOrders.map(order => order.id.toString())));
+      setSelectedOrders(new Set(filteredGttOrders.map(order => order.id.toString())));
     }
   };
 
@@ -368,7 +377,7 @@ export function GTTOrders() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">GTT ({gttOrders.length})</h2>
+          <h2 className="text-2xl font-bold text-gray-900">GTT ({filteredGttOrders.length})</h2>
           {isConnected && (
             <div className="flex items-center gap-1.5 mt-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs w-fit">
               <Activity className="w-3 h-3 animate-pulse" />
@@ -388,6 +397,20 @@ export function GTTOrders() {
                 <option key={broker.id} value={broker.id}>
                   {broker.account_holder_name || broker.account_name || 'Account'}
                   {broker.client_id && ` (${broker.client_id})`}
+                </option>
+              ))}
+            </select>
+          )}
+          {uniqueInstruments.length > 0 && (
+            <select
+              value={selectedInstrument}
+              onChange={(e) => setSelectedInstrument(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+            >
+              <option value="all">All Instruments</option>
+              {uniqueInstruments.map((instrument) => (
+                <option key={instrument} value={instrument}>
+                  {instrument}
                 </option>
               ))}
             </select>
@@ -472,7 +495,7 @@ export function GTTOrders() {
                 <th className="px-4 py-3 text-center w-12">
                   <input
                     type="checkbox"
-                    checked={selectedOrders.size === gttOrders.length && gttOrders.length > 0}
+                    checked={selectedOrders.size === filteredGttOrders.length && filteredGttOrders.length > 0}
                     onChange={toggleSelectAll}
                     className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                   />
@@ -533,7 +556,7 @@ export function GTTOrders() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {gttOrders.map((gtt) => {
+              {filteredGttOrders.map((gtt) => {
                 const isOCO = gtt.type === 'two-leg';
                 const transactionType = gtt.orders?.[0]?.transaction_type;
                 const quantity = gtt.orders?.[0]?.quantity || 0;
