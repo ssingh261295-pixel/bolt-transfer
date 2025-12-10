@@ -191,7 +191,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
               return (
                 <div
                   key={item.id}
-                  className="px-3 py-2 hover:bg-blue-50 cursor-pointer relative group transition-colors border-b border-gray-100 min-h-[44px]"
+                  className="px-3 py-2 cursor-pointer relative group border-b border-gray-100 min-h-[44px]"
                   onMouseEnter={() => setHoveredItem(item.id)}
                   onMouseLeave={() => setHoveredItem(null)}
                 >
@@ -216,10 +216,10 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
                         </button>
                         <button
                           onClick={() => onGTTClick(item.tradingsymbol, item.exchange, item.instrument_token)}
-                          className="px-2 py-1 hover:bg-gray-200 rounded transition-colors"
+                          className="px-2.5 py-1 bg-gray-600 text-white text-xs font-semibold rounded hover:bg-gray-700 transition-colors"
                           title="GTT"
                         >
-                          <span className="text-xs font-medium text-gray-700">GTT</span>
+                          G
                         </button>
                         <button
                           onClick={() => removeFromWatchlist(item.id)}

@@ -35,11 +35,11 @@ export default function TopNavigation() {
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard' },
+    { label: 'Brokers', path: '/brokers' },
     { label: 'Orders', path: '/orders' },
     { label: 'Positions', path: '/positions' },
     { label: 'Watchlist', path: '/watchlist' },
     { label: 'GTT', path: '/gtt' },
-    { label: 'Brokers', path: '/brokers' },
     { label: 'Strategies', path: '/strategies' },
   ];
 
