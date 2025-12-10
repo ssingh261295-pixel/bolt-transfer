@@ -675,8 +675,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[92vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-3 py-2.5 flex items-center justify-between z-10">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl h-[85vh] flex flex-col">
+        <div className="bg-white border-b border-gray-200 px-3 py-2.5 flex items-center justify-between flex-shrink-0">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">
               {editingGTT ? 'Edit GTT Order' : 'New GTT Order'}
@@ -710,8 +710,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-3 space-y-3">
-          <div className="min-h-[40px]">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-xs">
                 {error}
@@ -723,7 +723,6 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                 GTT order {editingGTT ? 'updated' : 'created'} successfully!
               </div>
             )}
-          </div>
 
           {/* Multi-Account Selection */}
           {!editingGTT && allBrokers && allBrokers.length > 0 && (
@@ -1261,9 +1260,10 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
               </div>
             </div>
           )}
+          </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between pt-2.5 border-t border-gray-200">
+          <div className="flex items-center justify-between px-3 py-2.5 border-t border-gray-200 flex-shrink-0 bg-white">
             <div className="text-xs text-gray-600">
               By {editingGTT ? 'modifying' : 'creating'}, I agree that trigger executions are not guaranteed.
             </div>
