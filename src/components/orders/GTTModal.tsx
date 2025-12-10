@@ -932,10 +932,10 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
               </div>
             </div>
 
-            <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-3 items-start">
+            <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-2 items-start">
               {/* Trigger Price */}
               <div>
-                <label className="block text-sm text-gray-700 mb-1.5">Trigger price</label>
+                <label className="block text-xs text-gray-700 mb-1">Trigger price</label>
                 <input
                   type="number"
                   step="0.05"
@@ -964,11 +964,11 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                       e.currentTarget.blur();
                     }
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="0.00"
                   required
                 />
-                <div className="flex items-center gap-1 mt-1 min-h-[24px]">
+                <div className="flex items-center gap-1 mt-0.5 min-h-[20px]">
                   {currentLTP && (
                     <>
                       <input
@@ -992,18 +992,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
               </div>
 
               {/* Arrow */}
-              <div className="flex items-center pt-7 text-gray-400 text-sm">
+              <div className="flex items-center pt-6 text-gray-400 text-sm">
                 →
               </div>
 
               {/* Quantity */}
               <div>
-                <label className="block text-sm text-gray-700 mb-1.5">Qty.</label>
+                <label className="block text-xs text-gray-700 mb-1">Qty.</label>
                 <input
                   type="number"
                   value={quantity1}
                   onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   min={selectedInstrument?.lot_size || 1}
                   step={selectedInstrument?.lot_size || 1}
                   required
@@ -1011,13 +1011,13 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
               </div>
 
               {/* Arrow */}
-              <div className="flex items-center pt-7 text-gray-400 text-sm">
+              <div className="flex items-center pt-6 text-gray-400 text-sm">
                 →
               </div>
 
               {/* Price */}
               <div>
-                <label className="block text-sm text-gray-700 mb-1.5">Price</label>
+                <label className="block text-xs text-gray-700 mb-1">Price</label>
                 <input
                   type="number"
                   step="0.05"
@@ -1046,11 +1046,11 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                       e.currentTarget.blur();
                     }
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="0.00"
                   required
                 />
-                <div className="flex items-center gap-1 mt-1 min-h-[24px]">
+                <div className="flex items-center gap-1 mt-0.5 min-h-[20px]">
                   {currentLTP && (
                     <>
                       <input
@@ -1118,10 +1118,10 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                 </div>
               </div>
 
-              <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-3 items-start">
+              <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-2 items-start">
                 {/* Trigger Price */}
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">Trigger price</label>
+                  <label className="block text-xs text-gray-700 mb-1">Trigger price</label>
                   <input
                     type="number"
                     step="0.05"
@@ -1150,11 +1150,11 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                         e.currentTarget.blur();
                       }
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     placeholder="0.00"
                     required
                   />
-                  <div className="flex items-center gap-1 mt-1 min-h-[24px]">
+                  <div className="flex items-center gap-1 mt-0.5 min-h-[20px]">
                     {currentLTP && (
                       <>
                         <input
@@ -1178,18 +1178,18 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                 </div>
 
                 {/* Arrow */}
-                <div className="flex items-center pt-7 text-gray-400 text-sm">
+                <div className="flex items-center pt-6 text-gray-400 text-sm">
                   →
                 </div>
 
                 {/* Quantity */}
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">Qty.</label>
+                  <label className="block text-xs text-gray-700 mb-1">Qty.</label>
                   <input
                     type="number"
                     value={quantity2}
                     onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     min={selectedInstrument?.lot_size || 1}
                     step={selectedInstrument?.lot_size || 1}
                     required
@@ -1197,13 +1197,13 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                 </div>
 
                 {/* Arrow */}
-                <div className="flex items-center pt-7 text-gray-400 text-sm">
+                <div className="flex items-center pt-6 text-gray-400 text-sm">
                   →
                 </div>
 
                 {/* Price */}
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1.5">Price</label>
+                  <label className="block text-xs text-gray-700 mb-1">Price</label>
                   <input
                     type="number"
                     step="0.05"
@@ -1232,11 +1232,11 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                         e.currentTarget.blur();
                       }
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     placeholder="0.00"
                     required
                   />
-                  <div className="flex items-center gap-1 mt-1 min-h-[24px]">
+                  <div className="flex items-center gap-1 mt-0.5 min-h-[20px]">
                     {currentLTP && (
                       <>
                         <input

@@ -198,7 +198,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
                   {hoveredItem === item.id ? (
                     // Hover state: Show action buttons in single row (Zerodha style)
                     <div className="flex items-center justify-between gap-2 h-[28px]">
-                      <div className="font-medium text-sm text-gray-900 truncate flex-1 min-w-0">
+                      <div className="font-medium text-[13px] text-gray-900 truncate flex-1 min-w-0">
                         {item.tradingsymbol}
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
