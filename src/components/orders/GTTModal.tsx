@@ -675,7 +675,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl h-[85vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl h-[95vh] flex flex-col">
         <div className="bg-white border-b border-gray-200 px-3 py-2.5 flex items-center justify-between flex-shrink-0">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">
@@ -967,26 +967,23 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   placeholder="0.00"
                   required
                 />
-                <div className="flex items-center gap-1 mt-0.5 min-h-[20px]">
-                  {currentLTP && (
-                    <>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={triggerPercent1}
-                        onChange={(e) => {
-                          setTriggerPercent1(e.target.value);
-                          if (currentLTP && e.target.value) {
-                            const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
-                            setTriggerPrice1(price);
-                          }
-                        }}
-                        className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                        placeholder="0"
-                      />
-                      <span className="text-xs text-gray-500">% of LTP</span>
-                    </>
-                  )}
+                <div className="flex items-center gap-1 mt-0.5">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={triggerPercent1}
+                    onChange={(e) => {
+                      setTriggerPercent1(e.target.value);
+                      if (currentLTP && e.target.value) {
+                        const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
+                        setTriggerPrice1(price);
+                      }
+                    }}
+                    disabled={!currentLTP}
+                    className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
+                    placeholder="0"
+                  />
+                  <span className="text-xs text-gray-500">% of LTP</span>
                 </div>
               </div>
 
@@ -1049,26 +1046,23 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   placeholder="0.00"
                   required
                 />
-                <div className="flex items-center gap-1 mt-0.5 min-h-[20px]">
-                  {currentLTP && (
-                    <>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={pricePercent1}
-                        onChange={(e) => {
-                          setPricePercent1(e.target.value);
-                          if (currentLTP && e.target.value) {
-                            const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
-                            setPrice1(price);
-                          }
-                        }}
-                        className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                        placeholder="0"
-                      />
-                      <span className="text-xs text-gray-500">% of LTP</span>
-                    </>
-                  )}
+                <div className="flex items-center gap-1 mt-0.5">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={pricePercent1}
+                    onChange={(e) => {
+                      setPricePercent1(e.target.value);
+                      if (currentLTP && e.target.value) {
+                        const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
+                        setPrice1(price);
+                      }
+                    }}
+                    disabled={!currentLTP}
+                    className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
+                    placeholder="0"
+                  />
+                  <span className="text-xs text-gray-500">% of LTP</span>
                 </div>
               </div>
             </div>
@@ -1153,26 +1147,23 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     placeholder="0.00"
                     required
                   />
-                  <div className="flex items-center gap-1 mt-0.5 min-h-[20px]">
-                    {currentLTP && (
-                      <>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={triggerPercent2}
-                          onChange={(e) => {
-                            setTriggerPercent2(e.target.value);
-                            if (currentLTP && e.target.value) {
-                              const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
-                              setTriggerPrice2(price);
-                            }
-                          }}
-                          className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                          placeholder="0"
-                        />
-                        <span className="text-xs text-gray-500">% of LTP</span>
-                      </>
-                    )}
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={triggerPercent2}
+                      onChange={(e) => {
+                        setTriggerPercent2(e.target.value);
+                        if (currentLTP && e.target.value) {
+                          const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
+                          setTriggerPrice2(price);
+                        }
+                      }}
+                      disabled={!currentLTP}
+                      className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
+                      placeholder="0"
+                    />
+                    <span className="text-xs text-gray-500">% of LTP</span>
                   </div>
                 </div>
 
@@ -1235,26 +1226,23 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                     placeholder="0.00"
                     required
                   />
-                  <div className="flex items-center gap-1 mt-0.5 min-h-[20px]">
-                    {currentLTP && (
-                      <>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={pricePercent2}
-                          onChange={(e) => {
-                            setPricePercent2(e.target.value);
-                            if (currentLTP && e.target.value) {
-                              const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
-                              setPrice2(price);
-                            }
-                          }}
-                          className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                          placeholder="0"
-                        />
-                        <span className="text-xs text-gray-500">% of LTP</span>
-                      </>
-                    )}
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={pricePercent2}
+                      onChange={(e) => {
+                        setPricePercent2(e.target.value);
+                        if (currentLTP && e.target.value) {
+                          const price = roundToTickSize(currentLTP * (1 + parseFloat(e.target.value) / 100));
+                          setPrice2(price);
+                        }
+                      }}
+                      disabled={!currentLTP}
+                      className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
+                      placeholder="0"
+                    />
+                    <span className="text-xs text-gray-500">% of LTP</span>
                   </div>
                 </div>
               </div>
