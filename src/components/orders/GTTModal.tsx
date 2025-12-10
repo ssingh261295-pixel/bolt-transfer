@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 interface GTTModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
   brokerConnectionId: string;
   editingGTT?: any;
   orderId?: string;
@@ -22,7 +23,7 @@ interface GTTModalProps {
   };
 }
 
-export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, initialSymbol, initialExchange, allBrokers, positionData }: GTTModalProps) {
+export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editingGTT, initialSymbol, initialExchange, allBrokers, positionData }: GTTModalProps) {
   const { session } = useAuth();
   const [symbol, setSymbol] = useState(initialSymbol || '');
   const [exchange, setExchange] = useState(initialExchange || 'NFO');
@@ -660,6 +661,9 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
       }
 
       setSuccess(true);
+      if (onSuccess) {
+        onSuccess();
+      }
       setTimeout(() => {
         onClose();
       }, 1500);

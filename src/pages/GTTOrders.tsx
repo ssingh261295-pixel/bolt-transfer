@@ -79,10 +79,12 @@ export function GTTOrders() {
     }
   };
 
-  const loadGTTOrders = async (throwOnError = false) => {
+  const loadGTTOrders = async (throwOnError = false, silent = false) => {
     if (!selectedBrokerId || brokers.length === 0) return;
 
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       if (selectedBrokerId === 'all') {
         const fetchPromises = brokers.map(async (broker) => {
@@ -151,7 +153,9 @@ export function GTTOrders() {
       if (throwOnError) throw err;
       setGttOrders([]);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -697,7 +701,9 @@ export function GTTOrders() {
           onClose={() => {
             setShowCreateModal(false);
             setEditingGTT(null);
-            handleSync();
+          }}
+          onSuccess={() => {
+            loadGTTOrders(false, true);
           }}
           brokerConnectionId={selectedBrokerId}
           editingGTT={editingGTT}
