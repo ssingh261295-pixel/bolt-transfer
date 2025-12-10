@@ -675,8 +675,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[92vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-3 py-2.5 flex items-center justify-between z-10">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">
               {editingGTT ? 'Edit GTT Order' : 'New GTT Order'}
@@ -710,16 +710,16 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          <div className="min-h-[52px]">
+        <form onSubmit={handleSubmit} className="p-3 space-y-3">
+          <div className="min-h-[40px]">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-xs">
                 {error}
               </div>
             )}
 
             {success && (
-              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded text-sm">
+              <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded text-xs">
                 GTT order {editingGTT ? 'updated' : 'created'} successfully!
               </div>
             )}
@@ -728,8 +728,8 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           {/* Multi-Account Selection */}
           {!editingGTT && allBrokers && allBrokers.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-medium text-gray-700">
                   Select Accounts ({selectedBrokerIds.length} selected)
                 </label>
                 <button
@@ -746,15 +746,15 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                   {selectedBrokerIds.length === allBrokers.length ? 'Deselect All' : 'Select All'}
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {allBrokers.map((broker) => {
                   const isSelected = selectedBrokerIds.includes(broker.id);
                   return (
                     <label
                       key={broker.id}
-                      className={`flex items-center gap-2 p-2 border-2 rounded cursor-pointer transition ${
+                      className={`flex items-center gap-1.5 px-2 py-1.5 border rounded cursor-pointer transition ${
                         isSelected
-                          ? 'border-blue-600 bg-blue-50'
+                          ? 'border-blue-500 bg-blue-50'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
@@ -768,13 +768,13 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                             setSelectedBrokerIds(selectedBrokerIds.filter(id => id !== broker.id));
                           }
                         }}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        className="w-3.5 h-3.5 text-blue-600 rounded focus:ring-1 focus:ring-blue-500"
                       />
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-medium text-gray-900 truncate">
                           {broker.account_holder_name || broker.account_name || 'Account'}
                           {broker.client_id && (
-                            <span className="text-gray-600"> ({broker.client_id})</span>
+                            <span className="text-gray-500"> ({broker.client_id})</span>
                           )}
                         </div>
                       </div>
@@ -788,7 +788,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           {/* Symbol Search */}
           {!editingGTT && (
             <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
                 Symbol
               </label>
               <div className="relative">
@@ -801,7 +801,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                       setShowSuggestions(true);
                     }
                   }}
-                  className="w-full px-4 py-2.5 pr-10 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="Search symbol (e.g., NIFTY, BANKNIFTY)"
                   required
                 />
@@ -809,17 +809,17 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
               </div>
 
               {showSuggestions && filteredInstruments.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
                   {filteredInstruments.map((instrument, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => selectInstrument(instrument)}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition"
+                      className="w-full px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition"
                     >
-                      <div className="font-medium text-gray-900 text-sm">{instrument.tradingsymbol}</div>
+                      <div className="font-medium text-gray-900 text-xs">{instrument.tradingsymbol}</div>
                       {instrument.name && (
-                        <div className="text-xs text-gray-600 mt-0.5">{instrument.name}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">{instrument.name}</div>
                       )}
                     </button>
                   ))}
@@ -831,9 +831,9 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
 
           {/* Transaction and Trigger Type */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Transaction type</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Transaction type</label>
               <div className="flex gap-3">
                 <label className="flex items-center cursor-pointer">
                   <input
@@ -859,7 +859,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Trigger type</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Trigger type</label>
               <div className="flex gap-3">
                 <label className="flex items-center cursor-pointer">
                   <input
@@ -883,22 +883,22 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
                 </label>
               </div>
               {gttType === 'two-leg' && (
-                <div className="mt-1.5 text-xs text-gray-600 leading-relaxed">
-                  One Cancels Other: Either the stoploss or the target order is placed when the Last Traded Price (LTP) crosses the respective trigger. Can be used to set target and stoploss for a position/holding.
+                <div className="mt-1 text-xs text-gray-600 leading-snug">
+                  One Cancels Other: Either the stoploss or the target order is placed when the LTP crosses the respective trigger.
                 </div>
               )}
             </div>
           </div>
 
           {/* Stoploss Leg */}
-          <div className="bg-gray-50 border border-gray-200 rounded p-3">
-            <div className="mb-3">
+          <div className="bg-gray-50 border border-gray-200 rounded p-2.5">
+            <div className="mb-2">
               <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
                 {gttType === 'two-leg' ? 'Stoploss' : 'Order'}
               </span>
             </div>
 
-            <div className="flex items-center gap-4 mb-3">
+            <div className="flex items-center gap-4 mb-2">
               <div className="flex gap-3">
                 <label className="flex items-center cursor-pointer">
                   <input
@@ -1077,14 +1077,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
 
           {/* Target Leg (Only for OCO) */}
           {gttType === 'two-leg' && (
-            <div className="bg-gray-50 border border-gray-200 rounded p-3">
-              <div className="mb-3">
+            <div className="bg-gray-50 border border-gray-200 rounded p-2.5">
+              <div className="mb-2">
                 <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
                   Target
                 </span>
               </div>
 
-              <div className="flex items-center gap-4 mb-3">
+              <div className="flex items-center gap-4 mb-2">
                 <div className="flex gap-3">
                   <label className="flex items-center cursor-pointer">
                     <input
@@ -1263,7 +1263,7 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
           )}
 
           {/* Footer */}
-          <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+          <div className="flex items-center justify-between pt-2.5 border-t border-gray-200">
             <div className="text-xs text-gray-600">
               By {editingGTT ? 'modifying' : 'creating'}, I agree that trigger executions are not guaranteed.
             </div>
@@ -1271,14 +1271,14 @@ export function GTTModal({ isOpen, onClose, brokerConnectionId, editingGTT, init
               <button
                 type="button"
                 onClick={onClose}
-                className="px-5 py-2 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50 transition"
+                className="px-4 py-1.5 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50 transition"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading || !selectedInstrument}
-                className="px-5 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Processing...' : editingGTT ? 'Modify' : 'Create'}
               </button>
