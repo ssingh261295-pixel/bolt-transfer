@@ -191,17 +191,17 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
               return (
                 <div
                   key={item.id}
-                  className="px-3 py-2 hover:bg-blue-50 cursor-pointer relative group transition-colors border-b border-gray-100"
+                  className="px-3 py-2 hover:bg-blue-50 cursor-pointer relative group transition-colors border-b border-gray-100 min-h-[44px]"
                   onMouseEnter={() => setHoveredItem(item.id)}
                   onMouseLeave={() => setHoveredItem(null)}
                 >
                   {hoveredItem === item.id ? (
                     // Hover state: Show action buttons in single row (Zerodha style)
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 h-[28px]">
                       <div className="font-medium text-sm text-gray-900 truncate flex-1 min-w-0">
                         {item.tradingsymbol}
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
                         <button
                           onClick={() => onBuyClick(item.tradingsymbol, item.exchange, item.instrument_token)}
                           className="px-2.5 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors"
@@ -231,7 +231,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
                     </div>
                   ) : (
                     // Normal state: Show price info (Zerodha style)
-                    <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center justify-between gap-1.5 h-[28px]">
                       <div className="flex-1 min-w-0 pr-1">
                         <div className="font-medium text-[13px] text-gray-900 truncate leading-tight">
                           {item.tradingsymbol}
