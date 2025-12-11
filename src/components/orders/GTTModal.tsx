@@ -15,6 +15,7 @@ interface GTTModalProps {
   initialSymbol?: string;
   initialExchange?: string;
   allBrokers?: any[];
+  isHMTMode?: boolean;
   positionData?: {
     quantity: number;
     averagePrice: number;
@@ -23,7 +24,7 @@ interface GTTModalProps {
   };
 }
 
-export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editingGTT, initialSymbol, initialExchange, allBrokers, positionData }: GTTModalProps) {
+export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editingGTT, initialSymbol, initialExchange, allBrokers, isHMTMode = false, positionData }: GTTModalProps) {
   const { session } = useAuth();
   const [symbol, setSymbol] = useState(initialSymbol || '');
   const [exchange, setExchange] = useState(initialExchange || 'NFO');
@@ -528,6 +529,87 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         }
       }
 
+      // HMT Mode: Save to database instead of calling Zerodha API
+      if (isHMTMode) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not authenticated');
+
+        const trigger1 = parseFloat(roundToTickSize(parseFloat(triggerPrice1)));
+        const limitPrice1 = parseFloat(roundToTickSize(parseFloat(price1)));
+
+        const brokersToProcess = editingGTT ? [brokerConnectionId] : selectedBrokerIds;
+        const results = await Promise.all(
+          brokersToProcess.map(async (brokerId) => {
+            try {
+              const hmtGttData: any = {
+                user_id: user.id,
+                broker_connection_id: brokerId,
+                trading_symbol: symbol,
+                exchange: exchange,
+                instrument_token: selectedInstrument.instrument_token,
+                condition_type: gttType,
+                transaction_type: transactionType,
+                product_type_1: product1,
+                trigger_price_1: trigger1,
+                order_price_1: limitPrice1,
+                quantity_1: quantity1,
+                status: 'active'
+              };
+
+              if (gttType === 'two-leg') {
+                const trigger2 = parseFloat(roundToTickSize(parseFloat(triggerPrice2)));
+                const limitPrice2 = parseFloat(roundToTickSize(parseFloat(price2)));
+                hmtGttData.product_type_2 = product2;
+                hmtGttData.trigger_price_2 = trigger2;
+                hmtGttData.order_price_2 = limitPrice2;
+                hmtGttData.quantity_2 = quantity2;
+              }
+
+              if (editingGTT) {
+                const { error } = await supabase
+                  .from('hmt_gtt_orders')
+                  .update(hmtGttData)
+                  .eq('id', editingGTT.id)
+                  .eq('user_id', user.id);
+
+                if (error) throw error;
+              } else {
+                const { error } = await supabase
+                  .from('hmt_gtt_orders')
+                  .insert([hmtGttData]);
+
+                if (error) throw error;
+              }
+
+              return { brokerId, success: true };
+            } catch (err: any) {
+              console.error(`Exception for broker ${brokerId}:`, err);
+              return { brokerId, success: false, error: err.message };
+            }
+          })
+        );
+
+        const failedCount = results.filter(r => !r.success).length;
+        if (failedCount === results.length) {
+          const errorDetails = results.map(r => r.error).filter(Boolean).join('; ');
+          throw new Error(`Failed to create HMT GTT orders for all accounts. Errors: ${errorDetails}`);
+        }
+
+        if (failedCount > 0) {
+          const failedErrors = results.filter(r => !r.success).map(r => r.error).join('; ');
+          setError(`Created HMT GTT for ${results.length - failedCount} of ${results.length} accounts. Failed accounts: ${failedErrors}`);
+        }
+
+        setSuccess(true);
+        if (onSuccess) {
+          onSuccess();
+        }
+        setTimeout(() => {
+          onClose();
+        }, 1500);
+        return;
+      }
+
       const ltp = await fetchLTP(selectedInstrument.instrument_token);
 
       const gttData: any = {
@@ -683,7 +765,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         <div className="bg-white border-b border-gray-200 px-3 py-2.5 flex items-center justify-between flex-shrink-0">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">
-              {editingGTT ? 'Edit GTT Order' : 'New GTT Order'}
+              {editingGTT ? (isHMTMode ? 'Edit HMT GTT Order' : 'Edit GTT Order') : (isHMTMode ? 'New HMT GTT Order' : 'New GTT Order')}
             </h2>
             {selectedInstrument && (
               <div className="flex items-center gap-2 mt-0.5">

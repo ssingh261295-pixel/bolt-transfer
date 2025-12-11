@@ -23,6 +23,7 @@ export function Positions() {
     totalInvested: 0,
   });
   const [gttModalOpen, setGttModalOpen] = useState(false);
+  const [hmtGttModalOpen, setHmtGttModalOpen] = useState(false);
   const [exitModalOpen, setExitModalOpen] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<any>(null);
   const [sortField, setSortField] = useState<SortField>('pnl');
@@ -290,6 +291,17 @@ export function Positions() {
     setSelectedPosition(null);
   };
 
+  const handleOpenHMTGTT = (position: any) => {
+    setSelectedPosition(position);
+    setHmtGttModalOpen(true);
+    setOpenMenuId(null);
+  };
+
+  const handleCloseHMTGTTModal = () => {
+    setHmtGttModalOpen(false);
+    setSelectedPosition(null);
+  };
+
   const toggleMenu = (positionId: string) => {
     setOpenMenuId(openMenuId === positionId ? null : positionId);
   };
@@ -537,6 +549,12 @@ export function Positions() {
                               >
                                 Create GTT
                               </button>
+                              <button
+                                onClick={() => handleOpenHMTGTT(position)}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                              >
+                                Create HMT GTT
+                              </button>
                             </div>
                           </div>
                         )}
@@ -563,20 +581,37 @@ export function Positions() {
       </div>
 
       {selectedPosition && (
-        <GTTModal
-          isOpen={gttModalOpen}
-          onClose={handleCloseGTTModal}
-          brokerConnectionId={selectedPosition.broker_connection_id}
-          initialSymbol={selectedPosition.symbol}
-          initialExchange={selectedPosition.exchange}
-          allBrokers={brokers}
-          positionData={{
-            quantity: Math.abs(selectedPosition.quantity),
-            averagePrice: selectedPosition.average_price,
-            currentPrice: selectedPosition.current_price,
-            transactionType: selectedPosition.quantity > 0 ? 'SELL' : 'BUY'
-          }}
-        />
+        <>
+          <GTTModal
+            isOpen={gttModalOpen}
+            onClose={handleCloseGTTModal}
+            brokerConnectionId={selectedPosition.broker_connection_id}
+            initialSymbol={selectedPosition.symbol}
+            initialExchange={selectedPosition.exchange}
+            allBrokers={brokers}
+            positionData={{
+              quantity: Math.abs(selectedPosition.quantity),
+              averagePrice: selectedPosition.average_price,
+              currentPrice: selectedPosition.current_price,
+              transactionType: selectedPosition.quantity > 0 ? 'SELL' : 'BUY'
+            }}
+          />
+          <GTTModal
+            isOpen={hmtGttModalOpen}
+            onClose={handleCloseHMTGTTModal}
+            brokerConnectionId={selectedPosition.broker_connection_id}
+            initialSymbol={selectedPosition.symbol}
+            initialExchange={selectedPosition.exchange}
+            allBrokers={brokers}
+            isHMTMode={true}
+            positionData={{
+              quantity: Math.abs(selectedPosition.quantity),
+              averagePrice: selectedPosition.average_price,
+              currentPrice: selectedPosition.current_price,
+              transactionType: selectedPosition.quantity > 0 ? 'SELL' : 'BUY'
+            }}
+          />
+        </>
       )}
 
       <ExitPositionModal

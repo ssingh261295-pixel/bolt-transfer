@@ -38,8 +38,9 @@ export default function TopNavigation() {
     { label: 'Brokers', path: '/brokers' },
     { label: 'Orders', path: '/orders' },
     { label: 'Positions', path: '/positions' },
-    { label: 'Watchlist', path: '/watchlist' },
     { label: 'GTT', path: '/gtt' },
+    { label: 'HMT GTT', path: '/hmt-gtt' },
+    { label: 'Watchlist', path: '/watchlist' },
     { label: 'Strategies', path: '/strategies' },
   ];
 

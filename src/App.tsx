@@ -8,6 +8,7 @@ import { Brokers } from './pages/Brokers';
 import { Strategies } from './pages/Strategies';
 import { Orders } from './pages/Orders';
 import { GTTOrders } from './pages/GTTOrders';
+import { HMTGTTOrders } from './pages/HMTGTTOrders';
 import { Positions } from './pages/Positions';
 import { Watchlist } from './pages/Watchlist';
 import { Settings } from './pages/Settings';
@@ -105,6 +106,7 @@ function ProtectedLayout() {
             <Route path="/strategies" element={<Strategies />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/gtt" element={<GTTOrders />} />
+            <Route path="/hmt-gtt" element={<HMTGTTOrders />} />
             <Route path="/positions" element={<Positions />} />
             <Route path="/watchlist" element={<Watchlist />} />
             <Route path="/settings" element={<Settings />} />
