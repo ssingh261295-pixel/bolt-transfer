@@ -98,71 +98,98 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
   useEffect(() => {
     const setupGTT = async () => {
       if (editingGTT) {
-        const tradingsymbol = editingGTT.condition?.tradingsymbol || '';
-        const exchangeValue = editingGTT.condition?.exchange || 'NFO';
-        const transType = editingGTT.orders?.[0]?.transaction_type || 'BUY';
+        // Handle both regular GTT (from Zerodha API) and HMT GTT (from database)
+        const tradingsymbol = isHMTMode
+          ? editingGTT.trading_symbol
+          : (editingGTT.condition?.tradingsymbol || '');
+        const exchangeValue = isHMTMode
+          ? editingGTT.exchange
+          : (editingGTT.condition?.exchange || 'NFO');
+        const transType = isHMTMode
+          ? editingGTT.transaction_type
+          : (editingGTT.orders?.[0]?.transaction_type || 'BUY');
+        const gttTypeValue = isHMTMode ? editingGTT.condition_type : (editingGTT.type || 'single');
 
         setSymbol(tradingsymbol);
         setExchange(exchangeValue);
         setTransactionType(transType);
-        setGttType(editingGTT.type || 'single');
+        setGttType(gttTypeValue);
 
-        if (editingGTT.condition?.instrument_token) {
+        const instrumentToken = isHMTMode
+          ? editingGTT.instrument_token
+          : editingGTT.condition?.instrument_token;
+
+        if (instrumentToken) {
           const instrument = {
-            instrument_token: editingGTT.condition.instrument_token,
-            tradingsymbol: editingGTT.condition.tradingsymbol,
-            exchange: editingGTT.condition.exchange,
+            instrument_token: instrumentToken,
+            tradingsymbol: tradingsymbol,
+            exchange: exchangeValue,
           };
           setSelectedInstrument(instrument);
 
           // Fetch LTP for the instrument (non-blocking)
-          if (instrument.instrument_token) {
-            fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange).catch(console.error);
-          }
+          fetchLTP(instrumentToken, tradingsymbol, exchangeValue).catch(console.error);
         }
 
-        if (editingGTT.type === 'two-leg') {
-          const trigger0 = editingGTT.condition?.trigger_values?.[0];
-          const trigger1 = editingGTT.condition?.trigger_values?.[1];
+        if (isHMTMode) {
+          // Handle HMT GTT editing
+          if (gttTypeValue === 'two-leg') {
+            setTriggerPrice1(editingGTT.trigger_price_1 ? roundToTickSize(editingGTT.trigger_price_1) : '');
+            setPrice1(editingGTT.order_price_1 ? roundToTickSize(editingGTT.order_price_1) : '');
+            setQuantity1(editingGTT.quantity_1 || 200);
+            setOrderType1('LIMIT');
+            setProduct1(editingGTT.product_type_1 || 'NRML');
 
-          // For BUY: Stoploss is higher, Target is lower
-          // For SELL: Stoploss is lower, Target is higher
-          // trigger_values are always sorted [lower, higher]
-
-          if (transType === 'BUY') {
-            // Stoploss = higher price = trigger1
-            setTriggerPrice1(trigger1 ? roundToTickSize(trigger1) : '');
-            setPrice1(editingGTT.orders?.[1]?.price ? roundToTickSize(editingGTT.orders[1].price) : '');
-            setQuantity1(editingGTT.orders?.[1]?.quantity || 200);
-            setOrderType1(editingGTT.orders?.[1]?.order_type || 'LIMIT');
-            setProduct1(editingGTT.orders?.[1]?.product || 'NRML');
-
-            // Target = lower price = trigger0
-            setTriggerPrice2(trigger0 ? roundToTickSize(trigger0) : '');
-            setPrice2(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
-            setQuantity2(editingGTT.orders?.[0]?.quantity || 200);
-            setOrderType2(editingGTT.orders?.[0]?.order_type || 'LIMIT');
-            setProduct2(editingGTT.orders?.[0]?.product || 'NRML');
+            setTriggerPrice2(editingGTT.trigger_price_2 ? roundToTickSize(editingGTT.trigger_price_2) : '');
+            setPrice2(editingGTT.order_price_2 ? roundToTickSize(editingGTT.order_price_2) : '');
+            setQuantity2(editingGTT.quantity_2 || 200);
+            setOrderType2('LIMIT');
+            setProduct2(editingGTT.product_type_2 || 'NRML');
           } else {
-            // SELL: Stoploss = lower, Target = higher
-            setTriggerPrice1(trigger0 ? roundToTickSize(trigger0) : '');
-            setPrice1(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
-            setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
-            setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
-            setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
-
-            setTriggerPrice2(trigger1 ? roundToTickSize(trigger1) : '');
-            setPrice2(editingGTT.orders?.[1]?.price ? roundToTickSize(editingGTT.orders[1].price) : '');
-            setQuantity2(editingGTT.orders?.[1]?.quantity || 200);
-            setOrderType2(editingGTT.orders?.[1]?.order_type || 'LIMIT');
-            setProduct2(editingGTT.orders?.[1]?.product || 'NRML');
+            setTriggerPrice1(editingGTT.trigger_price_1 ? roundToTickSize(editingGTT.trigger_price_1) : '');
+            setQuantity1(editingGTT.quantity_1 || 200);
+            setOrderType1('LIMIT');
+            setPrice1(editingGTT.order_price_1 ? roundToTickSize(editingGTT.order_price_1) : '');
+            setProduct1(editingGTT.product_type_1 || 'NRML');
           }
         } else {
-          setTriggerPrice1(editingGTT.condition?.trigger_values?.[0] ? roundToTickSize(editingGTT.condition.trigger_values[0]) : '');
-          setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
-          setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
-          setPrice1(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
-          setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
+          // Handle regular GTT editing
+          if (editingGTT.type === 'two-leg') {
+            const trigger0 = editingGTT.condition?.trigger_values?.[0];
+            const trigger1 = editingGTT.condition?.trigger_values?.[1];
+
+            if (transType === 'BUY') {
+              setTriggerPrice1(trigger1 ? roundToTickSize(trigger1) : '');
+              setPrice1(editingGTT.orders?.[1]?.price ? roundToTickSize(editingGTT.orders[1].price) : '');
+              setQuantity1(editingGTT.orders?.[1]?.quantity || 200);
+              setOrderType1(editingGTT.orders?.[1]?.order_type || 'LIMIT');
+              setProduct1(editingGTT.orders?.[1]?.product || 'NRML');
+
+              setTriggerPrice2(trigger0 ? roundToTickSize(trigger0) : '');
+              setPrice2(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
+              setQuantity2(editingGTT.orders?.[0]?.quantity || 200);
+              setOrderType2(editingGTT.orders?.[0]?.order_type || 'LIMIT');
+              setProduct2(editingGTT.orders?.[0]?.product || 'NRML');
+            } else {
+              setTriggerPrice1(trigger0 ? roundToTickSize(trigger0) : '');
+              setPrice1(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
+              setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
+              setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
+              setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
+
+              setTriggerPrice2(trigger1 ? roundToTickSize(trigger1) : '');
+              setPrice2(editingGTT.orders?.[1]?.price ? roundToTickSize(editingGTT.orders[1].price) : '');
+              setQuantity2(editingGTT.orders?.[1]?.quantity || 200);
+              setOrderType2(editingGTT.orders?.[1]?.order_type || 'LIMIT');
+              setProduct2(editingGTT.orders?.[1]?.product || 'NRML');
+            }
+          } else {
+            setTriggerPrice1(editingGTT.condition?.trigger_values?.[0] ? roundToTickSize(editingGTT.condition.trigger_values[0]) : '');
+            setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
+            setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
+            setPrice1(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
+            setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
+          }
         }
       } else if (isOpen) {
         setSymbol(initialSymbol || '');

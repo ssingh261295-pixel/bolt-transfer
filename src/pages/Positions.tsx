@@ -17,6 +17,7 @@ export function Positions() {
   const [allPositions, setAllPositions] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
   const [selectedBroker, setSelectedBroker] = useState<string>('all');
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('all');
   const [syncMessage, setSyncMessage] = useState('');
   const [summary, setSummary] = useState({
     totalPnL: 0,
@@ -55,7 +56,7 @@ export function Positions() {
 
   useEffect(() => {
     filterPositions();
-  }, [selectedBroker, allPositions]);
+  }, [selectedBroker, selectedSymbol, allPositions]);
 
   useEffect(() => {
     const brokerId = selectedBroker !== 'all' ? selectedBroker : brokers[0]?.id;
@@ -152,7 +153,11 @@ export function Positions() {
     let filtered = allPositions;
 
     if (selectedBroker !== 'all') {
-      filtered = allPositions.filter(pos => pos.broker_connection_id === selectedBroker);
+      filtered = filtered.filter(pos => pos.broker_connection_id === selectedBroker);
+    }
+
+    if (selectedSymbol !== 'all') {
+      filtered = filtered.filter(pos => pos.symbol === selectedSymbol);
     }
 
     setPositions(sortPositions(filtered));
@@ -344,7 +349,7 @@ export function Positions() {
           <select
             value={selectedBroker}
             onChange={(e) => setSelectedBroker(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
           >
             <option value="all">All Accounts</option>
             {brokers.map((broker) => (
@@ -352,6 +357,18 @@ export function Positions() {
                 {broker.account_holder_name
                   ? `${broker.account_holder_name} (${broker.client_id || 'No Client ID'})`
                   : broker.account_name || `Zerodha (${broker.api_key.substring(0, 8)}...)`}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedSymbol}
+            onChange={(e) => setSelectedSymbol(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+          >
+            <option value="all">All Instruments</option>
+            {Array.from(new Set(allPositions.map(p => p.symbol))).sort().map((symbol) => (
+              <option key={symbol} value={symbol}>
+                {symbol}
               </option>
             ))}
           </select>

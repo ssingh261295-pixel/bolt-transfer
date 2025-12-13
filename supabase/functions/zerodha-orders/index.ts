@@ -383,6 +383,57 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    if (req.method === 'DELETE') {
+      const brokerId = url.searchParams.get('broker_id');
+      const orderId = url.searchParams.get('order_id');
+      const variety = url.searchParams.get('variety') || 'regular';
+
+      if (!brokerId || !orderId) {
+        throw new Error('Missing broker_id or order_id');
+      }
+
+      const { data: brokerConnection } = await supabase
+        .from('broker_connections')
+        .select('api_key, access_token')
+        .eq('id', brokerId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!brokerConnection || !brokerConnection.access_token) {
+        throw new Error('Broker not connected');
+      }
+
+      const response = await fetch(`https://api.kite.trade/orders/${variety}/${orderId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `token ${brokerConnection.api_key}:${brokerConnection.access_token}`,
+          'X-Kite-Version': '3',
+        },
+      });
+
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        await supabase
+          .from('orders')
+          .update({ status: 'CANCELLED' })
+          .eq('order_id', orderId)
+          .eq('user_id', user.id);
+
+        return new Response(
+          JSON.stringify({ success: true, message: 'Order cancelled successfully' }),
+          {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      } else {
+        throw new Error(result.message || 'Order cancellation failed');
+      }
+    }
+
     throw new Error('Invalid endpoint');
 
   } catch (error) {

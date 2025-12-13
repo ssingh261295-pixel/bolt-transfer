@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ShoppingCart, Filter, Plus, RefreshCw, ArrowUpDown } from 'lucide-react';
+import { ShoppingCart, Filter, Plus, RefreshCw, ArrowUpDown, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodha } from '../hooks/useZerodha';
@@ -9,7 +9,7 @@ type SortField = 'created_at' | 'symbol' | 'quantity' | 'price' | 'status';
 type SortDirection = 'asc' | 'desc';
 
 export function Orders() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { syncOrders, loading: syncLoading } = useZerodha();
   const [orders, setOrders] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
@@ -19,6 +19,9 @@ export function Orders() {
   const [syncMessage, setSyncMessage] = useState('');
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [cancellingOrders, setCancellingOrders] = useState<Set<string>>(new Set());
+  const [cancelMessage, setCancelMessage] = useState('');
+  const [cancelError, setCancelError] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -98,6 +101,57 @@ export function Orders() {
         return aVal < bVal ? 1 : -1;
       }
     });
+  };
+
+  const handleCancelOrder = async (order: any) => {
+    if (!order.order_id || !order.broker_connection_id) {
+      setCancelError('Invalid order data');
+      setTimeout(() => setCancelError(''), 3000);
+      return;
+    }
+
+    const confirmCancel = window.confirm(`Are you sure you want to cancel order for ${order.symbol}?`);
+    if (!confirmCancel) return;
+
+    setCancellingOrders(prev => new Set(prev).add(order.id));
+    setCancelError('');
+    setCancelMessage('');
+
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders?broker_id=${order.broker_connection_id}&order_id=${order.order_id}&variety=${order.variety || 'regular'}`;
+
+      const response = await fetch(apiUrl, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setCancelMessage(`Order for ${order.symbol} cancelled successfully`);
+        await loadOrders();
+        setTimeout(() => setCancelMessage(''), 3000);
+      } else {
+        throw new Error(result.error || 'Failed to cancel order');
+      }
+    } catch (error: any) {
+      setCancelError(`Failed to cancel order: ${error.message}`);
+      setTimeout(() => setCancelError(''), 5000);
+    } finally {
+      setCancellingOrders(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(order.id);
+        return newSet;
+      });
+    }
+  };
+
+  const canCancelOrder = (status: string) => {
+    const cancellableStatuses = ['OPEN', 'TRIGGER PENDING', 'PENDING'];
+    return cancellableStatuses.includes(status);
   };
 
   const handleSort = (field: SortField) => {
@@ -262,6 +316,18 @@ export function Orders() {
         </div>
       )}
 
+      {cancelMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+          {cancelMessage}
+        </div>
+      )}
+
+      {cancelError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {cancelError}
+        </div>
+      )}
+
       <PlaceOrderModal
         isOpen={showPlaceOrder}
         onClose={() => setShowPlaceOrder(false)}
@@ -338,6 +404,9 @@ export function Orders() {
                       <ArrowUpDown className={`w-3 h-3 ${sortField === 'created_at' ? 'text-blue-600' : 'text-gray-400'}`} />
                     </div>
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -384,6 +453,19 @@ export function Orders() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {new Date(order.created_at).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {canCancelOrder(order.status) && (
+                        <button
+                          onClick={() => handleCancelOrder(order)}
+                          disabled={cancellingOrders.has(order.id)}
+                          className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Cancel Order"
+                        >
+                          <X className="w-4 h-4" />
+                          {cancellingOrders.has(order.id) ? 'Cancelling...' : 'Cancel'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
