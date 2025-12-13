@@ -365,30 +365,44 @@ export function HMTGTTOrders() {
           <p className="text-sm text-gray-600 mt-1">Server-Side Trigger Engine - Monitors 24/7</p>
           <div className="flex items-center gap-3 mt-2">
             {engineStatus && (
-              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs w-fit ${
-                engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected'
-                  ? 'bg-green-100 text-green-700'
-                  : engineStatus.status === 'running'
-                  ? 'bg-yellow-100 text-yellow-700'
-                  : 'bg-gray-100 text-gray-700'
-              }`}>
-                {engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected' ? (
-                  <>
-                    <Activity className="w-3 h-3 animate-pulse" />
-                    Engine Running
-                  </>
-                ) : engineStatus.status === 'running' ? (
-                  <>
-                    <AlertCircle className="w-3 h-3" />
-                    Connecting...
-                  </>
-                ) : (
-                  <>
-                    <Power className="w-3 h-3" />
-                    Engine Stopped
-                  </>
+              <>
+                <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs w-fit ${
+                  engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected'
+                    ? 'bg-green-100 text-green-700'
+                    : engineStatus.status === 'running' && engineStatus.error
+                    ? 'bg-red-100 text-red-700'
+                    : engineStatus.status === 'running'
+                    ? 'bg-yellow-100 text-yellow-700'
+                    : 'bg-gray-100 text-gray-700'
+                }`}>
+                  {engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected' ? (
+                    <>
+                      <Activity className="w-3 h-3 animate-pulse" />
+                      Engine Running
+                    </>
+                  ) : engineStatus.status === 'running' && engineStatus.error ? (
+                    <>
+                      <AlertCircle className="w-3 h-3" />
+                      Error
+                    </>
+                  ) : engineStatus.status === 'running' ? (
+                    <>
+                      <AlertCircle className="w-3 h-3" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <Power className="w-3 h-3" />
+                      Engine Stopped
+                    </>
+                  )}
+                </div>
+                {engineStatus.error && (
+                  <div className="text-xs text-red-600">
+                    {engineStatus.error}
+                  </div>
                 )}
-              </div>
+              </>
             )}
             {isConnected && (
               <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs w-fit">

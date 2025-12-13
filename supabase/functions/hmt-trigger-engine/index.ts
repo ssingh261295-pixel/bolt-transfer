@@ -44,6 +44,9 @@ const stats: EngineStats = {
   last_tick_time: null
 };
 
+// Engine error state
+let engineError: string | null = null;
+
 // Engine configuration with sensible defaults
 const config: EngineConfig = {
   enabled: Deno.env.get('HMT_ENGINE_ENABLED') !== 'false', // Enabled by default
@@ -74,6 +77,7 @@ async function initializeEngine(): Promise<void> {
   console.log('[Engine] Initializing HMT Trigger Engine...');
   engineStartTime = new Date();
   isEngineRunning = true;
+  engineError = null;
 
   // Initialize managers
   triggerManager = new TriggerManager();
@@ -90,7 +94,10 @@ async function initializeEngine(): Promise<void> {
   // Get broker connection for WebSocket (use first active broker)
   const broker = await getActiveBroker();
   if (!broker) {
-    console.error('[Engine] No active broker found. Cannot start WebSocket.');
+    engineError = 'No active broker connection found. Please connect a broker account first.';
+    console.error('[Engine]', engineError);
+    stats.websocket_status = 'disconnected';
+    // Keep engine "running" but without WebSocket - will retry when broker is added
     return;
   }
 
@@ -105,7 +112,15 @@ async function initializeEngine(): Promise<void> {
   wsManager.setTickHandler(handleTick);
 
   // Connect to WebSocket
-  await wsManager.connect();
+  stats.websocket_status = 'connecting';
+  try {
+    await wsManager.connect();
+    engineError = null;
+  } catch (error: any) {
+    engineError = `WebSocket connection failed: ${error.message}`;
+    console.error('[Engine]', engineError);
+    stats.websocket_status = 'disconnected';
+  }
 
   // Subscribe to all instruments
   const instruments = triggerManager.getSubscribedInstruments();
@@ -510,6 +525,7 @@ Deno.serve(async (req: Request) => {
   if (path.endsWith('/health')) {
     return new Response(JSON.stringify({
       status: isEngineRunning ? 'running' : 'stopped',
+      error: engineError,
       stats: {
         ...stats,
         active_triggers: triggerManager?.getActiveTriggerCount() || 0,
@@ -564,6 +580,8 @@ Deno.serve(async (req: Request) => {
   return new Response(JSON.stringify({
     message: 'HMT Trigger Engine - Fully Autonomous',
     status: isEngineRunning ? 'running' : 'stopped',
+    error: engineError,
+    websocket_status: stats.websocket_status,
     endpoints: {
       health: '/health',
       start: '/start',
