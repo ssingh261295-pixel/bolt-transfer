@@ -43,9 +43,9 @@ const stats: EngineStats = {
   last_tick_time: null
 };
 
-// Engine configuration
+// Engine configuration with sensible defaults
 const config: EngineConfig = {
-  enabled: Deno.env.get('HMT_ENGINE_ENABLED') === 'true',
+  enabled: Deno.env.get('HMT_ENGINE_ENABLED') !== 'false', // Enabled by default
   max_retries: parseInt(Deno.env.get('HMT_MAX_RETRIES') || '2'),
   retry_backoff_ms: parseInt(Deno.env.get('HMT_RETRY_BACKOFF_MS') || '1000'),
   health_check_interval_ms: parseInt(Deno.env.get('HMT_HEALTH_CHECK_INTERVAL_MS') || '30000'),
