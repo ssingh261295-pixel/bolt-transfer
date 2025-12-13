@@ -14,6 +14,7 @@
  * - In-memory trigger storage grouped by instrument_token
  * - Sub-100ms execution target
  * - Handles 100+ concurrent triggers
+ * - FULLY AUTONOMOUS: Auto-starts, auto-reconnects, self-healing
  */
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -452,6 +453,40 @@ function shutdownEngine(): void {
 }
 
 /**
+ * Auto-start the engine on first invocation
+ */
+let autoStartPromise: Promise<void> | null = null;
+
+function ensureEngineStarted(): Promise<void> {
+  if (isEngineRunning) {
+    return Promise.resolve();
+  }
+
+  if (autoStartPromise) {
+    return autoStartPromise;
+  }
+
+  autoStartPromise = initializeEngine()
+    .then(() => {
+      console.log('[Engine] Auto-start completed successfully');
+      autoStartPromise = null;
+    })
+    .catch((error) => {
+      console.error('[Engine] Auto-start failed:', error);
+      autoStartPromise = null;
+      // Retry after delay
+      setTimeout(() => {
+        ensureEngineStarted();
+      }, config.reconnect_delay_ms);
+    });
+
+  return autoStartPromise;
+}
+
+// Auto-start engine on module load
+ensureEngineStarted();
+
+/**
  * HTTP Handler
  */
 Deno.serve(async (req: Request) => {
@@ -464,6 +499,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
+
+  // Ensure engine is started on every request (self-healing)
+  await ensureEngineStarted();
 
   const url = new URL(req.url);
   const path = url.pathname;
@@ -524,7 +562,8 @@ Deno.serve(async (req: Request) => {
   }
 
   return new Response(JSON.stringify({
-    message: 'HMT Trigger Engine',
+    message: 'HMT Trigger Engine - Fully Autonomous',
+    status: isEngineRunning ? 'running' : 'stopped',
     endpoints: {
       health: '/health',
       start: '/start',
