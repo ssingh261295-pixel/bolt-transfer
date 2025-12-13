@@ -20,6 +20,7 @@ export function HMTGTTOrders() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingGTT, setEditingGTT] = useState<any>(null);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+  const [filterStateBeforeEdit, setFilterStateBeforeEdit] = useState<{ brokerId: string; instrument: string } | null>(null);
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [deleteMessage, setDeleteMessage] = useState('');
@@ -577,6 +578,10 @@ export function HMTGTTOrders() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => {
+                            setFilterStateBeforeEdit({
+                              brokerId: selectedBrokerId,
+                              instrument: selectedInstrument
+                            });
                             setEditingGTT(gtt);
                             setShowCreateModal(true);
                           }}
@@ -609,6 +614,11 @@ export function HMTGTTOrders() {
           onClose={() => {
             setShowCreateModal(false);
             setEditingGTT(null);
+            if (filterStateBeforeEdit) {
+              setSelectedBrokerId(filterStateBeforeEdit.brokerId);
+              setSelectedInstrument(filterStateBeforeEdit.instrument);
+              setFilterStateBeforeEdit(null);
+            }
           }}
           onSuccess={() => {
             loadHMTGTTOrders(true);

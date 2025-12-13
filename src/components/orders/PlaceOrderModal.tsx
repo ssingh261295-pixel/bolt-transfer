@@ -38,9 +38,11 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
     trigger_price: '',
   });
   const [orderErrors, setOrderErrors] = useState<string[]>([]);
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
-    if (isOpen && user) {
+    // Only reset form when transitioning from closed to open
+    if (isOpen && !wasOpenRef.current && user) {
       loadBrokers();
       setFormData({
         symbol: initialSymbol || '',
@@ -58,6 +60,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
       setSelectedInstrument(null);
       setOrderErrors([]);
     }
+    wasOpenRef.current = isOpen;
   }, [isOpen, user, initialSymbol, initialExchange, initialTransactionType]);
 
   useEffect(() => {

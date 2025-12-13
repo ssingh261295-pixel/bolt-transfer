@@ -6,6 +6,7 @@ import { useZerodha } from '../hooks/useZerodha';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
 import { GTTModal } from '../components/orders/GTTModal';
 import { ExitPositionModal } from '../components/orders/ExitPositionModal';
+import { PlaceOrderModal } from '../components/orders/PlaceOrderModal';
 
 type SortField = 'symbol' | 'quantity' | 'average_price' | 'current_price' | 'pnl' | 'pnl_percentage';
 type SortDirection = 'asc' | 'desc';
@@ -26,6 +27,7 @@ export function Positions() {
   const [gttModalOpen, setGttModalOpen] = useState(false);
   const [hmtGttModalOpen, setHmtGttModalOpen] = useState(false);
   const [exitModalOpen, setExitModalOpen] = useState(false);
+  const [addOrderModalOpen, setAddOrderModalOpen] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<any>(null);
   const [sortField, setSortField] = useState<SortField>('pnl');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -561,6 +563,16 @@ export function Positions() {
                                 Exit position
                               </button>
                               <button
+                                onClick={() => {
+                                  setSelectedPosition(position);
+                                  setAddOrderModalOpen(true);
+                                  setOpenMenuId(null);
+                                }}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                              >
+                                Add
+                              </button>
+                              <button
                                 onClick={() => handleOpenGTT(position)}
                                 className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
                               >
@@ -640,6 +652,24 @@ export function Positions() {
         positions={getPositionsToExit()}
         onSuccess={handleExitSuccess}
       />
+
+      {selectedPosition && (
+        <PlaceOrderModal
+          isOpen={addOrderModalOpen}
+          onClose={() => {
+            setAddOrderModalOpen(false);
+            setSelectedPosition(null);
+          }}
+          onSuccess={() => {
+            loadPositions();
+            setAddOrderModalOpen(false);
+            setSelectedPosition(null);
+          }}
+          brokerConnectionId={selectedPosition.broker_connection_id}
+          prefilledSymbol={selectedPosition.symbol}
+          prefilledExchange={selectedPosition.exchange}
+        />
+      )}
     </div>
   );
 }
