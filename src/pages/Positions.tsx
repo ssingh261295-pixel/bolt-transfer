@@ -668,6 +668,7 @@ export function Positions() {
           brokerConnectionId={selectedPosition.broker_connection_id}
           prefilledSymbol={selectedPosition.symbol}
           prefilledExchange={selectedPosition.exchange}
+          initialTransactionType={selectedPosition.quantity > 0 ? 'BUY' : 'SELL'}
         />
       )}
     </div>

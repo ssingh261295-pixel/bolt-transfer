@@ -12,9 +12,12 @@ interface PlaceOrderModalProps {
   initialSymbol?: string;
   initialExchange?: string;
   initialTransactionType?: 'BUY' | 'SELL';
+  brokerConnectionId?: string;
+  prefilledSymbol?: string;
+  prefilledExchange?: string;
 }
 
-export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, initialExchange, initialTransactionType }: PlaceOrderModalProps) {
+export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, initialExchange, initialTransactionType, brokerConnectionId, prefilledSymbol, prefilledExchange }: PlaceOrderModalProps) {
   const { user, session } = useAuth();
   const { placeOrder, loading, error } = useZerodha();
   const [brokers, setBrokers] = useState<any[]>([]);
@@ -43,10 +46,14 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
   useEffect(() => {
     // Only reset form when transitioning from closed to open
     if (isOpen && !wasOpenRef.current && user) {
-      loadBrokers();
+      loadBrokers().then(() => {
+        if (brokerConnectionId) {
+          setSelectedBrokerIds([brokerConnectionId]);
+        }
+      });
       setFormData({
-        symbol: initialSymbol || '',
-        exchange: initialExchange || 'NFO',
+        symbol: prefilledSymbol || initialSymbol || '',
+        exchange: prefilledExchange || initialExchange || 'NFO',
         transaction_type: initialTransactionType || 'BUY',
         quantity: 1,
         order_type: 'MARKET',
@@ -61,7 +68,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
       setOrderErrors([]);
     }
     wasOpenRef.current = isOpen;
-  }, [isOpen, user, initialSymbol, initialExchange, initialTransactionType]);
+  }, [isOpen, user, initialSymbol, initialExchange, initialTransactionType, prefilledSymbol, prefilledExchange, brokerConnectionId]);
 
   useEffect(() => {
     if (formData.exchange && selectedBrokerIds.length > 0 && !searchLoading) {
@@ -91,10 +98,11 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
 
     if (data) {
       setBrokers(data);
-      if (data.length > 0) {
+      if (data.length > 0 && !brokerConnectionId) {
         setSelectedBrokerIds([data[0].id]);
       }
     }
+    return data;
   };
 
   const loadInstruments = async () => {
