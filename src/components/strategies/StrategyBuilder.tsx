@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { Plus, X, TrendingUp, TrendingDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, X, TrendingUp, TrendingDown, Copy, Check } from 'lucide-react';
 import { SymbolSelector } from './SymbolSelector';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Indicator {
   id: string;
@@ -55,11 +57,27 @@ const TIMEFRAMES = [
 ];
 
 export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuilderProps) {
+  const { user } = useAuth();
   const [name, setName] = useState(initialData?.name || '');
   const [description, setDescription] = useState(initialData?.description || '');
   const [symbol, setSymbol] = useState(initialData?.symbol || '');
   const [exchange, setExchange] = useState(initialData?.exchange || 'NSE');
   const [timeframe, setTimeframe] = useState(initialData?.timeframe || 'day');
+
+  // Execution source
+  const [executionSource, setExecutionSource] = useState(initialData?.execution_source || 'manual');
+  const [webhookKey, setWebhookKey] = useState(initialData?.webhook_key || '');
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+
+  // ATR Configuration
+  const [atrPeriod, setAtrPeriod] = useState(initialData?.atr_config?.period || 14);
+  const [atrSlMultiplier, setAtrSlMultiplier] = useState(initialData?.atr_config?.sl_multiplier || 1.5);
+  const [atrTargetMultiplier, setAtrTargetMultiplier] = useState(initialData?.atr_config?.target_multiplier || 2.0);
+  const [atrTrailingMultiplier, setAtrTrailingMultiplier] = useState(initialData?.atr_config?.trailing_multiplier || 1.0);
+
+  // Account mappings
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(initialData?.account_mappings || []);
+  const [availableAccounts, setAvailableAccounts] = useState<any[]>([]);
 
   const [indicators, setIndicators] = useState<Indicator[]>(initialData?.indicators || []);
   const [entryConditions, setEntryConditions] = useState<Condition[]>(initialData?.entry_conditions || []);
@@ -68,6 +86,55 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
   const [stopLoss, setStopLoss] = useState(initialData?.risk_management?.stopLoss || 2);
   const [target, setTarget] = useState(initialData?.risk_management?.target || 5);
   const [positionSize, setPositionSize] = useState(initialData?.risk_management?.positionSize || 1);
+
+  // Load available broker accounts
+  useEffect(() => {
+    if (user) {
+      loadBrokerAccounts();
+    }
+  }, [user]);
+
+  // Generate webhook key if TradingView mode and no key exists
+  useEffect(() => {
+    if (executionSource === 'tradingview' && !webhookKey && !initialData) {
+      generateWebhookKey();
+    }
+  }, [executionSource]);
+
+  const loadBrokerAccounts = async () => {
+    const { data } = await supabase
+      .from('broker_connections')
+      .select('id, broker_name, account_name, is_active')
+      .eq('user_id', user?.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      setAvailableAccounts(data);
+    }
+  };
+
+  const generateWebhookKey = async () => {
+    const { data, error } = await supabase.rpc('generate_webhook_key');
+    if (!error && data) {
+      setWebhookKey(data);
+    }
+  };
+
+  const toggleAccount = (accountId: string) => {
+    setSelectedAccounts(prev =>
+      prev.includes(accountId)
+        ? prev.filter(id => id !== accountId)
+        : [...prev, accountId]
+    );
+  };
+
+  const copyWebhookUrl = () => {
+    const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tradingview-webhook`;
+    navigator.clipboard.writeText(webhookUrl);
+    setCopiedWebhook(true);
+    setTimeout(() => setCopiedWebhook(false), 2000);
+  };
 
   const addIndicator = () => {
     const id = `ind_${Date.now()}`;
@@ -138,14 +205,23 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
       symbol,
       exchange,
       timeframe,
-      indicators,
-      entry_conditions: entryConditions,
-      exit_conditions: exitConditions,
-      risk_management: {
+      execution_source: executionSource,
+      webhook_key: executionSource === 'tradingview' ? webhookKey : null,
+      atr_config: executionSource === 'tradingview' ? {
+        period: atrPeriod,
+        sl_multiplier: atrSlMultiplier,
+        target_multiplier: atrTargetMultiplier,
+        trailing_multiplier: atrTrailingMultiplier,
+      } : null,
+      account_mappings: executionSource === 'tradingview' ? selectedAccounts : [],
+      indicators: executionSource === 'manual' ? indicators : [],
+      entry_conditions: executionSource === 'manual' ? entryConditions : [],
+      exit_conditions: executionSource === 'manual' ? exitConditions : [],
+      risk_management: executionSource === 'manual' ? {
         stopLoss,
         target,
         positionSize,
-      },
+      } : {},
     };
     onSave(strategy);
   };
@@ -201,7 +277,7 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <SymbolSelector
             value={symbol}
             exchange={exchange}
@@ -225,9 +301,172 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
               ))}
             </select>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Execution Source
+            </label>
+            <select
+              value={executionSource}
+              onChange={(e) => setExecutionSource(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="manual">Manual (UI-based)</option>
+              <option value="tradingview">TradingView Webhook</option>
+            </select>
+          </div>
         </div>
       </div>
 
+      {/* TradingView Webhook Configuration */}
+      {executionSource === 'tradingview' && (
+        <>
+          {/* Webhook Info */}
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h3 className="text-sm font-semibold text-blue-900 mb-2">TradingView Webhook Setup</h3>
+            <div className="space-y-2 text-sm text-blue-800">
+              <p>Use this webhook URL in your TradingView alert:</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tradingview-webhook`}
+                  className="flex-1 px-3 py-2 bg-white border border-blue-300 rounded text-xs font-mono"
+                />
+                <button
+                  onClick={copyWebhookUrl}
+                  className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
+                >
+                  {copiedWebhook ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copiedWebhook ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <p className="mt-2">Webhook Key (include in alert message):</p>
+              <input
+                type="text"
+                readOnly
+                value={webhookKey}
+                className="w-full px-3 py-2 bg-white border border-blue-300 rounded text-xs font-mono"
+              />
+              <p className="text-xs mt-2">
+                Alert message format: {'{'}"action": "{'{'}{'{'} strategy.order.action {'}'}{'}'}",
+                "symbol": "{symbol}", "price": "{'{'}{'{'} close {'}'}{'}'}",
+                "atr": "{'{'}{'{'} atr {'}'}{'}'}",
+                "webhook_key": "{webhookKey}"{'}'}
+              </p>
+            </div>
+          </div>
+
+          {/* Account Selection */}
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Trading Accounts</h3>
+            <p className="text-sm text-gray-600 mb-3">Select which broker accounts should execute this strategy:</p>
+            <div className="space-y-2">
+              {availableAccounts.map(account => (
+                <label key={account.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedAccounts.includes(account.id)}
+                    onChange={() => toggleAccount(account.id)}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <div>
+                    <div className="font-medium text-gray-900">{account.account_name || 'Unnamed Account'}</div>
+                    <div className="text-sm text-gray-600">{account.broker_name}</div>
+                  </div>
+                </label>
+              ))}
+              {availableAccounts.length === 0 && (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                  No active broker accounts found. Please connect a broker first.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ATR Configuration */}
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">ATR-Based Risk Management</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  ATR Period
+                </label>
+                <input
+                  type="number"
+                  value={atrPeriod}
+                  onChange={(e) => setAtrPeriod(parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  min="1"
+                />
+                <p className="text-xs text-gray-500 mt-1">ATR calculation period in TradingView</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Position Size (Lots)
+                </label>
+                <input
+                  type="number"
+                  value={positionSize}
+                  onChange={(e) => setPositionSize(parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  min="1"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Stop Loss Multiplier
+                </label>
+                <input
+                  type="number"
+                  value={atrSlMultiplier}
+                  onChange={(e) => setAtrSlMultiplier(parseFloat(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  step="0.1"
+                  min="0.1"
+                />
+                <p className="text-xs text-gray-500 mt-1">SL = Entry ± (ATR × Multiplier)</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Target Multiplier
+                </label>
+                <input
+                  type="number"
+                  value={atrTargetMultiplier}
+                  onChange={(e) => setAtrTargetMultiplier(parseFloat(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  step="0.1"
+                  min="0.1"
+                />
+                <p className="text-xs text-gray-500 mt-1">Target = Entry ± (ATR × Multiplier)</p>
+              </div>
+
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Trailing SL Multiplier
+                </label>
+                <input
+                  type="number"
+                  value={atrTrailingMultiplier}
+                  onChange={(e) => setAtrTrailingMultiplier(parseFloat(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  step="0.1"
+                  min="0.1"
+                />
+                <p className="text-xs text-gray-500 mt-1">Trailing SL distance = ATR × Multiplier (optional)</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Manual Strategy Configuration */}
+      {executionSource === 'manual' && (
+        <>
       {/* Indicators */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
@@ -508,6 +747,8 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
           </div>
         </div>
       </div>
+        </>
+      )}
 
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t">

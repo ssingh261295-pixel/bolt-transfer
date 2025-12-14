@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Play, Pause, Trash2, TrendingUp, Edit } from 'lucide-react';
+import { Plus, Play, Pause, Trash2, TrendingUp, Edit, Webhook, Copy, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { StrategyBuilder } from '../components/strategies/StrategyBuilder';
@@ -9,6 +9,7 @@ export function Strategies() {
   const [strategies, setStrategies] = useState<any[]>([]);
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingStrategy, setEditingStrategy] = useState<any>(null);
+  const [copiedWebhookKey, setCopiedWebhookKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -84,6 +85,12 @@ export function Strategies() {
     }
   };
 
+  const copyWebhookKey = (webhookKey: string) => {
+    navigator.clipboard.writeText(webhookKey);
+    setCopiedWebhookKey(webhookKey);
+    setTimeout(() => setCopiedWebhookKey(null), 2000);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -120,9 +127,17 @@ export function Strategies() {
         {strategies.map((strategy) => (
           <div key={strategy.id} className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="font-semibold text-gray-900">{strategy.name}</h3>
-                <p className="text-sm text-gray-600 mt-1">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-semibold text-gray-900">{strategy.name}</h3>
+                  {strategy.execution_source === 'tradingview' && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">
+                      <Webhook className="w-3 h-3" />
+                      TradingView
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-600">
                   {strategy.description || 'No description'}
                 </p>
               </div>
@@ -165,12 +180,53 @@ export function Strategies() {
                   <span className="text-gray-900 capitalize">{strategy.timeframe}</span>
                 </div>
               )}
-              {strategy.indicators && strategy.indicators.length > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Indicators</span>
-                  <span className="text-gray-900">{strategy.indicators.length}</span>
-                </div>
+
+              {strategy.execution_source === 'tradingview' ? (
+                <>
+                  {strategy.account_mappings && strategy.account_mappings.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Accounts</span>
+                      <span className="text-gray-900">{strategy.account_mappings.length}</span>
+                    </div>
+                  )}
+                  {strategy.atr_config && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">ATR Period</span>
+                      <span className="text-gray-900">{strategy.atr_config.period}</span>
+                    </div>
+                  )}
+                  {strategy.webhook_key && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-gray-600 font-medium">Webhook Key</span>
+                        <button
+                          onClick={() => copyWebhookKey(strategy.webhook_key)}
+                          className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                        >
+                          {copiedWebhookKey === strategy.webhook_key ? (
+                            <><Check className="w-3 h-3" /> Copied</>
+                          ) : (
+                            <><Copy className="w-3 h-3" /> Copy</>
+                          )}
+                        </button>
+                      </div>
+                      <div className="text-xs font-mono bg-gray-50 px-2 py-1 rounded border border-gray-200 truncate">
+                        {strategy.webhook_key}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {strategy.indicators && strategy.indicators.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Indicators</span>
+                      <span className="text-gray-900">{strategy.indicators.length}</span>
+                    </div>
+                  )}
+                </>
               )}
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Status</span>
                 <span
