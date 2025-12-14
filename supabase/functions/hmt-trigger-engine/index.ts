@@ -31,6 +31,7 @@ let wsManager: WebSocketManager | null = null;
 let orderExecutor: OrderExecutor | null = null;
 let engineStartTime: Date | null = null;
 let isEngineRunning = false;
+let engineInstanceId: string = crypto.randomUUID();
 
 // Stats tracking
 const stats: EngineStats = {
@@ -46,6 +47,9 @@ const stats: EngineStats = {
 
 // Engine error state
 let engineError: string | null = null;
+
+// Heartbeat interval
+let heartbeatInterval: number | null = null;
 
 // Engine configuration with sensible defaults
 const config: EngineConfig = {
@@ -75,9 +79,20 @@ async function initializeEngine(): Promise<void> {
   }
 
   console.log('[Engine] Initializing HMT Trigger Engine...');
+
+  // Acquire distributed lock (SINGLETON ENFORCEMENT)
+  const lockAcquired = await acquireEngineLock();
+  if (!lockAcquired) {
+    engineError = 'Another engine instance is already running. Only one engine can execute orders.';
+    console.error('[Engine]', engineError);
+    return;
+  }
+
   engineStartTime = new Date();
   isEngineRunning = true;
   engineError = null;
+
+  console.log(`[Engine] Lock acquired. Instance ID: ${engineInstanceId}`);
 
   // Initialize managers
   triggerManager = new TriggerManager();
@@ -131,6 +146,9 @@ async function initializeEngine(): Promise<void> {
 
   // Start health check monitor
   startHealthCheckMonitor();
+
+  // Start heartbeat updates to database
+  startHeartbeatUpdates();
 
   // Listen to database changes for trigger CRUD
   subscribeToTriggerChanges();
@@ -249,6 +267,14 @@ async function executeTriggerAsync(
       return;
     }
 
+    // RISK SAFETY: Check user risk limits before placing order
+    const riskCheckPassed = await checkRiskLimits(trigger.user_id);
+    if (!riskCheckPassed) {
+      console.error(`[Engine] Risk limits exceeded for user ${trigger.user_id}`);
+      await markTriggerFailed(trigger.id, 'Risk limits exceeded (max trades, max loss, or kill switch)');
+      return;
+    }
+
     // Place order
     const result = await orderExecutor.execute(execution, broker);
 
@@ -261,11 +287,16 @@ async function executeTriggerAsync(
         result.order_id!
       );
 
-      // Handle OCO: Cancel sibling trigger
-      if (trigger.condition_type === 'two-leg') {
+      // Log trade for audit and risk tracking
+      await logTrade(trigger, execution, result.order_id!);
+
+      // Handle OCO: Cancel sibling trigger ATOMICALLY
+      if (trigger.condition_type === 'two-leg' && trigger.parent_id) {
         const siblingId = triggerManager.getOCOSibling(trigger.id);
         if (siblingId) {
-          await cancelTrigger(siblingId);
+          // Cancel sibling in database first (atomic guard)
+          await cancelTrigger(siblingId, 'OCO sibling executed');
+          // Then remove from memory
           triggerManager.removeTrigger(siblingId);
         }
       }
@@ -274,7 +305,7 @@ async function executeTriggerAsync(
       triggerManager.removeTrigger(trigger.id);
 
       stats.triggered_orders++;
-      console.log(`[Engine] ✓ Trigger ${trigger.id} executed successfully: ${result.order_id}`);
+      console.log(`[Engine] ✓ Trigger ${trigger.id} executed: ${result.order_id}`);
     } else {
       // Order placement failed
       await markTriggerFailed(trigger.id, result.error || 'Unknown error');
@@ -333,14 +364,145 @@ async function markTriggerFailed(triggerId: string, errorMessage: string): Promi
 /**
  * Cancel trigger (for OCO sibling)
  */
-async function cancelTrigger(triggerId: string): Promise<void> {
+async function cancelTrigger(triggerId: string, reason: string = 'Cancelled'): Promise<void> {
   await supabase
     .from('hmt_gtt_orders')
     .update({
       status: 'cancelled',
+      error_message: reason,
       updated_at: new Date().toISOString()
     })
-    .eq('id', triggerId);
+    .eq('id', triggerId)
+    .eq('status', 'active'); // Only cancel if still active (OCO atomicity guard)
+}
+
+/**
+ * Check risk limits before order placement (RISK SAFETY)
+ */
+async function checkRiskLimits(userId: string): Promise<boolean> {
+  try {
+    const { data: limits, error } = await supabase
+      .from('risk_limits')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !limits) {
+      console.error(`[Engine] Risk limits not found for user ${userId}`);
+      return false;
+    }
+
+    // Check kill switch
+    if (limits.kill_switch_enabled) {
+      console.error(`[Engine] Kill switch enabled for user ${userId}`);
+      return false;
+    }
+
+    // Reset daily counters if needed
+    const today = new Date().toISOString().split('T')[0];
+    if (limits.last_reset_date !== today) {
+      await supabase.rpc('reset_daily_risk_counters');
+      // Reload limits after reset
+      const { data: refreshedLimits } = await supabase
+        .from('risk_limits')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      if (refreshedLimits) {
+        Object.assign(limits, refreshedLimits);
+      }
+    }
+
+    // Check max trades per day
+    if (limits.daily_trades_count >= limits.max_trades_per_day) {
+      console.error(`[Engine] Max trades per day exceeded for user ${userId}`);
+      return false;
+    }
+
+    // Check max loss per day
+    if (limits.daily_pnl <= -Math.abs(limits.max_loss_per_day)) {
+      console.error(`[Engine] Max loss per day exceeded for user ${userId}`);
+      return false;
+    }
+
+    // Check auto square-off time
+    const now = new Date();
+    const currentTime = now.toTimeString().split(' ')[0];
+    if (currentTime >= limits.auto_square_off_time) {
+      console.error(`[Engine] Auto square-off time reached for user ${userId}`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('[Engine] Error checking risk limits:', error);
+    return false;
+  }
+}
+
+/**
+ * Log trade for audit trail and risk tracking
+ */
+async function logTrade(
+  trigger: HMTTrigger,
+  execution: any,
+  orderId: string
+): Promise<void> {
+  try {
+    await supabase
+      .from('hmt_trade_log')
+      .insert({
+        user_id: trigger.user_id,
+        hmt_order_id: trigger.id,
+        broker_connection_id: trigger.broker_connection_id,
+        trading_symbol: trigger.trading_symbol,
+        exchange: trigger.exchange,
+        transaction_type: trigger.transaction_type,
+        quantity: execution.order_data.quantity,
+        trigger_price: execution.triggered_leg === '1' ? trigger.trigger_price_1 : trigger.trigger_price_2,
+        executed_price: execution.ltp,
+        order_id: orderId,
+        order_status: 'COMPLETE'
+      });
+
+    // Update risk limits counters
+    await supabase.rpc('increment_daily_trade_count', { p_user_id: trigger.user_id });
+  } catch (error) {
+    console.error('[Engine] Error logging trade:', error);
+  }
+}
+
+/**
+ * Acquire distributed lock for singleton enforcement
+ */
+async function acquireEngineLock(): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .rpc('acquire_engine_lock', { p_instance_id: engineInstanceId });
+
+    if (error) {
+      console.error('[Engine] Error acquiring lock:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (error) {
+    console.error('[Engine] Exception acquiring lock:', error);
+    return false;
+  }
+}
+
+/**
+ * Release distributed lock
+ */
+async function releaseEngineLock(): Promise<void> {
+  try {
+    await supabase
+      .rpc('release_engine_lock', { p_instance_id: engineInstanceId });
+    console.log('[Engine] Lock released');
+  } catch (error) {
+    console.error('[Engine] Error releasing lock:', error);
+  }
 }
 
 /**
@@ -438,18 +600,47 @@ function startHealthCheckMonitor(): void {
     if (stats.last_tick_time) {
       const timeSinceLastTick = Date.now() - stats.last_tick_time.getTime();
       if (timeSinceLastTick > 60000 && stats.websocket_status === 'connected') {
-        console.warn('[Engine] No ticks received in 60 seconds - connection may be stale');
+        console.warn('[Engine] ⚠ No ticks in 60s - connection may be stale');
       }
     }
+
+    // Heartbeat log (every health check interval)
+    console.log(`[Engine] ♥ Heartbeat | Uptime: ${stats.uptime_seconds}s | Ticks: ${stats.processed_ticks} | Orders: ${stats.triggered_orders} | Active: ${stats.active_triggers} | WS: ${stats.websocket_status}`);
   }, config.health_check_interval_ms);
+}
+
+/**
+ * Start heartbeat updates to database
+ */
+function startHeartbeatUpdates(): void {
+  heartbeatInterval = setInterval(async () => {
+    try {
+      await supabase.rpc('update_engine_heartbeat', {
+        p_instance_id: engineInstanceId,
+        p_processed_ticks: stats.processed_ticks,
+        p_triggered_orders: stats.triggered_orders,
+        p_failed_orders: stats.failed_orders,
+        p_active_triggers: triggerManager?.getActiveTriggerCount() || 0,
+        p_websocket_status: stats.websocket_status
+      });
+    } catch (error) {
+      console.error('[Engine] Error updating heartbeat:', error);
+    }
+  }, 10000); // Update every 10 seconds
 }
 
 /**
  * Shutdown engine gracefully
  */
-function shutdownEngine(): void {
+async function shutdownEngine(): Promise<void> {
   console.log('[Engine] Shutting down...');
   isEngineRunning = false;
+
+  // Stop heartbeat updates
+  if (heartbeatInterval !== null) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
 
   if (wsManager) {
     wsManager.disconnect();
@@ -463,6 +654,9 @@ function shutdownEngine(): void {
 
   orderExecutor = null;
   engineStartTime = null;
+
+  // Release distributed lock
+  await releaseEngineLock();
 
   console.log('[Engine] Shutdown complete');
 }
@@ -559,7 +753,7 @@ Deno.serve(async (req: Request) => {
 
   // Stop engine endpoint
   if (path.endsWith('/stop')) {
-    shutdownEngine();
+    await shutdownEngine();
     return new Response(JSON.stringify({ success: true, message: 'Engine stopped' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

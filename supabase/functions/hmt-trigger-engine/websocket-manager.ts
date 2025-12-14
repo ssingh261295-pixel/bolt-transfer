@@ -146,18 +146,21 @@ export class WebSocketManager {
    */
   private handleMessage(data: any): void {
     try {
-      // Handle binary data (more efficient)
-      if (data instanceof ArrayBuffer || data instanceof Blob) {
-        // Zerodha sends binary tick data - parse accordingly
-        // For simplicity, we'll handle JSON for now
+      // Handle binary data (Zerodha's preferred format for performance)
+      if (data instanceof ArrayBuffer) {
+        this.handleBinaryMessage(data);
         return;
       }
 
-      // Handle JSON data
+      if (data instanceof Blob) {
+        data.arrayBuffer().then(buffer => this.handleBinaryMessage(buffer));
+        return;
+      }
+
+      // Handle JSON data (fallback)
       const message = typeof data === 'string' ? JSON.parse(data) : data;
 
       if (message.type === 'order') {
-        // Ignore order updates
         return;
       }
 
@@ -169,6 +172,48 @@ export class WebSocketManager {
       }
     } catch (error) {
       console.error('[WebSocketManager] Error handling message:', error);
+    }
+  }
+
+  /**
+   * Handle binary tick data from Zerodha WebSocket
+   * Binary format is more efficient and reduces latency
+   */
+  private handleBinaryMessage(buffer: ArrayBuffer): void {
+    try {
+      const view = new DataView(buffer);
+      let offset = 0;
+
+      // Read number of packets
+      if (buffer.byteLength < 2) return;
+      const packetCount = view.getUint16(offset, false);
+      offset += 2;
+
+      // Process each packet
+      for (let i = 0; i < packetCount; i++) {
+        if (offset + 2 > buffer.byteLength) break;
+        const packetLength = view.getUint16(offset, false);
+        offset += 2;
+
+        if (offset + packetLength > buffer.byteLength) break;
+
+        // Parse tick based on mode (full, quote, ltp)
+        // LTP mode: 8 bytes (instrument_token: 4, ltp: 4)
+        // Full mode: 44+ bytes with OHLC, volume, etc.
+        if (packetLength >= 8) {
+          const instrument_token = view.getUint32(offset, false);
+          const last_price = view.getUint32(offset + 4, false) / 100; // Price is in paise
+
+          this.processTick({
+            instrument_token,
+            last_price
+          });
+        }
+
+        offset += packetLength;
+      }
+    } catch (error) {
+      console.error('[WebSocketManager] Error parsing binary message:', error);
     }
   }
 
