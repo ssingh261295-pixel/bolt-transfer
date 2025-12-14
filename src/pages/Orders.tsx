@@ -302,12 +302,6 @@ export function Orders() {
         </div>
       </div>
 
-      {syncMessage && (
-        <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
-          {syncMessage}
-        </div>
-      )}
-
       {cancelMessage && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
           {cancelMessage}
