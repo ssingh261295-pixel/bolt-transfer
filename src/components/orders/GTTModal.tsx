@@ -1182,7 +1182,14 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
           </div>
 
           {/* Target Leg (Only for OCO) */}
-          {gttType === 'two-leg' && (
+          <div
+            className="transition-all duration-200 overflow-hidden"
+            style={{
+              maxHeight: gttType === 'two-leg' ? '500px' : '0',
+              opacity: gttType === 'two-leg' ? 1 : 0,
+              pointerEvents: gttType === 'two-leg' ? 'auto' : 'none'
+            }}
+          >
             <div className="bg-gray-50 border border-gray-200 rounded p-2.5">
               <div className="mb-2">
                 <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
@@ -1360,7 +1367,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                 </div>
               </div>
             </div>
-          )}
+          </div>
           </div>
 
           {/* Footer */}
