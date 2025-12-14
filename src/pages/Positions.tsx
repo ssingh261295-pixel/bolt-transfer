@@ -1,8 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
-import { LineChart, RefreshCw, ArrowUpDown, Activity, MoreVertical } from 'lucide-react';
+import { LineChart, ArrowUpDown, Activity, MoreVertical } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { useZerodha } from '../hooks/useZerodha';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
 import { GTTModal } from '../components/orders/GTTModal';
 import { ExitPositionModal } from '../components/orders/ExitPositionModal';
@@ -13,7 +12,6 @@ type SortDirection = 'asc' | 'desc';
 
 export function Positions() {
   const { user } = useAuth();
-  const { syncPositions, loading: syncLoading } = useZerodha();
   const [positions, setPositions] = useState<any[]>([]);
   const [allPositions, setAllPositions] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
@@ -208,58 +206,6 @@ export function Positions() {
     }
   };
 
-  const handleSync = async () => {
-    if (brokers.length === 0) {
-      setSyncMessage('No active broker connections found');
-      setTimeout(() => setSyncMessage(''), 3000);
-      return;
-    }
-
-    setSyncMessage(`Syncing positions from ${brokers.length} account(s)...`);
-
-    // Sync all brokers in parallel for faster performance
-    const syncPromises = brokers.map(async (broker) => {
-      try {
-        const accountName = broker.account_holder_name
-          ? `${broker.account_holder_name} (${broker.client_id || 'No Client ID'})`
-          : broker.account_name || `Account (${broker.api_key.substring(0, 8)}...)`;
-
-        const result = await syncPositions(broker.id);
-
-        if (result.success) {
-          console.log(`Successfully synced ${result.synced} positions from ${accountName}`);
-          return { success: true, synced: result.synced || 0, accountName };
-        } else {
-          console.error(`Failed to sync ${accountName}:`, result.error);
-          return { success: false, error: result.error, accountName };
-        }
-      } catch (err: any) {
-        const accountName = broker.account_holder_name
-          ? `${broker.account_holder_name} (${broker.client_id || 'No Client ID'})`
-          : broker.account_name || `Account (${broker.api_key.substring(0, 8)}...)`;
-        console.error(`Error syncing ${accountName}:`, err);
-        return { success: false, error: err.message || 'Unknown error', accountName };
-      }
-    });
-
-    const results = await Promise.all(syncPromises);
-
-    const successCount = results.filter(r => r.success).length;
-    const totalSynced = results.reduce((sum, r) => sum + (r.synced || 0), 0);
-    const errors = results.filter(r => !r.success);
-
-    if (errors.length === 0) {
-      setSyncMessage(`✓ Synced ${totalSynced} positions from ${successCount} account(s) successfully`);
-    } else if (successCount > 0) {
-      setSyncMessage(`Synced ${totalSynced} positions from ${successCount} account(s), ${errors.length} failed. Check console for details.`);
-    } else {
-      setSyncMessage(`Failed to sync all accounts. Check console for details.`);
-    }
-
-    await loadPositions();
-    setTimeout(() => setSyncMessage(''), 6000);
-  };
-
   const handleOpenExitModal = (position?: any) => {
     if (position) {
       setExitModalOpen(true);
@@ -374,14 +320,6 @@ export function Positions() {
               </option>
             ))}
           </select>
-          <button
-            onClick={handleSync}
-            disabled={syncLoading || brokers.length === 0}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw className={`w-5 h-5 ${syncLoading ? 'animate-spin' : ''}`} />
-            Sync Positions
-          </button>
         </div>
       </div>
 

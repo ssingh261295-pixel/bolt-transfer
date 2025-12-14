@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ShoppingCart, Filter, Plus, RefreshCw, ArrowUpDown, X } from 'lucide-react';
+import { ShoppingCart, Filter, Plus, ArrowUpDown, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { useZerodha } from '../hooks/useZerodha';
 import { PlaceOrderModal } from '../components/orders/PlaceOrderModal';
 
 type SortField = 'created_at' | 'symbol' | 'quantity' | 'price' | 'status';
@@ -10,13 +9,11 @@ type SortDirection = 'asc' | 'desc';
 
 export function Orders() {
   const { user, session } = useAuth();
-  const { syncOrders, loading: syncLoading } = useZerodha();
   const [orders, setOrders] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
   const [selectedBrokerId, setSelectedBrokerId] = useState<string>('all');
   const [filter, setFilter] = useState('all');
   const [showPlaceOrder, setShowPlaceOrder] = useState(false);
-  const [syncMessage, setSyncMessage] = useState('');
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [cancellingOrders, setCancellingOrders] = useState<Set<string>>(new Set());
@@ -182,62 +179,6 @@ export function Orders() {
     }
   };
 
-  const handleSync = async () => {
-    if (brokers.length === 0) {
-      setSyncMessage('No active broker connections found');
-      setTimeout(() => setSyncMessage(''), 3000);
-      return;
-    }
-
-    setSyncMessage(`Syncing orders from ${brokers.length} account(s)...`);
-
-    // Sync all brokers in parallel for faster performance
-    const syncPromises = brokers.map(async (broker) => {
-      try {
-        const accountName = broker.account_name || broker.account_holder_name || `Account (${broker.api_key.substring(0, 8)}...)`;
-        const result = await syncOrders(broker.id);
-
-        if (result.success) {
-          console.log(`Successfully synced ${result.synced} orders from ${accountName}`);
-          return { success: true, synced: result.synced || 0, accountName, tokenExpired: false };
-        } else {
-          const errorMsg = result.error || 'Unknown error';
-          const tokenExpired = errorMsg.includes('Token expired') || errorMsg.includes('403');
-          console.error(`Failed to sync ${accountName}:`, errorMsg);
-          return { success: false, error: errorMsg, accountName, tokenExpired };
-        }
-      } catch (err: any) {
-        const accountName = broker.account_name || broker.account_holder_name || `Account (${broker.api_key.substring(0, 8)}...)`;
-        const errorMsg = err.message || 'Unknown error';
-        const tokenExpired = errorMsg.includes('Token expired') || errorMsg.includes('403');
-        console.error(`Error syncing ${accountName}:`, err);
-        return { success: false, error: errorMsg, accountName, tokenExpired };
-      }
-    });
-
-    const results = await Promise.all(syncPromises);
-
-    const successCount = results.filter(r => r.success).length;
-    const totalSynced = results.reduce((sum, r) => sum + (r.synced || 0), 0);
-    const errors = results.filter(r => !r.success);
-    const hasTokenExpired = results.some(r => r.tokenExpired);
-
-    if (hasTokenExpired) {
-      await loadBrokers();
-    }
-
-    if (errors.length === 0) {
-      setSyncMessage(`✓ Synced ${totalSynced} orders from ${successCount} account(s) successfully`);
-    } else if (successCount > 0) {
-      setSyncMessage(`Synced ${totalSynced} orders from ${successCount} account(s), ${errors.length} failed. ${hasTokenExpired ? 'Some tokens expired - please reconnect.' : ''}`);
-    } else {
-      setSyncMessage(`Failed to sync all accounts. ${hasTokenExpired ? 'Tokens expired - please reconnect your broker accounts.' : 'Check console for details.'}`);
-    }
-
-    await loadOrders();
-    setTimeout(() => setSyncMessage(''), 8000);
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'COMPLETED':
@@ -283,14 +224,6 @@ export function Orders() {
           >
             <Plus className="w-5 h-5" />
             Place Order
-          </button>
-          <button
-            onClick={handleSync}
-            disabled={syncLoading || brokers.length === 0}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw className={`w-5 h-5 ${syncLoading ? 'animate-spin' : ''}`} />
-            Sync
           </button>
           <div className="flex items-center gap-2">
             <Filter className="w-5 h-5 text-gray-600" />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, RefreshCw, Edit2, Trash2, ArrowUpDown, Activity } from 'lucide-react';
+import { Plus, Edit2, Trash2, ArrowUpDown, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
@@ -16,7 +16,6 @@ export function GTTOrders() {
   const [selectedInstrument, setSelectedInstrument] = useState<string>('all');
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBrokerId !== 'all' ? selectedBrokerId : brokers[0]?.id);
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingGTT, setEditingGTT] = useState<any>(null);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
@@ -206,12 +205,6 @@ export function GTTOrders() {
       setGttOrders(sortGTTOrders(gttOrders));
     }
   }, [sortField, sortDirection]);
-
-  const handleSync = async () => {
-    setSyncing(true);
-    await loadGTTOrders();
-    setSyncing(false);
-  };
 
   const toggleOrderSelection = (orderId: string) => {
     setSelectedOrders(prev => {
@@ -420,14 +413,6 @@ export function GTTOrders() {
               ))}
             </select>
           )}
-          <button
-            onClick={handleSync}
-            disabled={syncing || !selectedBrokerId}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 text-sm"
-          >
-            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            Sync
-          </button>
           <button
             onClick={() => {
               setEditingGTT(null);

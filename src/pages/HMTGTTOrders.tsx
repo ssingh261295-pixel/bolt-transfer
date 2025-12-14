@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, RefreshCw, Edit2, Trash2, ArrowUpDown, Activity, Power, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, ArrowUpDown, Activity, Power, AlertCircle, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
@@ -199,10 +199,6 @@ export function HMTGTTOrders() {
       setHmtGttOrders(sortHMTGTTOrders(hmtGttOrders));
     }
   }, [sortField, sortDirection]);
-
-  const handleSync = async () => {
-    await loadHMTGTTOrders();
-  };
 
   const toggleOrderSelection = (orderId: string) => {
     setSelectedOrders(prev => {
@@ -453,14 +449,6 @@ export function HMTGTTOrders() {
           >
             <Power className="w-4 h-4" />
             {loadingEngine ? 'Loading...' : engineStatus?.status === 'running' ? 'Stop Engine' : 'Start Engine'}
-          </button>
-          <button
-            onClick={handleSync}
-            disabled={!selectedBrokerId}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 text-sm"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Sync
           </button>
           <button
             onClick={() => {
