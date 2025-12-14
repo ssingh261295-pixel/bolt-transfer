@@ -370,10 +370,6 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
             <p className="text-sm text-gray-600 mb-3">Select which broker accounts should execute this strategy:</p>
             <div className="space-y-2">
               {availableAccounts.map(account => {
-                const displayName = account.account_name ||
-                                   account.client_id ||
-                                   account.account_holder_name ||
-                                   `${account.broker_name} Account`;
                 return (
                   <label key={account.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                     <input
@@ -383,7 +379,10 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
                       className="w-4 h-4 text-blue-600"
                     />
                     <div>
-                      <div className="font-medium text-gray-900">{displayName}</div>
+                      <div className="font-medium text-gray-900">
+                        {account.account_holder_name || account.account_name || 'Account'}
+                        {account.client_id && ` (${account.client_id})`}
+                      </div>
                       <div className="text-sm text-gray-600">{account.broker_name}</div>
                     </div>
                   </label>
