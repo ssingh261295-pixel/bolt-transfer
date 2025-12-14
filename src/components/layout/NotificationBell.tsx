@@ -21,6 +21,8 @@ interface BrokerAccount {
   id: string;
   broker_name: string;
   account_name?: string;
+  client_id?: string;
+  account_holder_name?: string;
 }
 
 export function NotificationBell() {
@@ -81,7 +83,7 @@ export function NotificationBell() {
   const loadBrokerAccounts = async () => {
     const { data, error } = await supabase
       .from('broker_connections')
-      .select('id, broker_name, account_name')
+      .select('id, broker_name, account_name, client_id, account_holder_name')
       .eq('user_id', user?.id)
       .eq('is_active', true);
 
@@ -268,11 +270,17 @@ export function NotificationBell() {
                 className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="all">All Accounts</option>
-                {brokerAccounts.map(account => (
-                  <option key={account.id} value={account.id}>
-                    {account.account_name || account.broker_name}
-                  </option>
-                ))}
+                {brokerAccounts.map(account => {
+                  const displayName = account.account_name ||
+                                     account.client_id ||
+                                     account.account_holder_name ||
+                                     `${account.broker_name} Account`;
+                  return (
+                    <option key={account.id} value={account.id}>
+                      {displayName}
+                    </option>
+                  );
+                })}
               </select>
 
               <select
