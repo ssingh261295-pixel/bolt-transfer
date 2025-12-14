@@ -6,6 +6,7 @@ import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
 import { GTTModal } from '../components/orders/GTTModal';
 import { ExitPositionModal } from '../components/orders/ExitPositionModal';
 import { PlaceOrderModal } from '../components/orders/PlaceOrderModal';
+import { formatIndianCurrency } from '../lib/formatters';
 
 type SortField = 'symbol' | 'quantity' | 'average_price' | 'current_price' | 'pnl' | 'pnl_percentage';
 type SortDirection = 'asc' | 'desc';
@@ -372,12 +373,12 @@ export function Positions() {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="text-sm text-gray-600 mb-1">Total P&L</h3>
           <p className={`text-3xl font-bold ${summary.totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {summary.totalPnL >= 0 ? '+' : ''}₹{summary.totalPnL.toFixed(2)}
+            {summary.totalPnL >= 0 ? '+' : ''}{formatIndianCurrency(summary.totalPnL)}
           </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="text-sm text-gray-600 mb-1">Total Invested</h3>
-          <p className="text-3xl font-bold text-gray-900">₹{summary.totalInvested.toFixed(2)}</p>
+          <p className="text-3xl font-bold text-gray-900">{formatIndianCurrency(summary.totalInvested)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="text-sm text-gray-600 mb-1">Open Positions</h3>
@@ -506,14 +507,14 @@ export function Positions() {
                         </span>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
-                        ₹{position.average_price?.toFixed(2)}
+                        {formatIndianCurrency(position.average_price || 0)}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
-                        ₹{currentPrice.toFixed(2)}
+                        {formatIndianCurrency(currentPrice)}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <span className={`text-sm font-medium ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {pnl >= 0 ? '+' : ''}₹{pnl.toFixed(2)}
+                          {pnl >= 0 ? '+' : ''}{formatIndianCurrency(pnl)}
                         </span>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
