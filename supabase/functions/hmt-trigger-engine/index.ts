@@ -80,12 +80,26 @@ async function initializeEngine(): Promise<void> {
 
   console.log('[Engine] Initializing HMT Trigger Engine...');
 
-  // Acquire distributed lock (SINGLETON ENFORCEMENT)
-  const lockAcquired = await acquireEngineLock();
-  if (!lockAcquired) {
-    engineError = 'Another engine instance is already running. Only one engine can execute orders.';
-    console.error('[Engine]', engineError);
+  // Check if we already hold the lock
+  const alreadyRunning = await checkIfAlreadyRunning();
+  if (alreadyRunning) {
+    console.log('[Engine] Already running with this instance ID');
     return;
+  }
+
+  // Acquire distributed lock (SINGLETON ENFORCEMENT)
+  const lockResult = await acquireEngineLock();
+  if (!lockResult.acquired) {
+    if (lockResult.healthy_instance) {
+      console.log('[Engine] Another healthy instance is running. This instance will remain on standby.');
+      engineError = null;
+      isEngineRunning = false;
+      return;
+    } else {
+      engineError = 'Failed to acquire engine lock. Please try again.';
+      console.error('[Engine]', engineError);
+      return;
+    }
   }
 
   engineStartTime = new Date();
@@ -473,22 +487,60 @@ async function logTrade(
 }
 
 /**
+ * Check if this instance already holds the lock
+ */
+async function checkIfAlreadyRunning(): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('hmt_engine_state')
+      .select('*')
+      .eq('id', 'singleton')
+      .maybeSingle();
+
+    if (error || !data) return false;
+
+    return data.is_running && data.instance_id === engineInstanceId;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
  * Acquire distributed lock for singleton enforcement
  */
-async function acquireEngineLock(): Promise<boolean> {
+async function acquireEngineLock(): Promise<{ acquired: boolean; healthy_instance: boolean }> {
   try {
+    // First check if another instance is already running
+    const { data: currentState, error: stateError } = await supabase
+      .from('hmt_engine_state')
+      .select('*')
+      .eq('id', 'singleton')
+      .maybeSingle();
+
+    if (currentState && currentState.is_running && currentState.instance_id !== engineInstanceId) {
+      const lastHeartbeat = new Date(currentState.last_heartbeat);
+      const now = new Date();
+      const timeSinceHeartbeat = now.getTime() - lastHeartbeat.getTime();
+
+      if (timeSinceHeartbeat < 120000) {
+        console.log('[Engine] Another instance is healthy and running');
+        return { acquired: false, healthy_instance: true };
+      }
+      console.log('[Engine] Detected stale lock, attempting to reclaim...');
+    }
+
     const { data, error } = await supabase
       .rpc('acquire_engine_lock', { p_instance_id: engineInstanceId });
 
     if (error) {
       console.error('[Engine] Error acquiring lock:', error);
-      return false;
+      return { acquired: false, healthy_instance: false };
     }
 
-    return data === true;
+    return { acquired: data === true, healthy_instance: false };
   } catch (error) {
     console.error('[Engine] Exception acquiring lock:', error);
-    return false;
+    return { acquired: false, healthy_instance: false };
   }
 }
 
@@ -717,15 +769,49 @@ Deno.serve(async (req: Request) => {
 
   // Health check endpoint
   if (path.endsWith('/health')) {
+    // Fetch actual engine state from database
+    const { data: dbState } = await supabase
+      .from('hmt_engine_state')
+      .select('*')
+      .eq('id', 'singleton')
+      .maybeSingle();
+
+    // Determine if any engine instance is running
+    let actualStatus = 'stopped';
+    let actualError = engineError;
+
+    if (dbState && dbState.is_running) {
+      const lastHeartbeat = new Date(dbState.last_heartbeat);
+      const timeSinceHeartbeat = Date.now() - lastHeartbeat.getTime();
+
+      if (timeSinceHeartbeat < 120000) {
+        actualStatus = 'running';
+        actualError = null;
+      } else {
+        actualStatus = 'stopped';
+        actualError = 'Engine heartbeat stale (no updates in 2+ minutes)';
+      }
+    } else if (!actualError) {
+      actualError = null;
+    }
+
     return new Response(JSON.stringify({
-      status: isEngineRunning ? 'running' : 'stopped',
-      error: engineError,
+      status: actualStatus,
+      error: actualError,
       stats: {
         ...stats,
-        active_triggers: triggerManager?.getActiveTriggerCount() || 0,
-        subscribed_instruments: wsManager?.getSubscribedCount() || 0
+        active_triggers: dbState?.active_triggers || triggerManager?.getActiveTriggerCount() || 0,
+        subscribed_instruments: wsManager?.getSubscribedCount() || 0,
+        processed_ticks: dbState?.processed_ticks || stats.processed_ticks,
+        triggered_orders: dbState?.triggered_orders || stats.triggered_orders,
+        websocket_status: dbState?.websocket_status || stats.websocket_status
       },
-      config: config
+      config: config,
+      instance: {
+        is_this_instance_running: isEngineRunning,
+        this_instance_id: engineInstanceId,
+        running_instance_id: dbState?.instance_id || null
+      }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
