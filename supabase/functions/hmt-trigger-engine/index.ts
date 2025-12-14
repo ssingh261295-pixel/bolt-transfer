@@ -319,14 +319,14 @@ async function executeTriggerAsync(
       triggerManager.removeTrigger(trigger.id);
 
       stats.triggered_orders++;
-      console.log(`[Engine] ✓ Trigger ${trigger.id} executed: ${result.order_id}`);
+      console.log(`[Engine] Trigger ${trigger.id} executed: ${result.order_id}`);
     } else {
       // Order placement failed
       await markTriggerFailed(trigger.id, result.error || 'Unknown error');
       triggerManager.removeTrigger(trigger.id);
 
       stats.failed_orders++;
-      console.error(`[Engine] ✗ Trigger ${trigger.id} failed: ${result.error}`);
+      console.error(`[Engine] Trigger ${trigger.id} failed: ${result.error}`);
     }
   } catch (error: any) {
     console.error(`[Engine] Exception executing trigger ${trigger.id}:`, error);
@@ -655,12 +655,12 @@ function startHealthCheckMonitor(): void {
     if (stats.last_tick_time) {
       const timeSinceLastTick = Date.now() - stats.last_tick_time.getTime();
       if (timeSinceLastTick > 60000 && stats.websocket_status === 'connected') {
-        console.warn('[Engine] ⚠ No ticks in 60s - connection may be stale');
+        console.warn('[Engine] No ticks in 60s - connection may be stale');
       }
     }
 
     // Heartbeat log (every health check interval)
-    console.log(`[Engine] ♥ Heartbeat | Uptime: ${stats.uptime_seconds}s | Ticks: ${stats.processed_ticks} | Orders: ${stats.triggered_orders} | Active: ${stats.active_triggers} | WS: ${stats.websocket_status}`);
+    console.log(`[Engine] Heartbeat | Uptime: ${stats.uptime_seconds}s | Ticks: ${stats.processed_ticks} | Orders: ${stats.triggered_orders} | Active: ${stats.active_triggers} | WS: ${stats.websocket_status}`);
   }, config.health_check_interval_ms);
 }
 
@@ -689,9 +689,9 @@ async function updateHeartbeat(): Promise<void> {
       p_active_triggers: triggerManager?.getActiveTriggerCount() || 0,
       p_websocket_status: stats.websocket_status
     });
-    console.log(`[Engine] ♥ Heartbeat updated | Ticks: ${stats.processed_ticks} | WS: ${stats.websocket_status}`);
+    console.log(`[Engine] Heartbeat updated | Ticks: ${stats.processed_ticks} | WS: ${stats.websocket_status}`);
   } catch (error) {
-    console.error('[Engine] ⚠ Error updating heartbeat:', error);
+    console.error('[Engine] Error updating heartbeat:', error);
   }
 }
 

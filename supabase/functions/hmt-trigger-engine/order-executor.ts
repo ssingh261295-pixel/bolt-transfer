@@ -3,12 +3,15 @@
  */
 
 import { TriggerExecution, OrderResult, BrokerConnection } from './types.ts';
+import { createNotification, formatOrderNotification } from './notification-helper.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
 export class OrderExecutor {
   private supabaseUrl: string;
   private supabaseKey: string;
   private maxRetries: number;
   private retryBackoffMs: number;
+  private supabase: any;
 
   constructor(
     supabaseUrl: string,
@@ -20,6 +23,7 @@ export class OrderExecutor {
     this.supabaseKey = supabaseKey;
     this.maxRetries = maxRetries;
     this.retryBackoffMs = retryBackoffMs;
+    this.supabase = createClient(supabaseUrl, supabaseKey);
   }
 
   /**
@@ -44,6 +48,33 @@ export class OrderExecutor {
 
         if (result.success) {
           console.log(`[OrderExecutor] Order placed successfully: ${result.order_id} for trigger ${execution.trigger_id}`);
+
+          // Create success notification
+          // Leg 1 = Stop Loss, Leg 2 = Target
+          const action = execution.leg === '1' ? 'sl_hit' : (execution.leg === '2' ? 'target_hit' : 'placed');
+          const notif = formatOrderNotification(
+            action,
+            execution.trigger.trading_symbol,
+            execution.trigger.transaction_type,
+            execution.order_data.quantity,
+            execution.order_data.price
+          );
+
+          await createNotification(this.supabase, {
+            user_id: execution.trigger.user_id,
+            source: 'hmt_engine',
+            strategy_name: execution.trigger.metadata?.strategy_name,
+            symbol: execution.trigger.trading_symbol,
+            title: notif.title,
+            message: notif.message,
+            type: notif.type,
+            metadata: {
+              order_id: result.order_id,
+              trigger_id: execution.trigger_id,
+              leg: execution.leg
+            }
+          });
+
           return result;
         }
 
@@ -59,6 +90,31 @@ export class OrderExecutor {
         console.error(`[OrderExecutor] Exception on attempt ${attempt} for trigger ${execution.trigger_id}:`, error);
       }
     }
+
+    // Create failure notification
+    const notif = formatOrderNotification(
+      'failed',
+      execution.trigger.trading_symbol,
+      execution.trigger.transaction_type,
+      execution.order_data.quantity,
+      execution.order_data.price,
+      lastError
+    );
+
+    await createNotification(this.supabase, {
+      user_id: execution.trigger.user_id,
+      source: 'hmt_engine',
+      strategy_name: execution.trigger.metadata?.strategy_name,
+      symbol: execution.trigger.trading_symbol,
+      title: notif.title,
+      message: notif.message,
+      type: notif.type,
+      metadata: {
+        trigger_id: execution.trigger_id,
+        leg: execution.leg,
+        error: lastError
+      }
+    });
 
     return {
       success: false,
