@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Plus, RefreshCw, Edit2, Trash2, ArrowUpDown, Activity } from 'lucide-react';
+import { Plus, RefreshCw, Edit2, Trash2, ArrowUpDown, Activity, Power, AlertCircle, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
-import { useHMTGTTMonitor } from '../hooks/useHMTGTTMonitor';
 
 type SortField = 'symbol' | 'trigger_price' | 'created_at' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -29,12 +28,22 @@ export function HMTGTTOrders() {
   const [deleteType, setDeleteType] = useState<'bulk' | 'single'>('bulk');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [engineStatus, setEngineStatus] = useState<any>(null);
+  const [loadingEngine, setLoadingEngine] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadBrokers();
+      loadEngineStatus();
     }
   }, [user]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadEngineStatus();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (brokers.length > 0 && (!selectedBrokerId || selectedBrokerId === '')) {
@@ -67,11 +76,27 @@ export function HMTGTTOrders() {
     }
   }, [isConnected, hmtGttOrders, subscribe]);
 
-  // Monitor active HMT GTT orders and trigger when conditions are met
-  const activeOrders = hmtGttOrders.filter(order => order.status === 'active');
-  useHMTGTTMonitor(user?.id, activeOrders, getLTP, session?.access_token, () => {
-    loadHMTGTTOrders(true);
-  });
+  // Server-side engine handles all monitoring - UI just displays data
+  // Listen to real-time database changes for automatic updates
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel('hmt_gtt_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'hmt_gtt_orders',
+        filter: `user_id=eq.${user.id}`
+      }, () => {
+        loadHMTGTTOrders(true);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   const loadBrokers = async () => {
     const { data } = await supabase
@@ -290,18 +315,102 @@ export function HMTGTTOrders() {
     return `${sign}${absPercent.toFixed(1)}% of LTP`;
   };
 
+  const loadEngineStatus = async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hmt-trigger-engine/health`,
+        {
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setEngineStatus(data);
+      }
+    } catch (error) {
+      console.error('Failed to load engine status:', error);
+    }
+  };
+
+  const handleEngineToggle = async () => {
+    setLoadingEngine(true);
+    try {
+      const endpoint = engineStatus?.status === 'running' ? 'stop' : 'start';
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hmt-trigger-engine/${endpoint}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+        }
+      );
+      if (response.ok) {
+        await loadEngineStatus();
+      }
+    } catch (error) {
+      console.error('Failed to toggle engine:', error);
+    } finally {
+      setLoadingEngine(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">HMT GTT ({filteredHmtGttOrders.length})</h2>
-          <p className="text-sm text-gray-600 mt-1">Host-Monitored Trigger orders executed locally</p>
-          {isConnected && (
-            <div className="flex items-center gap-1.5 mt-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs w-fit">
-              <Activity className="w-3 h-3 animate-pulse" />
-              Live
-            </div>
-          )}
+          <p className="text-sm text-gray-600 mt-1">Server-Side Trigger Engine - Monitors 24/7</p>
+          <div className="flex items-center gap-3 mt-2">
+            {engineStatus && (
+              <>
+                <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs w-fit ${
+                  engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected'
+                    ? 'bg-green-100 text-green-700'
+                    : engineStatus.status === 'running' && engineStatus.error
+                    ? 'bg-red-100 text-red-700'
+                    : engineStatus.status === 'running'
+                    ? 'bg-yellow-100 text-yellow-700'
+                    : 'bg-gray-100 text-gray-700'
+                }`}>
+                  {engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected' ? (
+                    <>
+                      <Activity className="w-3 h-3 animate-pulse" />
+                      Engine Running
+                    </>
+                  ) : engineStatus.status === 'running' && engineStatus.error ? (
+                    <>
+                      <AlertCircle className="w-3 h-3" />
+                      Error
+                    </>
+                  ) : engineStatus.status === 'running' ? (
+                    <>
+                      <AlertCircle className="w-3 h-3" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <Power className="w-3 h-3" />
+                      Engine Stopped
+                    </>
+                  )}
+                </div>
+                {engineStatus.error && (
+                  <div className="text-xs text-red-600">
+                    {engineStatus.error}
+                  </div>
+                )}
+              </>
+            )}
+            {isConnected && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs w-fit">
+                <CheckCircle className="w-3 h-3" />
+                UI Live Prices
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex gap-3">
           {brokers.length > 0 && (
@@ -334,6 +443,18 @@ export function HMTGTTOrders() {
             </select>
           )}
           <button
+            onClick={handleEngineToggle}
+            disabled={loadingEngine}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-sm ${
+              engineStatus?.status === 'running'
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : 'bg-green-600 text-white hover:bg-green-700'
+            } disabled:opacity-50`}
+          >
+            <Power className="w-4 h-4" />
+            {loadingEngine ? 'Loading...' : engineStatus?.status === 'running' ? 'Stop Engine' : 'Start Engine'}
+          </button>
+          <button
             onClick={handleSync}
             disabled={!selectedBrokerId}
             className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 text-sm"
@@ -353,6 +474,29 @@ export function HMTGTTOrders() {
           </button>
         </div>
       </div>
+
+      {engineStatus && engineStatus.status === 'running' && engineStatus.stats && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <p className="text-gray-600">Active Triggers</p>
+              <p className="text-lg font-semibold text-gray-900">{engineStatus.stats.active_triggers}</p>
+            </div>
+            <div>
+              <p className="text-gray-600">Subscribed Instruments</p>
+              <p className="text-lg font-semibold text-gray-900">{engineStatus.stats.subscribed_instruments}</p>
+            </div>
+            <div>
+              <p className="text-gray-600">Processed Ticks</p>
+              <p className="text-lg font-semibold text-gray-900">{engineStatus.stats.processed_ticks.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-gray-600">Triggered Orders</p>
+              <p className="text-lg font-semibold text-green-700">{engineStatus.stats.triggered_orders}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deleteMessage && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
