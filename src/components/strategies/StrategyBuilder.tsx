@@ -104,7 +104,7 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
   const loadBrokerAccounts = async () => {
     const { data } = await supabase
       .from('broker_connections')
-      .select('id, broker_name, account_name, is_active')
+      .select('id, broker_name, account_name, client_id, account_holder_name, is_active')
       .eq('user_id', user?.id)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
@@ -342,12 +342,19 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
                 </button>
               </div>
               <p className="mt-2">Webhook Key (include in alert message):</p>
-              <input
-                type="text"
-                readOnly
-                value={webhookKey}
-                className="w-full px-3 py-2 bg-white border border-blue-300 rounded text-xs font-mono"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={webhookKey}
+                  className="flex-1 px-3 py-2 bg-gray-100 border border-blue-300 rounded text-xs font-mono"
+                />
+                {initialData && (
+                  <div className="px-3 py-2 bg-yellow-50 border border-yellow-300 rounded text-xs text-yellow-800 flex items-center">
+                    🔒 Read-only
+                  </div>
+                )}
+              </div>
               <p className="text-xs mt-2">
                 Alert message format: {'{'}"action": "{'{'}{'{'} strategy.order.action {'}'}{'}'}",
                 "symbol": "{symbol}", "price": "{'{'}{'{'} close {'}'}{'}'}",
@@ -362,20 +369,26 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
             <h3 className="text-lg font-semibold text-gray-900 mb-3">Trading Accounts</h3>
             <p className="text-sm text-gray-600 mb-3">Select which broker accounts should execute this strategy:</p>
             <div className="space-y-2">
-              {availableAccounts.map(account => (
-                <label key={account.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedAccounts.includes(account.id)}
-                    onChange={() => toggleAccount(account.id)}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <div>
-                    <div className="font-medium text-gray-900">{account.account_name || 'Unnamed Account'}</div>
-                    <div className="text-sm text-gray-600">{account.broker_name}</div>
-                  </div>
-                </label>
-              ))}
+              {availableAccounts.map(account => {
+                const displayName = account.account_name ||
+                                   account.client_id ||
+                                   account.account_holder_name ||
+                                   `${account.broker_name} Account`;
+                return (
+                  <label key={account.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedAccounts.includes(account.id)}
+                      onChange={() => toggleAccount(account.id)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <div>
+                      <div className="font-medium text-gray-900">{displayName}</div>
+                      <div className="text-sm text-gray-600">{account.broker_name}</div>
+                    </div>
+                  </label>
+                );
+              })}
               {availableAccounts.length === 0 && (
                 <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
                   No active broker accounts found. Please connect a broker first.
@@ -760,7 +773,7 @@ export function StrategyBuilder({ onSave, onCancel, initialData }: StrategyBuild
         </button>
         <button
           onClick={handleSave}
-          disabled={!name || !symbol}
+          disabled={!name || !symbol || (executionSource === 'tradingview' && (!webhookKey || selectedAccounts.length === 0))}
           className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Save Strategy
