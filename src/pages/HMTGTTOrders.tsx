@@ -330,12 +330,11 @@ export function HMTGTTOrders() {
     }
   };
 
-  const handleEngineToggle = async () => {
+  const handleRestartEngine = async () => {
     setLoadingEngine(true);
     try {
-      const endpoint = engineStatus?.status === 'running' ? 'stop' : 'start';
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hmt-trigger-engine/${endpoint}`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hmt-trigger-engine/start`,
         {
           method: 'POST',
           headers: {
@@ -347,7 +346,7 @@ export function HMTGTTOrders() {
         await loadEngineStatus();
       }
     } catch (error) {
-      console.error('Failed to toggle engine:', error);
+      console.error('Failed to restart engine:', error);
     } finally {
       setLoadingEngine(false);
     }
@@ -358,62 +357,77 @@ export function HMTGTTOrders() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">HMT GTT ({filteredHmtGttOrders.length})</h2>
-          <p className="text-sm text-gray-600 mt-1">Server-Side Trigger Engine - Monitors 24/7</p>
+          <p className="text-sm text-gray-600 mt-1">
+            Server-Side Trigger Engine - <span className="font-medium">Runs Automatically 24/7</span>
+          </p>
           <div className="flex items-center gap-3 mt-2">
-            {engineStatus && (
+            {engineStatus ? (
               <>
-                <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs w-fit ${
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
                   engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected'
-                    ? 'bg-green-100 text-green-700'
+                    ? 'bg-green-100 text-green-800 border border-green-300'
                     : engineStatus.status === 'stale'
-                    ? 'bg-yellow-100 text-yellow-700'
+                    ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
                     : engineStatus.status === 'running' && engineStatus.error
-                    ? 'bg-red-100 text-red-700'
+                    ? 'bg-red-100 text-red-800 border border-red-300'
                     : engineStatus.status === 'running'
-                    ? 'bg-yellow-100 text-yellow-700'
-                    : 'bg-gray-100 text-gray-700'
+                    ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                    : 'bg-gray-100 text-gray-800 border border-gray-300'
                 }`}>
                   {engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected' ? (
                     <>
-                      <Activity className="w-3 h-3 animate-pulse" />
-                      Engine Running
+                      <Activity className="w-4 h-4 animate-pulse" />
+                      <span>Engine Running</span>
                     </>
                   ) : engineStatus.status === 'stale' ? (
                     <>
-                      <AlertCircle className="w-3 h-3" />
-                      Engine Stale - Reconnecting
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Engine Stale - Auto-Reconnecting</span>
                     </>
                   ) : engineStatus.status === 'running' && engineStatus.error ? (
                     <>
-                      <AlertCircle className="w-3 h-3" />
-                      Error
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Engine Error</span>
                     </>
                   ) : engineStatus.status === 'running' ? (
                     <>
-                      <AlertCircle className="w-3 h-3" />
-                      Connecting...
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Connecting...</span>
                     </>
                   ) : (
                     <>
-                      <Power className="w-3 h-3" />
-                      Engine Stopped
+                      <Power className="w-4 h-4" />
+                      <span>Engine Stopped</span>
                     </>
                   )}
                 </div>
-                {engineStatus.heartbeat && (
-                  <div className="text-xs text-gray-600">
-                    Last heartbeat: {engineStatus.heartbeat.seconds_since_update}s ago
+                {engineStatus.heartbeat && engineStatus.heartbeat.seconds_since_update !== null && (
+                  <div className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
+                    Heartbeat: {engineStatus.heartbeat.seconds_since_update}s ago
                   </div>
                 )}
                 {engineStatus.error && engineStatus.status !== 'stale' && (
-                  <div className="text-xs text-red-600">
+                  <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200">
                     {engineStatus.error}
                   </div>
                 )}
+                {/* Show restart button only if engine is stopped or stale */}
+                {(engineStatus.status === 'stopped' || engineStatus.status === 'stale') && (
+                  <button
+                    onClick={handleRestartEngine}
+                    disabled={loadingEngine}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
+                  >
+                    <Power className="w-4 h-4" />
+                    {loadingEngine ? 'Restarting...' : 'Restart Engine'}
+                  </button>
+                )}
               </>
+            ) : (
+              <div className="text-sm text-gray-500">Loading engine status...</div>
             )}
             {isConnected && (
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs w-fit">
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
                 <CheckCircle className="w-3 h-3" />
                 UI Live Prices
               </div>
@@ -451,18 +465,6 @@ export function HMTGTTOrders() {
             </select>
           )}
           <button
-            onClick={handleEngineToggle}
-            disabled={loadingEngine}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition text-sm ${
-              engineStatus?.status === 'running'
-                ? 'bg-red-600 text-white hover:bg-red-700'
-                : 'bg-green-600 text-white hover:bg-green-700'
-            } disabled:opacity-50`}
-          >
-            <Power className="w-4 h-4" />
-            {loadingEngine ? 'Loading...' : engineStatus?.status === 'running' ? 'Stop Engine' : 'Start Engine'}
-          </button>
-          <button
             onClick={() => {
               setEditingGTT(null);
               setShowCreateModal(true);
@@ -476,23 +478,30 @@ export function HMTGTTOrders() {
       </div>
 
       {engineStatus && engineStatus.status === 'running' && engineStatus.stats && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-900">Engine Performance Metrics</h3>
+            <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium">
+              <Activity className="w-3.5 h-3.5 animate-pulse" />
+              Live Monitoring
+            </div>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
-              <p className="text-gray-600">Active Triggers</p>
-              <p className="text-lg font-semibold text-gray-900">{engineStatus.stats.active_triggers}</p>
+              <p className="text-gray-600 text-xs uppercase tracking-wide mb-1">Active Triggers</p>
+              <p className="text-2xl font-bold text-gray-900">{engineStatus.stats.active_triggers}</p>
             </div>
             <div>
-              <p className="text-gray-600">Subscribed Instruments</p>
-              <p className="text-lg font-semibold text-gray-900">{engineStatus.stats.subscribed_instruments}</p>
+              <p className="text-gray-600 text-xs uppercase tracking-wide mb-1">Subscribed Instruments</p>
+              <p className="text-2xl font-bold text-gray-900">{engineStatus.stats.subscribed_instruments}</p>
             </div>
             <div>
-              <p className="text-gray-600">Processed Ticks</p>
-              <p className="text-lg font-semibold text-gray-900">{engineStatus.stats.processed_ticks.toLocaleString()}</p>
+              <p className="text-gray-600 text-xs uppercase tracking-wide mb-1">Processed Ticks</p>
+              <p className="text-2xl font-bold text-blue-700">{engineStatus.stats.processed_ticks.toLocaleString()}</p>
             </div>
             <div>
-              <p className="text-gray-600">Triggered Orders</p>
-              <p className="text-lg font-semibold text-green-700">{engineStatus.stats.triggered_orders}</p>
+              <p className="text-gray-600 text-xs uppercase tracking-wide mb-1">Triggered Orders</p>
+              <p className="text-2xl font-bold text-green-700">{engineStatus.stats.triggered_orders}</p>
             </div>
           </div>
         </div>
