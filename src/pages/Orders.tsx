@@ -200,7 +200,7 @@ export function Orders() {
     try {
       const fetchPromises = brokers.map(async (broker) => {
         try {
-          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders?broker_id=${broker.id}`;
+          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/sync?broker_id=${broker.id}`;
           const response = await fetch(apiUrl, {
             headers: {
               'Authorization': `Bearer ${session?.access_token}`,
@@ -210,7 +210,7 @@ export function Orders() {
           const result = await response.json();
 
           if (result.success) {
-            console.log(`Fetched ${result.data?.length || 0} orders from broker ${broker.id}`);
+            console.log(`Synced ${result.synced || 0} orders from broker ${broker.id}`);
           }
         } catch (err) {
           console.error(`Error fetching orders for broker ${broker.id}:`, err);
