@@ -510,6 +510,9 @@ async function checkIfAlreadyRunning(): Promise<boolean> {
  */
 async function acquireEngineLock(): Promise<{ acquired: boolean; healthy_instance: boolean }> {
   try {
+    // Calculate stale threshold: 2 × health check interval
+    const staleThreshold = 2 * config.health_check_interval_ms;
+
     // First check if another instance is already running
     const { data: currentState, error: stateError } = await supabase
       .from('hmt_engine_state')
@@ -522,11 +525,11 @@ async function acquireEngineLock(): Promise<{ acquired: boolean; healthy_instanc
       const now = new Date();
       const timeSinceHeartbeat = now.getTime() - lastHeartbeat.getTime();
 
-      if (timeSinceHeartbeat < 120000) {
-        console.log('[Engine] Another instance is healthy and running');
+      if (timeSinceHeartbeat < staleThreshold) {
+        console.log(`[Engine] Another instance is healthy and running (heartbeat ${Math.floor(timeSinceHeartbeat / 1000)}s ago)`);
         return { acquired: false, healthy_instance: true };
       }
-      console.log('[Engine] Detected stale lock, attempting to reclaim...');
+      console.log(`[Engine] Detected stale lock (heartbeat ${Math.floor(timeSinceHeartbeat / 1000)}s ago, threshold ${staleThreshold / 1000}s), attempting to reclaim...`);
     }
 
     const { data, error } = await supabase
@@ -663,22 +666,33 @@ function startHealthCheckMonitor(): void {
 
 /**
  * Start heartbeat updates to database
+ * Updates every 10 seconds to ensure visibility even if health check is 30s
  */
 function startHeartbeatUpdates(): void {
-  heartbeatInterval = setInterval(async () => {
-    try {
-      await supabase.rpc('update_engine_heartbeat', {
-        p_instance_id: engineInstanceId,
-        p_processed_ticks: stats.processed_ticks,
-        p_triggered_orders: stats.triggered_orders,
-        p_failed_orders: stats.failed_orders,
-        p_active_triggers: triggerManager?.getActiveTriggerCount() || 0,
-        p_websocket_status: stats.websocket_status
-      });
-    } catch (error) {
-      console.error('[Engine] Error updating heartbeat:', error);
-    }
-  }, 10000); // Update every 10 seconds
+  // Emit heartbeat immediately on start
+  updateHeartbeat();
+
+  // Then emit every 10 seconds (more frequent than health check for reliability)
+  heartbeatInterval = setInterval(updateHeartbeat, 10000);
+}
+
+/**
+ * Update heartbeat in database (non-blocking)
+ */
+async function updateHeartbeat(): Promise<void> {
+  try {
+    await supabase.rpc('update_engine_heartbeat', {
+      p_instance_id: engineInstanceId,
+      p_processed_ticks: stats.processed_ticks,
+      p_triggered_orders: stats.triggered_orders,
+      p_failed_orders: stats.failed_orders,
+      p_active_triggers: triggerManager?.getActiveTriggerCount() || 0,
+      p_websocket_status: stats.websocket_status
+    });
+    console.log(`[Engine] ♥ Heartbeat updated | Ticks: ${stats.processed_ticks} | WS: ${stats.websocket_status}`);
+  } catch (error) {
+    console.error('[Engine] ⚠ Error updating heartbeat:', error);
+  }
 }
 
 /**
@@ -707,10 +721,10 @@ async function shutdownEngine(): Promise<void> {
   orderExecutor = null;
   engineStartTime = null;
 
-  // Release distributed lock
+  // Release distributed lock and update status to STOPPED
   await releaseEngineLock();
 
-  console.log('[Engine] Shutdown complete');
+  console.log('[Engine] Shutdown complete - status set to STOPPED');
 }
 
 /**
@@ -776,6 +790,9 @@ Deno.serve(async (req: Request) => {
       .eq('id', 'singleton')
       .maybeSingle();
 
+    // Calculate stale threshold: 2 × health check interval
+    const staleThreshold = 2 * config.health_check_interval_ms;
+
     // Determine if any engine instance is running
     let actualStatus = 'stopped';
     let actualError = engineError;
@@ -784,12 +801,12 @@ Deno.serve(async (req: Request) => {
       const lastHeartbeat = new Date(dbState.last_heartbeat);
       const timeSinceHeartbeat = Date.now() - lastHeartbeat.getTime();
 
-      if (timeSinceHeartbeat < 120000) {
+      if (timeSinceHeartbeat < staleThreshold) {
         actualStatus = 'running';
         actualError = null;
       } else {
-        actualStatus = 'stopped';
-        actualError = 'Engine heartbeat stale (no updates in 2+ minutes)';
+        actualStatus = 'stale';
+        actualError = `Engine heartbeat stale (no updates in ${Math.floor(timeSinceHeartbeat / 1000)}s, threshold: ${staleThreshold / 1000}s)`;
       }
     } else if (!actualError) {
       actualError = null;
@@ -807,6 +824,11 @@ Deno.serve(async (req: Request) => {
         websocket_status: dbState?.websocket_status || stats.websocket_status
       },
       config: config,
+      heartbeat: {
+        last_update: dbState?.last_heartbeat || null,
+        seconds_since_update: dbState?.last_heartbeat ? Math.floor(timeSinceHeartbeat / 1000) : null,
+        stale_threshold_seconds: staleThreshold / 1000
+      },
       instance: {
         is_this_instance_running: isEngineRunning,
         this_instance_id: engineInstanceId,

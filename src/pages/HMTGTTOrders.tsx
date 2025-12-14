@@ -365,6 +365,8 @@ export function HMTGTTOrders() {
                 <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs w-fit ${
                   engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected'
                     ? 'bg-green-100 text-green-700'
+                    : engineStatus.status === 'stale'
+                    ? 'bg-yellow-100 text-yellow-700'
                     : engineStatus.status === 'running' && engineStatus.error
                     ? 'bg-red-100 text-red-700'
                     : engineStatus.status === 'running'
@@ -375,6 +377,11 @@ export function HMTGTTOrders() {
                     <>
                       <Activity className="w-3 h-3 animate-pulse" />
                       Engine Running
+                    </>
+                  ) : engineStatus.status === 'stale' ? (
+                    <>
+                      <AlertCircle className="w-3 h-3" />
+                      Engine Stale - Reconnecting
                     </>
                   ) : engineStatus.status === 'running' && engineStatus.error ? (
                     <>
@@ -393,7 +400,12 @@ export function HMTGTTOrders() {
                     </>
                   )}
                 </div>
-                {engineStatus.error && (
+                {engineStatus.heartbeat && (
+                  <div className="text-xs text-gray-600">
+                    Last heartbeat: {engineStatus.heartbeat.seconds_since_update}s ago
+                  </div>
+                )}
+                {engineStatus.error && engineStatus.status !== 'stale' && (
                   <div className="text-xs text-red-600">
                     {engineStatus.error}
                   </div>
