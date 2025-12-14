@@ -185,7 +185,7 @@ Deno.serve(async (req: Request) => {
 
     // Create notification
     const notificationType = getNotificationTypeFromStatus(postbackData.status);
-    const priceStr = executedPrice ? ` at ₹${executedPrice}` : '';
+    const priceStr = executedPrice ? ` at 500 ${executedPrice}` : '';
     const qtyStr = executedQuantity > 0 ? ` (${executedQuantity}/${postbackData.quantity})` : '';
 
     let notificationTitle = 'Order Update';
@@ -215,6 +215,7 @@ Deno.serve(async (req: Request) => {
       .from('notifications')
       .insert({
         user_id: order.user_id,
+        broker_account_id: order.broker_connection_id,
         source: 'zerodha',
         symbol: postbackData.tradingsymbol,
         title: notificationTitle,

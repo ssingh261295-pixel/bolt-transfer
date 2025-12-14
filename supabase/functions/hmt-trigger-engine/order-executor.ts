@@ -62,6 +62,7 @@ export class OrderExecutor {
 
           await createNotification(this.supabase, {
             user_id: execution.trigger.user_id,
+            broker_account_id: execution.trigger.broker_connection_id,
             source: 'hmt_engine',
             strategy_name: execution.trigger.metadata?.strategy_name,
             symbol: execution.trigger.trading_symbol,
@@ -103,6 +104,7 @@ export class OrderExecutor {
 
     await createNotification(this.supabase, {
       user_id: execution.trigger.user_id,
+      broker_account_id: execution.trigger.broker_connection_id,
       source: 'hmt_engine',
       strategy_name: execution.trigger.metadata?.strategy_name,
       symbol: execution.trigger.trading_symbol,

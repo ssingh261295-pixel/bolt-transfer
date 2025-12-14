@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 interface Notification {
   id: string;
   source: string;
+  broker_account_id?: string;
   strategy_name?: string;
   symbol?: string;
   title: string;
@@ -16,9 +17,18 @@ interface Notification {
   metadata?: any;
 }
 
+interface BrokerAccount {
+  id: string;
+  broker_name: string;
+  account_name?: string;
+}
+
 export function NotificationBell() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [brokerAccounts, setBrokerAccounts] = useState<BrokerAccount[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<string>('all');
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('all');
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -27,6 +37,7 @@ export function NotificationBell() {
   useEffect(() => {
     if (user) {
       loadNotifications();
+      loadBrokerAccounts();
       subscribeToNotifications();
     }
 
@@ -65,6 +76,18 @@ export function NotificationBell() {
       setUnreadCount(data.filter(n => !n.is_read).length);
     }
     setLoading(false);
+  };
+
+  const loadBrokerAccounts = async () => {
+    const { data, error } = await supabase
+      .from('broker_connections')
+      .select('id, broker_name, account_name')
+      .eq('user_id', user?.id)
+      .eq('is_active', true);
+
+    if (!error && data) {
+      setBrokerAccounts(data);
+    }
   };
 
   const subscribeToNotifications = () => {
@@ -186,6 +209,20 @@ export function NotificationBell() {
     return date.toLocaleDateString();
   };
 
+  const uniqueSymbols = Array.from(
+    new Set(notifications.map(n => n.symbol).filter(Boolean))
+  ).sort();
+
+  const filteredNotifications = notifications.filter(notification => {
+    if (selectedAccount !== 'all' && notification.broker_account_id !== selectedAccount) {
+      return false;
+    }
+    if (selectedSymbol !== 'all' && notification.symbol !== selectedSymbol) {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
@@ -223,19 +260,49 @@ export function NotificationBell() {
             </div>
           </div>
 
+          {notifications.length > 0 && (
+            <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 flex gap-2">
+              <select
+                value={selectedAccount}
+                onChange={(e) => setSelectedAccount(e.target.value)}
+                className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="all">All Accounts</option>
+                {brokerAccounts.map(account => (
+                  <option key={account.id} value={account.id}>
+                    {account.account_name || account.broker_name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedSymbol}
+                onChange={(e) => setSelectedSymbol(e.target.value)}
+                className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="all">All Symbols</option>
+                {uniqueSymbols.map(symbol => (
+                  <option key={symbol} value={symbol}>
+                    {symbol}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="max-h-96 overflow-y-auto">
             {loading ? (
               <div className="p-8 text-center text-gray-500">
                 Loading notifications...
               </div>
-            ) : notifications.length === 0 ? (
+            ) : filteredNotifications.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <Bell className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                <p>No notifications yet</p>
+                <p>{notifications.length === 0 ? 'No notifications yet' : 'No notifications match filters'}</p>
               </div>
             ) : (
               <div className="divide-y divide-gray-100">
-                {notifications.map((notification) => (
+                {filteredNotifications.map((notification) => (
                   <div
                     key={notification.id}
                     className={`p-4 hover:bg-gray-50 transition cursor-pointer ${

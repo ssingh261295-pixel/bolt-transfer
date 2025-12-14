@@ -2,6 +2,7 @@ import { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 export interface NotificationData {
   user_id: string;
+  broker_account_id?: string;
   source: string;
   strategy_name?: string;
   symbol?: string;
@@ -18,6 +19,7 @@ export async function createNotification(
   try {
     const { error } = await supabase.from('notifications').insert({
       user_id: data.user_id,
+      broker_account_id: data.broker_account_id,
       source: data.source,
       strategy_name: data.strategy_name,
       symbol: data.symbol,

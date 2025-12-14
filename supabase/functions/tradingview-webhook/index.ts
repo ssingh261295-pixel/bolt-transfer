@@ -188,25 +188,6 @@ Deno.serve(async (req: Request) => {
     // Get quantity
     const quantity = strategy.risk_management?.positionSize || 1;
 
-    // Create notification for TradingView signal
-    await supabase.from('notifications').insert({
-      user_id: strategy.user_id,
-      source: 'tradingview',
-      strategy_name: strategy.name,
-      symbol: payload.symbol,
-      title: 'TradingView Signal Received',
-      message: `${action} signal for ${payload.symbol} via ${strategy.name}. Entry: ${entryPrice}, SL: ${stopLossPrice.toFixed(2)}, Target: ${targetPrice.toFixed(2)}`,
-      type: 'trade',
-      metadata: {
-        action: action,
-        entry_price: entryPrice,
-        stop_loss: stopLossPrice,
-        target: targetPrice,
-        atr: atr,
-        quantity: quantity
-      }
-    });
-
     // Create HMT GTT orders for each account
     const createdOrders = [];
     const errors = [];
@@ -273,6 +254,27 @@ Deno.serve(async (req: Request) => {
           sl: stopLossPrice,
           target: targetPrice,
           quantity: quantity
+        });
+
+        // Create notification for this account
+        await supabase.from('notifications').insert({
+          user_id: strategy.user_id,
+          broker_account_id: account.id,
+          source: 'tradingview',
+          strategy_name: strategy.name,
+          symbol: payload.symbol,
+          title: 'TradingView Signal Received',
+          message: `${action} signal for ${payload.symbol} via ${strategy.name}. Entry: ${entryPrice}, SL: ${stopLossPrice.toFixed(2)}, Target: ${targetPrice.toFixed(2)}`,
+          type: 'trade',
+          metadata: {
+            action: action,
+            entry_price: entryPrice,
+            stop_loss: stopLossPrice,
+            target: targetPrice,
+            atr: atr,
+            quantity: quantity,
+            broker_name: account.broker_name
+          }
         });
       } catch (error: any) {
         console.error(`[TradingView Webhook] Exception for account ${account.id}:`, error);
