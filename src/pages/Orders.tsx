@@ -19,6 +19,7 @@ export function Orders() {
   const [cancellingOrders, setCancellingOrders] = useState<Set<string>>(new Set());
   const [cancelMessage, setCancelMessage] = useState('');
   const [cancelError, setCancelError] = useState('');
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -31,6 +32,12 @@ export function Orders() {
       loadOrders();
     }
   }, [user, filter, selectedBrokerId]);
+
+  useEffect(() => {
+    if (brokers.length > 0 && !initialLoadDone) {
+      fetchInitialOrders();
+    }
+  }, [brokers]);
 
   const loadOrders = async () => {
     let query = supabase
@@ -176,6 +183,38 @@ export function Orders() {
 
     if (data) {
       setBrokers(data);
+    }
+  };
+
+  const fetchInitialOrders = async () => {
+    if (brokers.length === 0) return;
+
+    setInitialLoadDone(true);
+
+    try {
+      const fetchPromises = brokers.map(async (broker) => {
+        try {
+          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders?broker_id=${broker.id}`;
+          const response = await fetch(apiUrl, {
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          const result = await response.json();
+
+          if (result.success) {
+            console.log(`Fetched ${result.data?.length || 0} orders from broker ${broker.id}`);
+          }
+        } catch (err) {
+          console.error(`Error fetching orders for broker ${broker.id}:`, err);
+        }
+      });
+
+      await Promise.all(fetchPromises);
+      await loadOrders();
+    } catch (error) {
+      console.error('Error in initial orders fetch:', error);
     }
   };
 

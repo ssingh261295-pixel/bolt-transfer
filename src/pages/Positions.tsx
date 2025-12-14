@@ -11,7 +11,7 @@ type SortField = 'symbol' | 'quantity' | 'average_price' | 'current_price' | 'pn
 type SortDirection = 'asc' | 'desc';
 
 export function Positions() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [positions, setPositions] = useState<any[]>([]);
   const [allPositions, setAllPositions] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
@@ -33,6 +33,7 @@ export function Positions() {
   const [isExiting, setIsExiting] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBroker !== 'all' ? selectedBroker : brokers[0]?.id);
 
@@ -42,6 +43,12 @@ export function Positions() {
       loadBrokers();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (brokers.length > 0 && !initialLoadDone) {
+      fetchInitialPositions();
+    }
+  }, [brokers]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -203,6 +210,38 @@ export function Positions() {
 
     if (data) {
       setBrokers(data);
+    }
+  };
+
+  const fetchInitialPositions = async () => {
+    if (brokers.length === 0) return;
+
+    setInitialLoadDone(true);
+
+    try {
+      const fetchPromises = brokers.map(async (broker) => {
+        try {
+          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions?broker_id=${broker.id}`;
+          const response = await fetch(apiUrl, {
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          const result = await response.json();
+
+          if (result.success) {
+            console.log(`Fetched ${result.data?.length || 0} positions from broker ${broker.id}`);
+          }
+        } catch (err) {
+          console.error(`Error fetching positions for broker ${broker.id}:`, err);
+        }
+      });
+
+      await Promise.all(fetchPromises);
+      await loadPositions();
+    } catch (error) {
+      console.error('Error in initial positions fetch:', error);
     }
   };
 
