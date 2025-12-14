@@ -162,6 +162,8 @@ export function NotificationBell() {
         return 'bg-purple-100 text-purple-700';
       case 'hmt_engine':
         return 'bg-blue-100 text-blue-700';
+      case 'zerodha':
+        return 'bg-green-100 text-green-700';
       case 'system':
         return 'bg-gray-100 text-gray-700';
       default:
@@ -261,6 +263,7 @@ export function NotificationBell() {
                           <span className={`px-2 py-0.5 text-xs font-medium rounded ${getSourceBadgeColor(notification.source)}`}>
                             {notification.source === 'tradingview' ? 'TradingView' :
                              notification.source === 'hmt_engine' ? 'HMT Engine' :
+                             notification.source === 'zerodha' ? 'Zerodha' :
                              notification.source}
                           </span>
                           {notification.symbol && (
