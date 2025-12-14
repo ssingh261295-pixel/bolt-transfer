@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { TrendingUp, User, Bell, ShoppingCart, LogOut, Settings as SettingsIcon, Shield } from 'lucide-react';
+import { TrendingUp, User, ShoppingCart, LogOut, Settings as SettingsIcon, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { NotificationBell } from './NotificationBell';
 
 export default function TopNavigation() {
   const navigate = useNavigate();
@@ -79,10 +80,7 @@ export default function TopNavigation() {
 
         {/* Right Side Actions */}
         <div className="flex items-center gap-4">
-          <button className="p-2 text-gray-500 hover:text-gray-900 relative">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-          </button>
+          <NotificationBell />
 
           <button className="p-2 text-gray-500 hover:text-gray-900">
             <ShoppingCart className="w-5 h-5" />
