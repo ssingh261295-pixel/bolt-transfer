@@ -796,10 +796,11 @@ Deno.serve(async (req: Request) => {
     // Determine if any engine instance is running
     let actualStatus = 'stopped';
     let actualError = engineError;
+    let timeSinceHeartbeat = 0;
 
     if (dbState && dbState.is_running) {
       const lastHeartbeat = new Date(dbState.last_heartbeat);
-      const timeSinceHeartbeat = Date.now() - lastHeartbeat.getTime();
+      timeSinceHeartbeat = Date.now() - lastHeartbeat.getTime();
 
       if (timeSinceHeartbeat < staleThreshold) {
         actualStatus = 'running';
