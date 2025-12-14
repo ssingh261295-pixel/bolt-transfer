@@ -20,6 +20,7 @@ export function Orders() {
   const [cancelMessage, setCancelMessage] = useState('');
   const [cancelError, setCancelError] = useState('');
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
@@ -40,34 +41,39 @@ export function Orders() {
   }, [brokers]);
 
   const loadOrders = async () => {
-    let query = supabase
-      .from('orders')
-      .select(`
-        *,
-        broker_connections (
-          account_name,
-          broker_name,
-          account_holder_name,
-          client_id
-        )
-      `)
-      .eq('user_id', user?.id);
+    try {
+      let query = supabase
+        .from('orders')
+        .select(`
+          *,
+          broker_connections (
+            account_name,
+            broker_name,
+            account_holder_name,
+            client_id
+          )
+        `)
+        .eq('user_id', user?.id);
 
-    if (filter === 'all') {
-      // Show only active orders (exclude completed, rejected, cancelled)
-      query = query.not('status', 'in', '("COMPLETE","REJECTED","CANCELLED")');
-    } else {
-      query = query.eq('status', filter.toUpperCase());
-    }
+      if (filter === 'all') {
+        query = query.not('status', 'in', '("COMPLETE","REJECTED","CANCELLED")');
+      } else {
+        query = query.eq('status', filter.toUpperCase());
+      }
 
-    if (selectedBrokerId !== 'all') {
-      query = query.eq('broker_connection_id', selectedBrokerId);
-    }
+      if (selectedBrokerId !== 'all') {
+        query = query.eq('broker_connection_id', selectedBrokerId);
+      }
 
-    const { data } = await query;
+      const { data } = await query;
 
-    if (data) {
-      setOrders(sortOrders(data));
+      if (data) {
+        setOrders(sortOrders(data));
+      }
+    } catch (error) {
+      console.error('Error loading orders:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -234,6 +240,14 @@ export function Orders() {
     }
   };
 
+  if (loading && orders.length === 0 && brokers.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -242,43 +256,49 @@ export function Orders() {
           <p className="text-sm text-gray-600 mt-1">View and track all your orders</p>
         </div>
         <div className="flex items-center gap-3">
-          {brokers.length > 0 && (
-            <select
-              value={selectedBrokerId}
-              onChange={(e) => setSelectedBrokerId(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
-            >
-              <option value="all">All Accounts</option>
-              {brokers.map((broker) => (
-                <option key={broker.id} value={broker.id}>
-                  {broker.account_holder_name || broker.account_name || 'Account'}
-                  {broker.client_id && ` (${broker.client_id})`}
-                </option>
-              ))}
-            </select>
+          {brokers.length === 0 ? (
+            <div className="text-sm text-gray-600 bg-yellow-50 px-4 py-2 rounded-lg border border-yellow-200">
+              No active broker connections. Please connect a broker first.
+            </div>
+          ) : (
+            <>
+              <select
+                value={selectedBrokerId}
+                onChange={(e) => setSelectedBrokerId(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+              >
+                <option value="all">All Accounts</option>
+                {brokers.map((broker) => (
+                  <option key={broker.id} value={broker.id}>
+                    {broker.account_holder_name || broker.account_name || 'Account'}
+                    {broker.client_id && ` (${broker.client_id})`}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => setShowPlaceOrder(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              >
+                <Plus className="w-5 h-5" />
+                Place Order
+              </button>
+              <div className="flex items-center gap-2">
+                <Filter className="w-5 h-5 text-gray-600" />
+                <select
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                >
+                  <option value="all">All Orders</option>
+                  <option value="completed">Completed</option>
+                  <option value="pending">Pending</option>
+                  <option value="open">Open</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+            </>
           )}
-          <button
-            onClick={() => setShowPlaceOrder(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            <Plus className="w-5 h-5" />
-            Place Order
-          </button>
-          <div className="flex items-center gap-2">
-            <Filter className="w-5 h-5 text-gray-600" />
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-            >
-              <option value="all">All Orders</option>
-              <option value="completed">Completed</option>
-              <option value="pending">Pending</option>
-              <option value="open">Open</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </div>
         </div>
       </div>
 
