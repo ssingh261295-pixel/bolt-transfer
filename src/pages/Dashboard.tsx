@@ -123,7 +123,9 @@ export function Dashboard() {
               last_updated: new Date(),
             };
           } else {
-            failedAccounts.push(broker.account_holder_name || broker.client_id || broker.id);
+            const accountName = broker.account_holder_name || broker.client_id || broker.id;
+            console.error(`API error for ${accountName}:`, result.error || result.message);
+            failedAccounts.push(accountName);
             return null;
           }
         } catch (err: any) {
@@ -145,7 +147,8 @@ export function Dashboard() {
       setAccountsData(accountResults);
 
       if (failedAccounts.length > 0) {
-        setError(`Failed to fetch data for: ${failedAccounts.join(', ')}`);
+        const accountList = failedAccounts.join(', ');
+        setError(`Failed to fetch data for: ${accountList}. Token may have expired - reconnect accounts from Brokers page.`);
       }
     } catch (err) {
       console.error('Error fetching accounts data:', err);
@@ -194,8 +197,28 @@ export function Dashboard() {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-          {error}
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0">
+              <svg className="w-5 h-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-red-700 font-medium">{error}</p>
+              {error.includes('Token may have expired') && (
+                <a
+                  href="/brokers"
+                  className="inline-flex items-center gap-1 mt-2 text-sm text-red-800 font-medium hover:text-red-900 underline"
+                >
+                  Go to Brokers Page
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </a>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

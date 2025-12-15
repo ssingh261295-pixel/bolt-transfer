@@ -261,8 +261,13 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (error) {
+    console.error('Error in zerodha-positions:', error.message);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({
+        success: false,
+        error: error.message,
+        message: error.message
+      }),
       {
         status: 400,
         headers: {
