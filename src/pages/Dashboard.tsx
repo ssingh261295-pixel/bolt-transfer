@@ -32,6 +32,23 @@ export function Dashboard() {
     }
   }, [user]);
 
+  const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 10000) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      throw err;
+    }
+  };
+
   const loadBrokers = async () => {
     const { data } = await supabase
       .from('broker_connections')
@@ -42,9 +59,6 @@ export function Dashboard() {
 
     if (data) {
       setBrokers(data);
-      if (data.length > 0) {
-        fetchAccountsData(data);
-      }
     }
   };
 
@@ -52,28 +66,28 @@ export function Dashboard() {
     setLoading(true);
     setError('');
 
+    const failedAccounts: string[] = [];
+
     try {
-      // Fetch all brokers' data in parallel instead of sequentially
       const accountPromises = brokersToFetch.map(async (broker) => {
         if (broker.broker_name !== 'zerodha') return null;
 
         try {
+          const headers = {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          };
+
           const [positionsResponse, gttResponse] = await Promise.all([
-            fetch(
+            fetchWithTimeout(
               `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions?broker_id=${broker.id}`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${session?.access_token}`,
-                },
-              }
+              { headers },
+              15000
             ),
-            fetch(
+            fetchWithTimeout(
               `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${broker.id}`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${session?.access_token}`,
-                },
-              }
+              { headers },
+              15000
             ),
           ]);
 
@@ -108,13 +122,21 @@ export function Dashboard() {
               active_gtt: activeGtt,
               last_updated: new Date(),
             };
+          } else {
+            failedAccounts.push(broker.account_holder_name || broker.client_id || broker.id);
+            return null;
           }
-        } catch (err) {
-          console.error(`Error fetching data for broker ${broker.id}:`, err);
+        } catch (err: any) {
+          const accountName = broker.account_holder_name || broker.client_id || broker.id;
+          failedAccounts.push(accountName);
+
+          if (err.name === 'AbortError') {
+            console.error(`Timeout fetching data for ${accountName}`);
+          } else {
+            console.error(`Error fetching data for ${accountName}:`, err);
+          }
           return null;
         }
-
-        return null;
       });
 
       const results = await Promise.all(accountPromises);
@@ -122,12 +144,12 @@ export function Dashboard() {
 
       setAccountsData(accountResults);
 
-      if (accountResults.length < brokersToFetch.length) {
-        setError(`Failed to fetch data for some accounts`);
+      if (failedAccounts.length > 0) {
+        setError(`Failed to fetch data for: ${failedAccounts.join(', ')}`);
       }
     } catch (err) {
       console.error('Error fetching accounts data:', err);
-      setError('Failed to fetch account data');
+      setError('Failed to fetch account data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -295,10 +317,24 @@ export function Dashboard() {
                   </div>
                 </div>
               </div>
+            ) : accountsData.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <Activity className="w-16 h-16 text-blue-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Ready to view account data</h3>
+                <p className="text-gray-600 mb-4">Click the Refresh button above to fetch your latest account information</p>
+                <button
+                  onClick={handleRefresh}
+                  disabled={loading || brokers.length === 0}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                  Fetch Account Data
+                </button>
+              </div>
             ) : filteredAccountsData.length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-                <p className="text-gray-600">No account data available</p>
-                <p className="text-sm text-gray-500 mt-1">Click refresh to fetch latest data</p>
+                <p className="text-gray-600">No data available for selected account</p>
+                <p className="text-sm text-gray-500 mt-1">Try selecting a different account or refresh the data</p>
               </div>
             ) : (
               filteredAccountsData.map((account) => (
