@@ -35,6 +35,7 @@ export function Positions() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [menuOpenUpward, setMenuOpenUpward] = useState(false);
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBroker !== 'all' ? selectedBroker : brokers[0]?.id);
 
@@ -295,8 +296,20 @@ export function Positions() {
     setSelectedPosition(null);
   };
 
-  const toggleMenu = (positionId: string) => {
-    setOpenMenuId(openMenuId === positionId ? null : positionId);
+  const toggleMenu = (positionId: string, event: React.MouseEvent) => {
+    if (openMenuId === positionId) {
+      setOpenMenuId(null);
+      setMenuOpenUpward(false);
+    } else {
+      setOpenMenuId(positionId);
+
+      const buttonElement = event.currentTarget as HTMLElement;
+      const rect = buttonElement.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const menuHeight = 180;
+
+      setMenuOpenUpward(spaceBelow < menuHeight);
+    }
   };
 
   const handleSelectAll = () => {
@@ -525,14 +538,16 @@ export function Positions() {
                     <td className="px-3 py-3 whitespace-nowrap">
                       <div className="relative" ref={openMenuId === position.id ? menuRef : null}>
                         <button
-                          onClick={() => toggleMenu(position.id)}
+                          onClick={(e) => toggleMenu(position.id, e)}
                           className="p-2 hover:bg-gray-100 rounded-lg transition"
                         >
                           <MoreVertical className="w-5 h-5 text-gray-600" />
                         </button>
 
                         {openMenuId === position.id && (
-                          <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                          <div className={`absolute right-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10 ${
+                            menuOpenUpward ? 'bottom-full mb-1' : 'mt-1'
+                          }`}>
                             <div className="py-1">
                               <button
                                 onClick={() => handleOpenExitModal(position)}
