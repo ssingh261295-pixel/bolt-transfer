@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Wallet, RefreshCw, Filter, TrendingUp, Activity, ListChecks } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -25,6 +25,7 @@ export function Dashboard() {
   const [selectedBroker, setSelectedBroker] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const [lastFetch, setLastFetch] = useState<Date | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -145,6 +146,7 @@ export function Dashboard() {
       const accountResults = results.filter((result): result is AccountData => result !== null);
 
       setAccountsData(accountResults);
+      setLastFetch(new Date());
 
       if (failedAccounts.length > 0) {
         const accountList = failedAccounts.join(', ');
@@ -164,16 +166,22 @@ export function Dashboard() {
     }
   };
 
-  const filteredAccountsData = selectedBroker === 'all'
-    ? accountsData
-    : accountsData.filter(a => a.broker_id === selectedBroker);
+  const filteredAccountsData = useMemo(() => {
+    return selectedBroker === 'all'
+      ? accountsData
+      : accountsData.filter(a => a.broker_id === selectedBroker);
+  }, [accountsData, selectedBroker]);
 
-  const totalAvailableMargin = filteredAccountsData.reduce((sum, a) => sum + a.available_margin, 0);
-  const totalUsedMargin = filteredAccountsData.reduce((sum, a) => sum + a.used_margin, 0);
-  const totalAvailableCash = filteredAccountsData.reduce((sum, a) => sum + a.available_cash, 0);
-  const totalTodayPnl = filteredAccountsData.reduce((sum, a) => sum + a.today_pnl, 0);
-  const totalActiveTrades = filteredAccountsData.reduce((sum, a) => sum + a.active_trades, 0);
-  const totalActiveGtt = filteredAccountsData.reduce((sum, a) => sum + a.active_gtt, 0);
+  const aggregatedMetrics = useMemo(() => {
+    return {
+      totalAvailableMargin: filteredAccountsData.reduce((sum, a) => sum + a.available_margin, 0),
+      totalUsedMargin: filteredAccountsData.reduce((sum, a) => sum + a.used_margin, 0),
+      totalAvailableCash: filteredAccountsData.reduce((sum, a) => sum + a.available_cash, 0),
+      totalTodayPnl: filteredAccountsData.reduce((sum, a) => sum + a.today_pnl, 0),
+      totalActiveTrades: filteredAccountsData.reduce((sum, a) => sum + a.active_trades, 0),
+      totalActiveGtt: filteredAccountsData.reduce((sum, a) => sum + a.active_gtt, 0),
+    };
+  }, [filteredAccountsData]);
 
   const formatCurrency = (value: number) => {
     return `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -185,6 +193,11 @@ export function Dashboard() {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Account Overview</h2>
           <p className="text-sm text-gray-600 mt-1">View margin, P&L, and trading activity by account</p>
+          {lastFetch && (
+            <p className="text-xs text-gray-500 mt-1">
+              Last updated: {lastFetch.toLocaleTimeString()}
+            </p>
+          )}
         </div>
         <button
           onClick={handleRefresh}
@@ -266,7 +279,7 @@ export function Dashboard() {
                   <h3 className="text-sm font-medium text-blue-100">Total Available Margin</h3>
                   <Wallet className="w-5 h-5 text-blue-200" />
                 </div>
-                <p className="text-3xl font-bold">{formatCurrency(totalAvailableMargin)}</p>
+                <p className="text-3xl font-bold">{formatCurrency(aggregatedMetrics.totalAvailableMargin)}</p>
                 <p className="text-xs text-blue-100 mt-1">Across all accounts</p>
               </div>
 
@@ -275,7 +288,7 @@ export function Dashboard() {
                   <h3 className="text-sm font-medium text-orange-100">Total Used Margin</h3>
                   <Wallet className="w-5 h-5 text-orange-200" />
                 </div>
-                <p className="text-3xl font-bold">{formatCurrency(totalUsedMargin)}</p>
+                <p className="text-3xl font-bold">{formatCurrency(aggregatedMetrics.totalUsedMargin)}</p>
                 <p className="text-xs text-orange-100 mt-1">Across all accounts</p>
               </div>
 
@@ -284,35 +297,35 @@ export function Dashboard() {
                   <h3 className="text-sm font-medium text-green-100">Total Opening Balance</h3>
                   <Wallet className="w-5 h-5 text-green-200" />
                 </div>
-                <p className="text-3xl font-bold">{formatCurrency(totalAvailableCash)}</p>
+                <p className="text-3xl font-bold">{formatCurrency(aggregatedMetrics.totalAvailableCash)}</p>
                 <p className="text-xs text-green-100 mt-1">Across all accounts</p>
               </div>
 
-              <div className={`bg-gradient-to-br ${totalTodayPnl >= 0 ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600'} rounded-xl p-6 text-white`}>
+              <div className={`bg-gradient-to-br ${aggregatedMetrics.totalTodayPnl >= 0 ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600'} rounded-xl p-6 text-white`}>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-medium text-white/80">Today's P&L</h3>
                   <TrendingUp className="w-5 h-5 text-white/70" />
                 </div>
-                <p className="text-3xl font-bold">{totalTodayPnl >= 0 ? '+' : ''}{formatCurrency(totalTodayPnl)}</p>
+                <p className="text-3xl font-bold">{aggregatedMetrics.totalTodayPnl >= 0 ? '+' : ''}{formatCurrency(aggregatedMetrics.totalTodayPnl)}</p>
                 <p className="text-xs text-white/80 mt-1">Across all accounts</p>
               </div>
 
-              <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white">
+              <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-xl p-6 text-white">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-purple-100">Active Trades</h3>
-                  <Activity className="w-5 h-5 text-purple-200" />
+                  <h3 className="text-sm font-medium text-cyan-100">Active Trades</h3>
+                  <Activity className="w-5 h-5 text-cyan-200" />
                 </div>
-                <p className="text-3xl font-bold">{totalActiveTrades}</p>
-                <p className="text-xs text-purple-100 mt-1">Open positions</p>
+                <p className="text-3xl font-bold">{aggregatedMetrics.totalActiveTrades}</p>
+                <p className="text-xs text-cyan-100 mt-1">Open positions</p>
               </div>
 
-              <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-6 text-white">
+              <div className="bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl p-6 text-white">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-indigo-100">Active GTT</h3>
-                  <ListChecks className="w-5 h-5 text-indigo-200" />
+                  <h3 className="text-sm font-medium text-teal-100">Active GTT</h3>
+                  <ListChecks className="w-5 h-5 text-teal-200" />
                 </div>
-                <p className="text-3xl font-bold">{totalActiveGtt}</p>
-                <p className="text-xs text-indigo-100 mt-1">Pending orders</p>
+                <p className="text-3xl font-bold">{aggregatedMetrics.totalActiveGtt}</p>
+                <p className="text-xs text-teal-100 mt-1">Pending orders</p>
               </div>
             </div>
           )}
@@ -411,16 +424,16 @@ export function Dashboard() {
                       </p>
                     </div>
 
-                    <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
-                      <p className="text-sm font-medium text-purple-900 mb-1">Active Trades</p>
-                      <p className="text-2xl font-bold text-purple-600">
+                    <div className="bg-cyan-50 rounded-lg p-4 border border-cyan-100">
+                      <p className="text-sm font-medium text-cyan-900 mb-1">Active Trades</p>
+                      <p className="text-2xl font-bold text-cyan-600">
                         {account.active_trades}
                       </p>
                     </div>
 
-                    <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-100">
-                      <p className="text-sm font-medium text-indigo-900 mb-1">Active GTT</p>
-                      <p className="text-2xl font-bold text-indigo-600">
+                    <div className="bg-teal-50 rounded-lg p-4 border border-teal-100">
+                      <p className="text-sm font-medium text-teal-900 mb-1">Active GTT</p>
+                      <p className="text-2xl font-bold text-teal-600">
                         {account.active_gtt}
                       </p>
                     </div>

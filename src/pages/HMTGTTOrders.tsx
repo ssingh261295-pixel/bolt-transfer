@@ -41,7 +41,7 @@ export function HMTGTTOrders() {
   useEffect(() => {
     const interval = setInterval(() => {
       loadEngineStatus();
-    }, 10000);
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -76,27 +76,66 @@ export function HMTGTTOrders() {
     }
   }, [isConnected, hmtGttOrders, subscribe]);
 
-  // Server-side engine handles all monitoring - UI just displays data
-  // Listen to real-time database changes for automatic updates
   useEffect(() => {
     if (!user?.id) return;
 
     const channel = supabase
       .channel('hmt_gtt_changes')
       .on('postgres_changes', {
-        event: '*',
+        event: 'INSERT',
         schema: 'public',
         table: 'hmt_gtt_orders',
         filter: `user_id=eq.${user.id}`
-      }, () => {
-        loadHMTGTTOrders(true);
+      }, async (payload) => {
+        const newOrder = payload.new as any;
+        const { data: brokerData } = await supabase
+          .from('broker_connections')
+          .select('id, account_name, account_holder_name, client_id')
+          .eq('id', newOrder.broker_connection_id)
+          .single();
+
+        if (brokerData) {
+          newOrder.broker_connections = brokerData;
+        }
+
+        setHmtGttOrders(prev => sortHMTGTTOrders([...prev, newOrder]));
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'hmt_gtt_orders',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const updatedOrder = payload.new as any;
+        setHmtGttOrders(prev => {
+          const updated = prev.map(order =>
+            order.id === updatedOrder.id
+              ? { ...order, ...updatedOrder }
+              : order
+          );
+          return sortHMTGTTOrders(updated);
+        });
+      })
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'hmt_gtt_orders',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const deletedId = payload.old.id;
+        setHmtGttOrders(prev => prev.filter(order => order.id !== deletedId));
+        setSelectedOrders(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(deletedId);
+          return newSet;
+        });
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user?.id, sortField, sortDirection]);
 
   const loadBrokers = async () => {
     const { data } = await supabase
@@ -260,7 +299,6 @@ export function HMTGTTOrders() {
 
     if (successCount > 0) {
       setSelectedOrders(new Set());
-      await loadHMTGTTOrders(true);
       setDeleteMessage(`Successfully deleted ${successCount} HMT GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
       setDeleteError('');
       setTimeout(() => setDeleteMessage(''), 5000);
@@ -294,7 +332,6 @@ export function HMTGTTOrders() {
 
       setDeleteMessage('Successfully deleted HMT GTT order');
       setTimeout(() => setDeleteMessage(''), 5000);
-      await loadHMTGTTOrders(true);
     } catch (err: any) {
       setDeleteError('Failed to delete HMT GTT order: ' + err.message);
       setTimeout(() => setDeleteError(''), 5000);
@@ -411,7 +448,6 @@ export function HMTGTTOrders() {
                     {engineStatus.error}
                   </div>
                 )}
-                {/* Show restart button only if engine is stopped or stale */}
                 {(engineStatus.status === 'stopped' || engineStatus.status === 'stale') && (
                   <button
                     onClick={handleRestartEngine}
@@ -674,7 +710,7 @@ export function HMTGTTOrders() {
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
                         <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium w-fit ${
-                          isOCO ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                          isOCO ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'
                         }`}>
                           {isOCO ? 'OCO' : 'SINGLE'}
                         </span>
