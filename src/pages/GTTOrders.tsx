@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, ArrowUpDown, Activity } from 'lucide-react';
+import { Plus, Edit2, Trash2, ArrowUpDown, Activity, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
@@ -7,6 +7,24 @@ import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
 
 type SortField = 'symbol' | 'trigger_price' | 'created_at' | 'status';
 type SortDirection = 'asc' | 'desc';
+
+const formatTimestamp = (date: Date): string => {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  return date.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+};
 
 export function GTTOrders() {
   const { user, session } = useAuth();
@@ -28,6 +46,8 @@ export function GTTOrders() {
   const [deleteType, setDeleteType] = useState<'bulk' | 'single'>('bulk');
   const [deleteTarget, setDeleteTarget] = useState<{ gttId?: number; brokerId?: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -43,7 +63,7 @@ export function GTTOrders() {
 
   useEffect(() => {
     if (selectedBrokerId && brokers.length > 0) {
-      loadGTTOrders();
+      loadCachedGTTOrders();
     }
   }, [selectedBrokerId, brokers]);
 
@@ -79,6 +99,77 @@ export function GTTOrders() {
     }
   };
 
+  const loadCachedGTTOrders = async () => {
+    if (!selectedBrokerId || brokers.length === 0) return;
+
+    setLoading(true);
+    try {
+      let query = supabase
+        .from('gtt_orders')
+        .select(`
+          *,
+          broker_connections!inner(
+            id,
+            account_name,
+            account_holder_name,
+            client_id
+          )
+        `)
+        .eq('user_id', user?.id)
+        .neq('status', 'triggered');
+
+      if (selectedBrokerId !== 'all') {
+        query = query.eq('broker_connection_id', selectedBrokerId);
+      }
+
+      const { data, error } = await query;
+
+      if (!error && data) {
+        const formattedOrders = data.map(order => {
+          if (order.raw_data) {
+            return {
+              ...order.raw_data,
+              broker_info: {
+                id: order.broker_connections.id,
+                account_name: order.broker_connections.account_name,
+                account_holder_name: order.broker_connections.account_holder_name,
+                client_id: order.broker_connections.client_id
+              }
+            };
+          }
+          return null;
+        }).filter(Boolean);
+
+        setGttOrders(sortGTTOrders(formattedOrders));
+
+        if (data.length > 0) {
+          const mostRecentSync = data.reduce((latest, order) => {
+            const syncTime = new Date(order.synced_at || order.updated_at);
+            return syncTime > latest ? syncTime : latest;
+          }, new Date(0));
+          setLastSyncTime(mostRecentSync);
+        }
+      }
+
+      syncWithZerodha();
+    } catch (err) {
+      console.error('Failed to load cached GTT orders:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const syncWithZerodha = async () => {
+    if (!selectedBrokerId || brokers.length === 0) return;
+
+    setSyncing(true);
+    try {
+      await loadGTTOrders(false, true);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const loadGTTOrders = async (throwOnError = false, silent = false) => {
     if (!selectedBrokerId || brokers.length === 0) return;
 
@@ -86,6 +177,8 @@ export function GTTOrders() {
       setLoading(true);
     }
     try {
+      const syncTime = new Date().toISOString();
+
       if (selectedBrokerId === 'all') {
         const fetchPromises = brokers.map(async (broker) => {
           try {
@@ -98,6 +191,7 @@ export function GTTOrders() {
             });
             const result = await response.json();
             if (result.success && result.data) {
+              await syncGTTOrdersToDatabase(result.data, broker.id, syncTime);
               return result.data.map((order: any) => ({
                 ...order,
                 broker_info: {
@@ -118,9 +212,9 @@ export function GTTOrders() {
 
         const results = await Promise.all(fetchPromises);
         const allOrders = results.flat();
-        // Filter out triggered orders
         const activeOrders = allOrders.filter(order => order.status !== 'triggered');
         setGttOrders(sortGTTOrders(activeOrders));
+        setLastSyncTime(new Date(syncTime));
       } else {
         const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${selectedBrokerId}`;
         const response = await fetch(apiUrl, {
@@ -132,6 +226,7 @@ export function GTTOrders() {
         const result = await response.json();
         if (result.success && result.data) {
           const broker = brokers.find(b => b.id === selectedBrokerId);
+          await syncGTTOrdersToDatabase(result.data, selectedBrokerId, syncTime);
           const ordersWithBroker = result.data.map((order: any) => ({
             ...order,
             broker_info: {
@@ -141,9 +236,9 @@ export function GTTOrders() {
               client_id: broker?.client_id
             }
           }));
-          // Filter out triggered orders
           const activeOrders = ordersWithBroker.filter((order: any) => order.status !== 'triggered');
           setGttOrders(sortGTTOrders(activeOrders));
+          setLastSyncTime(new Date(syncTime));
         } else {
           setGttOrders([]);
         }
@@ -156,6 +251,61 @@ export function GTTOrders() {
       if (!silent) {
         setLoading(false);
       }
+    }
+  };
+
+  const syncGTTOrdersToDatabase = async (orders: any[], brokerId: string, syncTime: string) => {
+    try {
+      const upsertPromises = orders.map(async (order) => {
+        const { data: existing } = await supabase
+          .from('gtt_orders')
+          .select('id')
+          .eq('zerodha_gtt_id', order.id)
+          .eq('broker_connection_id', brokerId)
+          .maybeSingle();
+
+        const gttData = {
+          user_id: user?.id,
+          broker_connection_id: brokerId,
+          zerodha_gtt_id: order.id,
+          symbol: order.condition?.tradingsymbol || '',
+          exchange: order.condition?.exchange || '',
+          transaction_type: order.orders?.[0]?.transaction_type || 'BUY',
+          quantity: order.orders?.[0]?.quantity || 0,
+          gtt_type: order.type === 'two-leg' ? 'oco' : 'single',
+          trigger_price: order.condition?.trigger_values?.[0] || null,
+          stop_loss: order.type === 'two-leg' ? order.condition?.trigger_values?.[1] : null,
+          target: order.type === 'two-leg' ? order.condition?.trigger_values?.[0] : null,
+          status: order.status,
+          instrument_token: order.condition?.instrument_token,
+          last_price: order.condition?.last_price,
+          raw_data: order,
+          synced_at: syncTime,
+          updated_at: new Date().toISOString()
+        };
+
+        if (existing) {
+          await supabase
+            .from('gtt_orders')
+            .update(gttData)
+            .eq('id', existing.id);
+        } else {
+          await supabase
+            .from('gtt_orders')
+            .insert(gttData);
+        }
+      });
+
+      await Promise.all(upsertPromises);
+
+      const zerodhaGttIds = orders.map(o => o.id);
+      await supabase
+        .from('gtt_orders')
+        .delete()
+        .eq('broker_connection_id', brokerId)
+        .not('zerodha_gtt_id', 'in', `(${zerodhaGttIds.join(',')})`);
+    } catch (err) {
+      console.error('Failed to sync GTT orders to database:', err);
     }
   };
 
@@ -376,14 +526,30 @@ export function GTTOrders() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">GTT ({filteredGttOrders.length})</h2>
-          {isConnected && (
-            <div className="flex items-center gap-1.5 mt-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs w-fit">
-              <Activity className="w-3 h-3 animate-pulse" />
-              Live
-            </div>
-          )}
+          <div className="flex items-center gap-3 mt-1">
+            {isConnected && (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs w-fit">
+                <Activity className="w-3 h-3 animate-pulse" />
+                Live
+              </div>
+            )}
+            {lastSyncTime && (
+              <div className="text-xs text-gray-500">
+                {syncing ? 'Syncing...' : `Updated ${formatTimestamp(lastSyncTime)}`}
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex gap-3">
+          <button
+            onClick={syncWithZerodha}
+            disabled={syncing || loading}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Refresh from Zerodha"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
           {brokers.length > 0 && (
             <select
               value={selectedBrokerId}
