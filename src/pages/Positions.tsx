@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { LineChart, ArrowUpDown, Activity, MoreVertical } from 'lucide-react';
+import { LineChart, ArrowUpDown, Activity, MoreVertical, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
@@ -36,6 +36,7 @@ export function Positions() {
   const menuRef = useRef<HTMLDivElement>(null);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [menuOpenUpward, setMenuOpenUpward] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBroker !== 'all' ? selectedBroker : brokers[0]?.id);
 
@@ -219,11 +220,12 @@ export function Positions() {
     if (brokers.length === 0) return;
 
     setInitialLoadDone(true);
+    setIsSyncing(true);
 
     try {
       const fetchPromises = brokers.map(async (broker) => {
         try {
-          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions?broker_id=${broker.id}`;
+          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions/sync?broker_id=${broker.id}`;
           const response = await fetch(apiUrl, {
             headers: {
               'Authorization': `Bearer ${session?.access_token}`,
@@ -233,17 +235,32 @@ export function Positions() {
           const result = await response.json();
 
           if (result.success) {
-            console.log(`Fetched ${result.data?.length || 0} positions from broker ${broker.id}`);
+            console.log(`Synced ${result.synced || 0} positions from broker ${broker.id}`);
           }
         } catch (err) {
-          console.error(`Error fetching positions for broker ${broker.id}:`, err);
+          console.error(`Error syncing positions for broker ${broker.id}:`, err);
         }
       });
 
       await Promise.all(fetchPromises);
       await loadPositions();
     } catch (error) {
-      console.error('Error in initial positions fetch:', error);
+      console.error('Error in initial positions sync:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleManualRefresh = async () => {
+    setIsSyncing(true);
+    try {
+      await fetchInitialPositions();
+      setSyncMessage('✓ Positions refreshed successfully');
+      setTimeout(() => setSyncMessage(''), 3000);
+    } catch (error) {
+      console.error('Error refreshing positions:', error);
+      setSyncMessage('✗ Failed to refresh positions');
+      setTimeout(() => setSyncMessage(''), 3000);
     }
   };
 
@@ -347,6 +364,15 @@ export function Positions() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleManualRefresh}
+            disabled={isSyncing}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Refresh positions from Zerodha"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Syncing...' : 'Refresh'}
+          </button>
           <select
             value={selectedBroker}
             onChange={(e) => setSelectedBroker(e.target.value)}
