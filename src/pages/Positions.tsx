@@ -407,7 +407,7 @@ export function Positions() {
             <p className="text-gray-600">Your active positions will appear here</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto pb-44">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -545,7 +545,7 @@ export function Positions() {
                         </button>
 
                         {openMenuId === position.id && (
-                          <div className={`absolute right-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10 ${
+                          <div className={`absolute right-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 ${
                             menuOpenUpward ? 'bottom-full mb-1' : 'mt-1'
                           }`}>
                             <div className="py-1">
