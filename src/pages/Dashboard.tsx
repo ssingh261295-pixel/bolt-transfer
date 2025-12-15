@@ -33,6 +33,12 @@ export function Dashboard() {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (brokers.length > 0 && accountsData.length === 0 && !loading) {
+      fetchAccountsData(brokers);
+    }
+  }, [brokers]);
+
   const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 10000) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
