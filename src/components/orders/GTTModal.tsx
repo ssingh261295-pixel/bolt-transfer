@@ -525,8 +525,12 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         throw new Error('Please select a valid instrument from the dropdown list');
       }
 
-      if (selectedBrokerIds.length === 0) {
+      if (!editingGTT && selectedBrokerIds.length === 0) {
         throw new Error('Please select at least one account');
+      }
+
+      if (editingGTT && !brokerConnectionId) {
+        throw new Error('No broker account found for this GTT order');
       }
 
       if (!triggerPrice1) {
