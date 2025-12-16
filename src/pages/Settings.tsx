@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { User, Bell, Shield, CreditCard } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Bell, Shield, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -12,6 +12,66 @@ export function Settings() {
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [riskLimits, setRiskLimits] = useState<any>(null);
+  const [loadingRiskLimits, setLoadingRiskLimits] = useState(false);
+  const [savingRiskLimits, setSavingRiskLimits] = useState(false);
+  const [riskMessage, setRiskMessage] = useState('');
+
+  useEffect(() => {
+    if (activeTab === 'risk') {
+      loadRiskLimits();
+    }
+  }, [activeTab, profile?.id]);
+
+  const loadRiskLimits = async () => {
+    if (!profile?.id) return;
+
+    setLoadingRiskLimits(true);
+    try {
+      const { data, error } = await supabase
+        .from('risk_limits')
+        .select('*')
+        .eq('user_id', profile.id)
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setRiskLimits(data);
+      }
+    } catch (error) {
+      console.error('Error loading risk limits:', error);
+    } finally {
+      setLoadingRiskLimits(false);
+    }
+  };
+
+  const handleSaveRiskLimits = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingRiskLimits(true);
+    setRiskMessage('');
+
+    try {
+      const { error } = await supabase
+        .from('risk_limits')
+        .update({
+          max_trades_per_day: riskLimits.max_trades_per_day,
+          max_loss_per_day: riskLimits.max_loss_per_day,
+          auto_square_off_time: riskLimits.auto_square_off_time,
+          kill_switch_enabled: riskLimits.kill_switch_enabled,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', profile?.id);
+
+      if (error) throw error;
+
+      setRiskMessage('Risk limits updated successfully');
+      await loadRiskLimits();
+    } catch (error: any) {
+      setRiskMessage('Failed to update risk limits: ' + error.message);
+    } finally {
+      setSavingRiskLimits(false);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +99,7 @@ export function Settings() {
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
+    { id: 'risk', label: 'Risk Management', icon: AlertTriangle },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
   ];
@@ -116,6 +177,137 @@ export function Settings() {
                     {saving ? 'Saving...' : 'Save Changes'}
                   </button>
                 </form>
+              </div>
+            )}
+
+            {activeTab === 'risk' && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Risk Management</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  Configure safety limits for HMT GTT orders. These limits protect your account from excessive losses.
+                </p>
+
+                {loadingRiskLimits ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : riskLimits ? (
+                  <>
+                    {riskMessage && (
+                      <div className={`mb-4 p-3 rounded-lg ${
+                        riskMessage.includes('success') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                      }`}>
+                        {riskMessage}
+                      </div>
+                    )}
+
+                    <form onSubmit={handleSaveRiskLimits} className="space-y-6">
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                          <div>
+                            <p className="text-sm font-medium text-yellow-900 mb-1">Emergency Kill Switch</p>
+                            <p className="text-sm text-yellow-700 mb-3">
+                              Instantly stop all HMT GTT order executions. Use this in emergencies to prevent further trades.
+                            </p>
+                            <label className="flex items-center gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={riskLimits.kill_switch_enabled}
+                                onChange={(e) => setRiskLimits({
+                                  ...riskLimits,
+                                  kill_switch_enabled: e.target.checked
+                                })}
+                                className="w-5 h-5 text-red-600 rounded focus:ring-red-500"
+                              />
+                              <span className="text-sm font-medium text-gray-900">
+                                {riskLimits.kill_switch_enabled ? 'Kill Switch ACTIVE - All trades blocked' : 'Kill Switch Disabled'}
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Max Trades Per Day
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="1000"
+                            value={riskLimits.max_trades_per_day}
+                            onChange={(e) => setRiskLimits({
+                              ...riskLimits,
+                              max_trades_per_day: parseInt(e.target.value)
+                            })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                          />
+                          <p className="text-xs text-gray-600 mt-1">
+                            Current: {riskLimits.daily_trades_count} / {riskLimits.max_trades_per_day}
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Max Loss Per Day (₹)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={riskLimits.max_loss_per_day}
+                            onChange={(e) => setRiskLimits({
+                              ...riskLimits,
+                              max_loss_per_day: parseFloat(e.target.value)
+                            })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                          />
+                          <p className="text-xs text-gray-600 mt-1">
+                            Current P&L: ₹{parseFloat(riskLimits.daily_pnl).toFixed(2)}
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Auto Square-Off Time
+                          </label>
+                          <input
+                            type="time"
+                            value={riskLimits.auto_square_off_time}
+                            onChange={(e) => setRiskLimits({
+                              ...riskLimits,
+                              auto_square_off_time: e.target.value
+                            })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                          />
+                          <p className="text-xs text-gray-600 mt-1">
+                            No new trades after this time
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-sm text-blue-900">
+                          <strong>Daily counters reset at midnight (00:00 IST).</strong> Risk limits are checked before every HMT GTT order execution.
+                        </p>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={savingRiskLimits}
+                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                      >
+                        {savingRiskLimits ? 'Saving...' : 'Save Risk Limits'}
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-600">
+                    No risk limits found. They will be created automatically when you place your first HMT GTT order.
+                  </div>
+                )}
               </div>
             )}
 
