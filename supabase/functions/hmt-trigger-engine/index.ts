@@ -304,18 +304,7 @@ async function executeTriggerAsync(
       // Log trade for audit and risk tracking
       await logTrade(trigger, execution, result.order_id!);
 
-      // Handle OCO: Cancel sibling trigger ATOMICALLY
-      if (trigger.condition_type === 'two-leg' && trigger.parent_id) {
-        const siblingId = triggerManager.getOCOSibling(trigger.id);
-        if (siblingId) {
-          // Cancel sibling in database first (atomic guard)
-          await cancelTrigger(siblingId, 'OCO sibling executed');
-          // Then remove from memory
-          triggerManager.removeTrigger(siblingId);
-        }
-      }
-
-      // Remove from memory
+      // Remove from memory (for single-row OCO, marking as 'triggered' prevents the other leg from executing)
       triggerManager.removeTrigger(trigger.id);
 
       stats.triggered_orders++;
