@@ -545,11 +545,11 @@ export function GTTOrders() {
   };
 
   const calculatePercentage = (triggerValue: number, currentPrice: number): string => {
-    if (!currentPrice || currentPrice === 0) return '0% of LTP';
+    if (!currentPrice || currentPrice === 0) return '0%';
     const percentOfLTP = ((triggerValue - currentPrice) / currentPrice) * 100;
     const absPercent = Math.abs(percentOfLTP);
     const sign = percentOfLTP > 0 ? '+' : '-';
-    return `${sign}${absPercent.toFixed(1)}% of LTP`;
+    return `${sign}${absPercent.toFixed(1)}%`;
   };
 
   return (
@@ -774,12 +774,6 @@ export function GTTOrders() {
                     <td className="px-4 py-3">
                       <div className="text-sm font-medium text-gray-900">
                         {gtt.condition?.tradingsymbol || 'N/A'}
-                        {isConnected && ltp && (
-                          <span className="ml-1 text-xs text-green-600">●</span>
-                        )}
-                        <span className="text-xs text-gray-500 ml-1">
-                          {gtt.condition?.exchange}
-                        </span>
                       </div>
                     </td>
                     {selectedBrokerId === 'all' && (
