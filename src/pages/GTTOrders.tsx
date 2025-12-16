@@ -118,7 +118,7 @@ export function GTTOrders() {
     return positions.find(pos =>
       pos.symbol === gtt.condition?.tradingsymbol &&
       pos.exchange === gtt.condition?.exchange &&
-      pos.broker_connection_id === gtt.broker_id
+      pos.broker_connection_id === gtt.broker_info?.id
     );
   };
 
