@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
+import { formatIndianCurrency } from '../lib/formatters';
 
 type SortField = 'symbol' | 'trigger_price' | 'created_at' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -30,6 +31,7 @@ export function GTTOrders() {
   const { user, session } = useAuth();
   const [gttOrders, setGttOrders] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
+  const [positions, setPositions] = useState<any[]>([]);
   const [selectedBrokerId, setSelectedBrokerId] = useState<string>('all');
   const [selectedInstrument, setSelectedInstrument] = useState<string>('all');
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBrokerId !== 'all' ? selectedBrokerId : brokers[0]?.id);
@@ -52,6 +54,7 @@ export function GTTOrders() {
   useEffect(() => {
     if (user) {
       loadBrokers();
+      loadPositions();
     }
   }, [user]);
 
@@ -97,6 +100,34 @@ export function GTTOrders() {
     if (data && data.length > 0) {
       setBrokers(data);
     }
+  };
+
+  const loadPositions = async () => {
+    const { data } = await supabase
+      .from('positions')
+      .select('*')
+      .eq('user_id', user?.id)
+      .neq('quantity', 0);
+
+    if (data) {
+      setPositions(data);
+    }
+  };
+
+  const getPositionForGTT = (gtt: any) => {
+    return positions.find(pos =>
+      pos.symbol === gtt.condition?.tradingsymbol &&
+      pos.exchange === gtt.condition?.exchange &&
+      pos.broker_connection_id === gtt.broker_id
+    );
+  };
+
+  const calculatePnL = (gtt: any, currentPrice: number) => {
+    const position = getPositionForGTT(gtt);
+    if (!position) return null;
+
+    const pnl = (currentPrice - position.average_price) * position.quantity;
+    return pnl;
   };
 
   const loadCachedGTTOrders = async () => {
@@ -697,6 +728,9 @@ export function GTTOrders() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Qty.
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                  P&L
+                </th>
                 <th
                   onClick={() => handleSort('status')}
                   className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
@@ -804,6 +838,19 @@ export function GTTOrders() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {quantity}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const pnl = calculatePnL(gtt, currentPrice);
+                        if (pnl === null) {
+                          return <span className="text-sm text-gray-400">-</span>;
+                        }
+                        return (
+                          <span className={`text-sm font-medium ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {pnl >= 0 ? '+' : ''}{formatIndianCurrency(pnl)}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 rounded text-xs font-medium uppercase ${
