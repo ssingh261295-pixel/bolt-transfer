@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Search, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -26,10 +26,22 @@ interface GTTModalProps {
 
 export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editingGTT, initialSymbol, initialExchange, allBrokers, isHMTMode = false, positionData }: GTTModalProps) {
   const { session } = useAuth();
+  const initialPositionDataRef = useRef<typeof positionData | null>(null);
+
+  if (isOpen && positionData && !initialPositionDataRef.current) {
+    initialPositionDataRef.current = positionData;
+  }
+
+  if (!isOpen && initialPositionDataRef.current) {
+    initialPositionDataRef.current = null;
+  }
+
+  const positionDataToUse = initialPositionDataRef.current || positionData;
+
   const [symbol, setSymbol] = useState(initialSymbol || '');
   const [exchange, setExchange] = useState(initialExchange || 'NFO');
-  const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>(positionData?.transactionType || 'BUY');
-  const [gttType, setGttType] = useState<'single' | 'two-leg'>(positionData ? 'two-leg' : 'single');
+  const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>(positionDataToUse?.transactionType || 'BUY');
+  const [gttType, setGttType] = useState<'single' | 'two-leg'>(positionDataToUse ? 'two-leg' : 'single');
   const [selectedBrokerIds, setSelectedBrokerIds] = useState<string[]>(
     brokerConnectionId && brokerConnectionId !== 'all' ? [brokerConnectionId] : []
   );
@@ -195,11 +207,11 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         setSymbol(initialSymbol || '');
         setExchange(initialExchange || 'NFO');
         // If opened from position page, keep transaction type and GTT type from initial state
-        if (!positionData) {
+        if (!positionDataToUse) {
           setTransactionType('BUY');
           setGttType('single');
         } else {
-          setTransactionType(positionData.transactionType);
+          setTransactionType(positionDataToUse.transactionType);
           setGttType('two-leg');
         }
         setTriggerPrice1('');
@@ -229,7 +241,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
     };
 
     setupGTT();
-  }, [editingGTT, isOpen, initialSymbol, initialExchange, positionData]);
+  }, [editingGTT, isOpen, initialSymbol, initialExchange]);
 
   // Fetch LTP when symbol is pre-filled from position or watchlist
   useEffect(() => {
@@ -242,14 +254,14 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         selectInstrument(instrument);
 
         // Set quantity based on position data if available
-        if (positionData?.quantity) {
-          const qty = positionData.quantity;
+        if (positionDataToUse?.quantity) {
+          const qty = positionDataToUse.quantity;
           setQuantity1(qty);
           setQuantity2(qty);
         }
       }
     }
-  }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT, positionData, selectedInstrument]);
+  }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT, selectedInstrument]);
 
   // Re-calculate prefilled values when GTT type or transaction type changes
   useEffect(() => {
@@ -257,7 +269,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
       // For two-leg, if target fields are empty but stoploss has value, fill ONLY target
       if (gttType === 'two-leg' && !triggerPrice2 && triggerPrice1) {
         // Only populate target fields, don't touch stoploss fields
-        const isClosingPosition = positionData !== undefined;
+        const isClosingPosition = positionDataToUse !== undefined;
 
         if (isClosingPosition) {
           if (transactionType === 'SELL') {
@@ -300,7 +312,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         setInitialLTPCaptured(true);
       }
     }
-  }, [gttType, transactionType, currentLTP, editingGTT, initialLTPCaptured, triggerPrice1, triggerPrice2, positionData]);
+  }, [gttType, transactionType, currentLTP, editingGTT, initialLTPCaptured, triggerPrice1, triggerPrice2]);
 
   // Calculate percentages for editing GTT when LTP becomes available (one time only)
   useEffect(() => {

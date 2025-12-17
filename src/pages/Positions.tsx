@@ -292,7 +292,15 @@ export function Positions() {
   };
 
   const handleOpenGTT = (position: any) => {
-    setSelectedPosition(position);
+    const ltp = position.instrument_token ? getLTP(position.instrument_token) : null;
+    const capturedPrice = ltp ?? position.current_price ?? position.average_price;
+
+    const positionSnapshot = {
+      ...position,
+      current_price: capturedPrice
+    };
+
+    setSelectedPosition(positionSnapshot);
     setGttModalOpen(true);
     setOpenMenuId(null);
   };
@@ -303,7 +311,15 @@ export function Positions() {
   };
 
   const handleOpenHMTGTT = (position: any) => {
-    setSelectedPosition(position);
+    const ltp = position.instrument_token ? getLTP(position.instrument_token) : null;
+    const capturedPrice = ltp ?? position.current_price ?? position.average_price;
+
+    const positionSnapshot = {
+      ...position,
+      current_price: capturedPrice
+    };
+
+    setSelectedPosition(positionSnapshot);
     setHmtGttModalOpen(true);
     setOpenMenuId(null);
   };
