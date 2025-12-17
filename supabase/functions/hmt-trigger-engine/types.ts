@@ -21,6 +21,10 @@ export interface HMTTrigger {
   quantity_2: number | null;
   status: 'active' | 'processing' | 'triggered' | 'failed' | 'cancelled' | 'expired';
   parent_id: string | null; // Links OCO legs together
+  metadata?: {
+    strategy_name?: string;
+    [key: string]: any;
+  };
   created_at: string;
   updated_at: string;
 }
@@ -42,6 +46,7 @@ export interface WebSocketTick {
 
 export interface TriggerExecution {
   trigger_id: string;
+  trigger: HMTTrigger;
   triggered_leg: '1' | '2';
   ltp: number;
   order_data: {

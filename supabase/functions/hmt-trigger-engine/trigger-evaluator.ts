@@ -46,6 +46,7 @@ export class TriggerEvaluator {
 
     return {
       trigger_id: trigger.id,
+      trigger: trigger,
       triggered_leg: '1',
       ltp: ltp,
       order_data: {
@@ -92,6 +93,7 @@ export class TriggerEvaluator {
     if (leg1Triggered) {
       return {
         trigger_id: trigger.id,
+        trigger: trigger,
         triggered_leg: '1',
         ltp: ltp,
         order_data: {
@@ -109,6 +111,7 @@ export class TriggerEvaluator {
     if (leg2Triggered && trigger.quantity_2 && trigger.product_type_2) {
       return {
         trigger_id: trigger.id,
+        trigger: trigger,
         triggered_leg: '2',
         ltp: ltp,
         order_data: {
