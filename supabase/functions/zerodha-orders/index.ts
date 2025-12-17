@@ -39,10 +39,18 @@ Deno.serve(async (req: Request) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-    if (authError || !user) {
-      throw new Error('Unauthorized');
+    let user: any = null;
+    let isServiceRole = false;
+
+    if (token === supabaseKey) {
+      isServiceRole = true;
+    } else {
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !authUser) {
+        throw new Error('Unauthorized');
+      }
+      user = authUser;
     }
 
     const url = new URL(req.url);
@@ -50,12 +58,16 @@ Deno.serve(async (req: Request) => {
     if (req.method === 'POST' && url.pathname.endsWith('/place')) {
       const orderData: OrderRequest = await req.json();
 
-      const { data: brokerConnection } = await supabase
+      let brokerQuery = supabase
         .from('broker_connections')
-        .select('api_key, access_token')
-        .eq('id', orderData.broker_connection_id)
-        .eq('user_id', user.id)
-        .single();
+        .select('api_key, access_token, user_id')
+        .eq('id', orderData.broker_connection_id);
+
+      if (!isServiceRole && user) {
+        brokerQuery = brokerQuery.eq('user_id', user.id);
+      }
+
+      const { data: brokerConnection } = await brokerQuery.single();
 
       if (!brokerConnection || !brokerConnection.access_token) {
         throw new Error('Broker not connected');
@@ -92,8 +104,10 @@ Deno.serve(async (req: Request) => {
       const result = await response.json();
 
       if (result.status === 'success' && result.data?.order_id) {
+        const userId = isServiceRole ? brokerConnection.user_id : user.id;
+
         await supabase.from('orders').insert({
-          user_id: user.id,
+          user_id: userId,
           broker_connection_id: orderData.broker_connection_id,
           strategy_id: orderData.strategy_id || null,
           symbol: orderData.symbol,
@@ -128,12 +142,16 @@ Deno.serve(async (req: Request) => {
         throw new Error('Missing broker_id');
       }
 
-      const { data: brokerConnection } = await supabase
+      let brokerQuery = supabase
         .from('broker_connections')
-        .select('api_key, access_token')
-        .eq('id', brokerId)
-        .eq('user_id', user.id)
-        .single();
+        .select('api_key, access_token, user_id')
+        .eq('id', brokerId);
+
+      if (!isServiceRole && user) {
+        brokerQuery = brokerQuery.eq('user_id', user.id);
+      }
+
+      const { data: brokerConnection } = await brokerQuery.single();
 
       if (!brokerConnection || !brokerConnection.access_token) {
         throw new Error('Broker not connected');
@@ -171,8 +189,10 @@ Deno.serve(async (req: Request) => {
         const orders = result.data;
 
         if (orders.length > 0) {
+          const userId = isServiceRole ? brokerConnection.user_id : user.id;
+
           const orderRecords = orders.map((order: any) => ({
-            user_id: user.id,
+            user_id: userId,
             broker_connection_id: brokerId,
             symbol: order.tradingsymbol,
             exchange: order.exchange,
@@ -207,12 +227,16 @@ Deno.serve(async (req: Request) => {
     if (req.method === 'POST' && url.pathname.endsWith('/exit')) {
       const { position_id } = await req.json();
 
-      const { data: position } = await supabase
+      let positionQuery = supabase
         .from('positions')
-        .select('*, broker_connections!inner(api_key, access_token)')
-        .eq('id', position_id)
-        .eq('user_id', user.id)
-        .single();
+        .select('*, broker_connections!inner(api_key, access_token, user_id)')
+        .eq('id', position_id);
+
+      if (!isServiceRole && user) {
+        positionQuery = positionQuery.eq('user_id', user.id);
+      }
+
+      const { data: position } = await positionQuery.single();
 
       if (!position || !position.broker_connections.access_token) {
         throw new Error('Position or broker not found');
@@ -244,8 +268,10 @@ Deno.serve(async (req: Request) => {
       const result = await response.json();
 
       if (result.status === 'success' && result.data?.order_id) {
+        const userId = isServiceRole ? position.broker_connections.user_id : user.id;
+
         await supabase.from('orders').insert({
-          user_id: user.id,
+          user_id: userId,
           broker_connection_id: position.broker_connection_id,
           symbol: position.symbol,
           exchange: position.exchange,
@@ -284,11 +310,16 @@ Deno.serve(async (req: Request) => {
         throw new Error('No positions provided');
       }
 
-      const { data: positions } = await supabase
+      let positionsQuery = supabase
         .from('positions')
-        .select('*, broker_connections!inner(api_key, access_token)')
-        .in('id', position_ids)
-        .eq('user_id', user.id);
+        .select('*, broker_connections!inner(api_key, access_token, user_id)')
+        .in('id', position_ids);
+
+      if (!isServiceRole && user) {
+        positionsQuery = positionsQuery.eq('user_id', user.id);
+      }
+
+      const { data: positions } = await positionsQuery;
 
       if (!positions || positions.length === 0) {
         throw new Error('No valid positions found');
@@ -325,8 +356,10 @@ Deno.serve(async (req: Request) => {
           const result = await response.json();
 
           if (result.status === 'success' && result.data?.order_id) {
+            const userId = isServiceRole ? position.broker_connections.user_id : user.id;
+
             await supabase.from('orders').insert({
-              user_id: user.id,
+              user_id: userId,
               broker_connection_id: position.broker_connection_id,
               symbol: position.symbol,
               exchange: position.exchange,
@@ -392,12 +425,16 @@ Deno.serve(async (req: Request) => {
         throw new Error('Missing broker_id or order_id');
       }
 
-      const { data: brokerConnection } = await supabase
+      let brokerQuery = supabase
         .from('broker_connections')
-        .select('api_key, access_token')
-        .eq('id', brokerId)
-        .eq('user_id', user.id)
-        .single();
+        .select('api_key, access_token, user_id')
+        .eq('id', brokerId);
+
+      if (!isServiceRole && user) {
+        brokerQuery = brokerQuery.eq('user_id', user.id);
+      }
+
+      const { data: brokerConnection } = await brokerQuery.single();
 
       if (!brokerConnection || !brokerConnection.access_token) {
         throw new Error('Broker not connected');
@@ -414,11 +451,16 @@ Deno.serve(async (req: Request) => {
       const result = await response.json();
 
       if (result.status === 'success') {
-        await supabase
+        let updateQuery = supabase
           .from('orders')
           .update({ status: 'CANCELLED' })
-          .eq('order_id', orderId)
-          .eq('user_id', user.id);
+          .eq('order_id', orderId);
+
+        if (!isServiceRole && user) {
+          updateQuery = updateQuery.eq('user_id', user.id);
+        }
+
+        await updateQuery;
 
         return new Response(
           JSON.stringify({ success: true, message: 'Order cancelled successfully' }),
