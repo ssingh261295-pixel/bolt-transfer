@@ -131,7 +131,12 @@ export class OrderExecutor {
     execution: TriggerExecution,
     broker: BrokerConnection
   ): Promise<OrderResult> {
-    const url = `${this.supabaseUrl}/functions/v1/zerodha-orders?broker_id=${broker.id}`;
+    const url = `${this.supabaseUrl}/functions/v1/zerodha-orders/place`;
+
+    const orderPayload = {
+      ...execution.order_data,
+      broker_connection_id: broker.id
+    };
 
     const response = await fetch(url, {
       method: 'POST',
@@ -139,7 +144,7 @@ export class OrderExecutor {
         'Authorization': `Bearer ${this.supabaseKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(execution.order_data),
+      body: JSON.stringify(orderPayload),
     });
 
     if (!response.ok) {

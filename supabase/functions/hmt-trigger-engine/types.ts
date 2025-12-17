@@ -50,8 +50,8 @@ export interface TriggerExecution {
   triggered_leg: '1' | '2';
   ltp: number;
   order_data: {
+    symbol: string;
     exchange: string;
-    tradingsymbol: string;
     transaction_type: string;
     quantity: number;
     order_type: string;

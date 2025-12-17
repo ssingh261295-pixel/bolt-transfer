@@ -50,8 +50,8 @@ export class TriggerEvaluator {
       triggered_leg: '1',
       ltp: ltp,
       order_data: {
+        symbol: trigger.trading_symbol,
         exchange: trigger.exchange,
-        tradingsymbol: trigger.trading_symbol,
         transaction_type: trigger.transaction_type,
         quantity: trigger.quantity_1,
         order_type: 'MARKET',
@@ -97,8 +97,8 @@ export class TriggerEvaluator {
         triggered_leg: '1',
         ltp: ltp,
         order_data: {
+          symbol: trigger.trading_symbol,
           exchange: trigger.exchange,
-          tradingsymbol: trigger.trading_symbol,
           transaction_type: trigger.transaction_type,
           quantity: trigger.quantity_1,
           order_type: 'MARKET',
@@ -115,8 +115,8 @@ export class TriggerEvaluator {
         triggered_leg: '2',
         ltp: ltp,
         order_data: {
+          symbol: trigger.trading_symbol,
           exchange: trigger.exchange,
-          tradingsymbol: trigger.trading_symbol,
           transaction_type: trigger.transaction_type,
           quantity: trigger.quantity_2,
           order_type: 'MARKET',
