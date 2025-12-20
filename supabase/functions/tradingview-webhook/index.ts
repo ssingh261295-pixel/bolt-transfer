@@ -221,42 +221,61 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const now = new Date();
-    const day = now.getDate();
+    const today = new Date().toISOString().split('T')[0];
+    const day = new Date().getDate();
 
-    let expiryDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    if (day > 15) {
-      expiryDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    }
-
-    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    const year = expiryDate.getFullYear().toString().slice(-2);
-    const month = monthNames[expiryDate.getMonth()];
-
-    const futSymbol = `${normalized.symbol}${year}${month}FUT`;
-
-    console.log('[TradingView Webhook] Resolved FUT symbol:', futSymbol);
-
-    const { data: instrument, error: instrumentError } = await supabase
+    const { data: futInstruments, error: instrumentError } = await supabase
       .from('nfo_instruments')
-      .select('instrument_token, tradingsymbol, exchange, lot_size')
-      .eq('tradingsymbol', futSymbol)
-      .maybeSingle();
+      .select('instrument_token, tradingsymbol, exchange, lot_size, expiry')
+      .eq('name', normalized.symbol)
+      .eq('instrument_type', 'FUT')
+      .gte('expiry', today)
+      .order('expiry', { ascending: true })
+      .limit(2);
 
-    if (instrumentError || !instrument) {
+    if (instrumentError || !futInstruments || futInstruments.length === 0) {
       await supabase.from('tradingview_webhook_logs').insert({
         webhook_key_id: keyData.id,
         source_ip: sourceIp,
         payload: rawPayload,
         status: 'failed',
-        error_message: `Instrument not found: ${futSymbol}`
+        error_message: `FUT instrument not found for ${normalized.symbol}`
       });
 
       return new Response(
-        JSON.stringify({ error: `Instrument not found: ${futSymbol}` }),
+        JSON.stringify({ error: `FUT instrument not found for ${normalized.symbol}` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    let instrument;
+    if (day <= 15) {
+      instrument = futInstruments[0];
+    } else {
+      if (futInstruments.length < 2) {
+        await supabase.from('tradingview_webhook_logs').insert({
+          webhook_key_id: keyData.id,
+          source_ip: sourceIp,
+          payload: rawPayload,
+          status: 'failed',
+          error_message: `Second nearest FUT expiry not found for ${normalized.symbol} (day > 15)`
+        });
+
+        return new Response(
+          JSON.stringify({ error: `Second nearest FUT expiry not found for ${normalized.symbol}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      instrument = futInstruments[1];
+    }
+
+    console.log('[TradingView Webhook] Resolved FUT instrument:', {
+      symbol: normalized.symbol,
+      tradingsymbol: instrument.tradingsymbol,
+      expiry: instrument.expiry,
+      lot_size: instrument.lot_size,
+      day_of_month: day
+    });
 
     const lotMultiplier = keyData.lot_multiplier || 1;
     const quantity = instrument.lot_size * lotMultiplier;
