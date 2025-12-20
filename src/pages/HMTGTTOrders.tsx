@@ -521,8 +521,7 @@ export function HMTGTTOrders() {
               <option value="all">All Accounts</option>
               {brokers.map((broker) => (
                 <option key={broker.id} value={broker.id}>
-                  {broker.account_holder_name || broker.account_name || 'Account'}
-                  {broker.client_id && ` (${broker.client_id})`}
+                  {(broker.account_holder_name || broker.account_name || 'Account')} ({broker.client_id || 'No ID'})
                 </option>
               ))}
             </select>
@@ -742,13 +741,8 @@ export function HMTGTTOrders() {
                     {selectedBrokerId === 'all' && (
                       <td className="px-4 py-3">
                         <div className="text-sm text-gray-900">
-                          {gtt.broker_connections?.account_holder_name || gtt.broker_connections?.account_name || 'Account'}
+                          {(gtt.broker_connections?.account_holder_name || gtt.broker_connections?.account_name || 'Account')} ({gtt.broker_connections?.client_id || 'No ID'})
                         </div>
-                        {gtt.broker_connections?.client_id && (
-                          <div className="text-xs text-gray-500">
-                            ID: {gtt.broker_connections.client_id}
-                          </div>
-                        )}
                       </td>
                     )}
                     <td className="px-4 py-3">

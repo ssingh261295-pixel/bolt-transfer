@@ -397,9 +397,7 @@ export function Positions() {
             <option value="all">All Accounts</option>
             {brokers.map((broker) => (
               <option key={broker.id} value={broker.id}>
-                {broker.account_holder_name
-                  ? `${broker.account_holder_name} (${broker.client_id || 'No Client ID'})`
-                  : broker.account_name || `Zerodha (${broker.api_key.substring(0, 8)}...)`}
+                {(broker.account_holder_name || broker.account_name || 'Account')} ({broker.client_id || 'No ID'})
               </option>
             ))}
           </select>
@@ -550,10 +548,7 @@ export function Positions() {
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <div className="text-xs text-gray-900 font-medium">
-                          {position.broker_connections?.account_holder_name || position.broker_connections?.account_name || 'Default Account'}
-                          {position.broker_connections?.client_id && (
-                            <span className="text-gray-600"> ({position.broker_connections.client_id})</span>
-                          )}
+                          {(position.broker_connections?.account_holder_name || position.broker_connections?.account_name || 'Account')} ({position.broker_connections?.client_id || 'No ID'})
                         </div>
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-sm font-medium">

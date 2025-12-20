@@ -373,7 +373,7 @@ export function Dashboard() {
                   <option value="all">All Accounts</option>
                   {brokers.map((broker) => (
                     <option key={broker.id} value={broker.id}>
-                      {broker.account_holder_name || broker.account_name || broker.client_id || broker.broker_name}
+                      {(broker.account_holder_name || broker.account_name || 'Account')} ({broker.client_id || 'No ID'})
                     </option>
                   ))}
                 </select>
@@ -487,14 +487,8 @@ export function Dashboard() {
                   <div className="flex items-center justify-between mb-6">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">
-                        {account.account_holder_name || account.account_name || account.client_id}
+                        {(account.account_holder_name || account.account_name || 'Account')} ({account.client_id || 'No ID'})
                       </h3>
-                      {account.client_id && (
-                        <p className="text-sm text-gray-600">Client ID: {account.client_id}</p>
-                      )}
-                      {account.account_name && account.account_holder_name && (
-                        <p className="text-xs text-gray-500">{account.account_name}</p>
-                      )}
                     </div>
                     <div className="text-right text-xs text-gray-500">
                       <p>Last updated</p>
