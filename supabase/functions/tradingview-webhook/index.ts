@@ -1,25 +1,27 @@
 /**
- * TradingView Webhook Handler
+ * TradingView Webhook Execution Gateway
  *
- * Receives advanced indicator-based signals from TradingView alerts
- * and creates HMT GTT orders for all accounts mapped to the strategy.
+ * Platform acts as SECURE EXECUTION GATEWAY ONLY.
+ * TradingView owns strategy logic.
+ *
+ * Flow:
+ * 1. Validate webhook_key + log request
+ * 2. Resolve accounts mapped to key
+ * 3. Resolve NFO FUT symbol + lot size
+ * 4. Place MARKET order (MANDATORY FIRST)
+ * 5. Create HMT GTT (SL + Target) after order success
+ * 6. Notify user in real-time
  *
  * Expected payload:
  * {
- *   "strategy_key": "whk_abc123...",
- *   "type": "BUY" | "SELL",
- *   "symbol": "NIFTY25DECFUT",
- *   "timeframe": "5m",
+ *   "webhook_key": "wk_...",
+ *   "symbol": "NIFTY", // CASH symbol
+ *   "exchange": "NSE",
+ *   "timeframe": "60",
+ *   "action": "BUY" | "SELL",
  *   "price": 24500.50,
  *   "atr": 120.75,
- *   "adx": 35.5,
- *   "last_candle_adx": 33.2,
- *   "di_plus": 28.5,
- *   "di_minus": 15.3,
- *   "ema21": 24480.25,
- *   "current_volume": 150000,
- *   "avg_5day_volume": 120000,
- *   "timestamp": "2024-12-14T10:30:00Z" (optional)
+ *   "event_time": 1710000000000
  * }
  */
 
@@ -37,43 +39,14 @@ const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface TradingViewPayload {
-  strategy_key: string;
-  type: string;
-  symbol: string;
-  timeframe: string;
-  price: number;
-  atr: number;
-  adx?: number;
-  last_candle_adx?: number;
-  di_plus?: number;
-  di_minus?: number;
-  ema21?: number;
-  current_volume?: number;
-  avg_5day_volume?: number;
-  timestamp?: string;
-
-  webhook_key?: string;
-  action?: string;
-}
-
-interface Strategy {
-  id: string;
-  name: string;
-  user_id: string;
+  webhook_key: string;
   symbol: string;
   exchange: string;
-  is_active: boolean;
-  execution_source: string;
-  atr_config: {
-    period: number;
-    sl_multiplier: number;
-    target_multiplier: number;
-    trailing_multiplier: number;
-  };
-  account_mappings: string[];
-  risk_management: {
-    positionSize?: number;
-  };
+  timeframe?: string;
+  action: 'BUY' | 'SELL';
+  price: number;
+  atr: number;
+  event_time?: number;
 }
 
 Deno.serve(async (req: Request) => {
@@ -88,123 +61,190 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  const sourceIp = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
+  let webhookKeyId: string | null = null;
+
   try {
     // Parse payload
     const payload: TradingViewPayload = await req.json();
 
-    // Support both old and new payload formats
-    const strategyKey = payload.strategy_key || payload.webhook_key;
-    const actionType = payload.type || payload.action;
-
-    console.log('[TradingView Webhook] Received payload:', {
-      strategy_key: strategyKey?.substring(0, 10) + '...',
-      type: actionType,
+    console.log('[TradingView Webhook] Received:', {
       symbol: payload.symbol,
+      action: payload.action,
       price: payload.price,
-      atr: payload.atr,
-      adx: payload.adx,
-      timeframe: payload.timeframe
+      ip: sourceIp
     });
 
-    // Validate required fields
-    if (!strategyKey || !actionType || !payload.symbol || !payload.price || !payload.atr) {
+    // ============================================================
+    // STEP 0: VALIDATE & AUDIT
+    // ============================================================
+
+    if (!payload.webhook_key || !payload.action || !payload.symbol || !payload.price || !payload.atr) {
+      await supabase.from('tradingview_webhook_logs').insert({
+        source_ip: sourceIp,
+        payload,
+        status: 'rejected',
+        error_message: 'Missing required fields: webhook_key, action, symbol, price, atr'
+      });
+
       return new Response(
-        JSON.stringify({
-          error: "Missing required fields",
-          required: ["strategy_key", "type", "symbol", "price", "atr"]
-        }),
+        JSON.stringify({ error: "Missing required fields" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Validate strategy by webhook_key/strategy_key
-    const { data: strategy, error: strategyError } = await supabase
-      .from('strategies')
-      .select('*')
-      .eq('webhook_key', strategyKey)
+    // Validate webhook_key
+    const { data: webhookKey, error: keyError } = await supabase
+      .from('webhook_keys')
+      .select('id, user_id, name, is_active, account_mappings, lot_multiplier, sl_multiplier, target_multiplier')
+      .eq('webhook_key', payload.webhook_key)
       .maybeSingle();
 
-    if (strategyError || !strategy) {
-      console.error('[TradingView Webhook] Invalid strategy key:', strategyKey);
+    if (keyError || !webhookKey) {
+      await supabase.from('tradingview_webhook_logs').insert({
+        source_ip: sourceIp,
+        payload,
+        status: 'rejected',
+        error_message: 'Invalid webhook_key'
+      });
+
       return new Response(
-        JSON.stringify({ error: "Invalid strategy key" }),
+        JSON.stringify({ error: "Invalid webhook_key" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Check if strategy is active
-    if (!strategy.is_active) {
-      console.error('[TradingView Webhook] Strategy is not active:', strategy.name);
+    if (!webhookKey.is_active) {
+      await supabase.from('tradingview_webhook_logs').insert({
+        webhook_key_id: webhookKey.id,
+        source_ip: sourceIp,
+        payload,
+        status: 'rejected',
+        error_message: 'Webhook key is disabled'
+      });
+
       return new Response(
-        JSON.stringify({ error: "Strategy is not active" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Webhook key is disabled" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Check if execution_source is tradingview
-    if (strategy.execution_source !== 'tradingview') {
-      console.error('[TradingView Webhook] Strategy execution_source is not tradingview:', strategy.execution_source);
-      return new Response(
-        JSON.stringify({ error: "Strategy is not configured for TradingView execution" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    webhookKeyId = webhookKey.id;
 
-    // Normalize action (BUY/SELL)
-    const action = actionType.toUpperCase();
+    // Update last_used_at
+    await supabase
+      .from('webhook_keys')
+      .update({ last_used_at: new Date().toISOString() })
+      .eq('id', webhookKey.id);
+
+    // Normalize action
+    const action = payload.action.toUpperCase();
     if (action !== 'BUY' && action !== 'SELL') {
+      await supabase.from('tradingview_webhook_logs').insert({
+        webhook_key_id: webhookKey.id,
+        source_ip: sourceIp,
+        payload,
+        status: 'rejected',
+        error_message: "Invalid action. Must be 'BUY' or 'SELL'"
+      });
+
       return new Response(
-        JSON.stringify({ error: "Invalid type. Must be 'BUY' or 'SELL'" }),
+        JSON.stringify({ error: "Invalid action" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Get account mappings
-    const accountIds = strategy.account_mappings || [];
+    // ============================================================
+    // STEP 1: RESOLVE ACCOUNTS
+    // ============================================================
+
+    const accountIds = webhookKey.account_mappings || [];
     if (accountIds.length === 0) {
-      console.error('[TradingView Webhook] No accounts mapped to strategy:', strategy.name);
+      await supabase.from('tradingview_webhook_logs').insert({
+        webhook_key_id: webhookKey.id,
+        source_ip: sourceIp,
+        payload,
+        status: 'rejected',
+        error_message: 'No accounts mapped to webhook key'
+      });
+
       return new Response(
-        JSON.stringify({ error: "No accounts mapped to this strategy" }),
+        JSON.stringify({ error: "No accounts mapped" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Get broker connections
     const { data: brokerAccounts, error: brokerError } = await supabase
       .from('broker_connections')
-      .select('id, broker_name, api_key, is_active')
+      .select('id, account_name, broker_name, api_key, access_token, is_active')
       .in('id', accountIds)
       .eq('is_active', true);
 
     if (brokerError || !brokerAccounts || brokerAccounts.length === 0) {
-      console.error('[TradingView Webhook] No active broker accounts found');
+      await supabase.from('tradingview_webhook_logs').insert({
+        webhook_key_id: webhookKey.id,
+        source_ip: sourceIp,
+        payload,
+        status: 'failed',
+        error_message: 'No active broker accounts found'
+      });
+
       return new Response(
-        JSON.stringify({ error: "No active broker accounts found for this strategy" }),
+        JSON.stringify({ error: "No active accounts" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Get instrument token for the symbol
+    // ============================================================
+    // STEP 2: RESOLVE NFO FUT SYMBOL
+    // ============================================================
+
+    const now = new Date();
+    const day = now.getDate();
+
+    // Determine expiry month (current if day <= 15, else next)
+    let expiryDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (day > 15) {
+      expiryDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    }
+
+    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const year = expiryDate.getFullYear().toString().slice(-2);
+    const month = monthNames[expiryDate.getMonth()];
+
+    // Build FUT tradingsymbol
+    const futSymbol = `${payload.symbol}${year}${month}FUT`;
+
+    console.log('[TradingView Webhook] Resolved FUT symbol:', futSymbol);
+
     const { data: instrument, error: instrumentError } = await supabase
       .from('nfo_instruments')
-      .select('instrument_token, tradingsymbol, exchange')
-      .eq('tradingsymbol', payload.symbol)
+      .select('instrument_token, tradingsymbol, exchange, lot_size')
+      .eq('tradingsymbol', futSymbol)
       .maybeSingle();
 
     if (instrumentError || !instrument) {
-      console.error('[TradingView Webhook] Instrument not found:', payload.symbol);
+      await supabase.from('tradingview_webhook_logs').insert({
+        webhook_key_id: webhookKey.id,
+        source_ip: sourceIp,
+        payload,
+        status: 'failed',
+        error_message: `Instrument not found: ${futSymbol}`
+      });
+
       return new Response(
-        JSON.stringify({ error: `Instrument not found: ${payload.symbol}` }),
+        JSON.stringify({ error: `Instrument not found: ${futSymbol}` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Calculate SL and Target based on ATR
-    const atrConfig = strategy.atr_config || {
-      sl_multiplier: 1.5,
-      target_multiplier: 2.0,
-      trailing_multiplier: 1.0
-    };
+    // Calculate quantity
+    const lotMultiplier = webhookKey.lot_multiplier || 1;
+    const quantity = instrument.lot_size * lotMultiplier;
+
+    // Calculate SL and Target
+    const slMultiplier = webhookKey.sl_multiplier || 1.5;
+    const targetMultiplier = webhookKey.target_multiplier || 2.0;
 
     const entryPrice = payload.price;
     const atr = payload.atr;
@@ -213,185 +253,186 @@ Deno.serve(async (req: Request) => {
     let targetPrice: number;
 
     if (action === 'BUY') {
-      // For BUY: SL below entry, Target above entry
-      stopLossPrice = entryPrice - (atr * atrConfig.sl_multiplier);
-      targetPrice = entryPrice + (atr * atrConfig.target_multiplier);
+      stopLossPrice = entryPrice - (atr * slMultiplier);
+      targetPrice = entryPrice + (atr * targetMultiplier);
     } else {
-      // For SELL: SL above entry, Target below entry
-      stopLossPrice = entryPrice + (atr * atrConfig.sl_multiplier);
-      targetPrice = entryPrice - (atr * atrConfig.target_multiplier);
+      stopLossPrice = entryPrice + (atr * slMultiplier);
+      targetPrice = entryPrice - (atr * targetMultiplier);
     }
 
-    // Get quantity
-    const quantity = strategy.risk_management?.positionSize || 1;
+    // ============================================================
+    // STEP 3 & 4: EXECUTE FOR EACH ACCOUNT
+    // ============================================================
 
-    // Create HMT GTT orders for each account
-    const createdOrders = [];
-    const errors = [];
+    const executionResults = [];
 
     for (const account of brokerAccounts) {
+      const accountResult: any = {
+        account_id: account.id,
+        account_name: account.account_name,
+        broker_name: account.broker_name,
+        order_placed: false,
+        hmt_gtt_created: false
+      };
+
       try {
-        // Create HMT GTT order (OCO: stop-loss + target)
-        const parentId = crypto.randomUUID();
+        // STEP 3: PLACE MARKET ORDER (MANDATORY FIRST)
+        const orderParams: any = {
+          tradingsymbol: instrument.tradingsymbol,
+          exchange: instrument.exchange,
+          transaction_type: action,
+          quantity: quantity.toString(),
+          order_type: 'MARKET',
+          product: 'MIS',
+          validity: 'DAY',
+        };
 
-        // Leg 1: Stop Loss
-        const { data: slOrder, error: slError } = await supabase
-          .from('hmt_gtt_orders')
-          .insert({
-            user_id: strategy.user_id,
+        const orderResponse = await fetch('https://api.kite.trade/orders/regular', {
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${account.api_key}:${account.access_token}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Kite-Version': '3',
+          },
+          body: new URLSearchParams(orderParams),
+        });
+
+        const orderResult = await orderResponse.json();
+
+        if (orderResult.status === 'success' && orderResult.data?.order_id) {
+          accountResult.order_placed = true;
+          accountResult.order_id = orderResult.data.order_id;
+
+          // Insert into orders table
+          await supabase.from('orders').insert({
+            user_id: webhookKey.user_id,
             broker_connection_id: account.id,
-            trading_symbol: instrument.tradingsymbol,
+            symbol: instrument.tradingsymbol,
             exchange: instrument.exchange,
-            instrument_token: instrument.instrument_token,
-            condition_type: 'two-leg',
+            order_type: 'MARKET',
             transaction_type: action,
-            product_type_1: 'MIS',
-            trigger_price_1: stopLossPrice,
-            order_price_1: stopLossPrice,
-            quantity_1: quantity,
-            product_type_2: 'MIS',
-            trigger_price_2: targetPrice,
-            order_price_2: targetPrice,
-            quantity_2: quantity,
-            parent_id: parentId,
-            status: 'active',
-            metadata: {
-              source: 'tradingview_webhook',
-              strategy_id: strategy.id,
-              strategy_name: strategy.name,
-              entry_price: entryPrice,
-              atr: atr,
-              atr_config: atrConfig
-            }
-          })
-          .select()
-          .single();
-
-        if (slError) {
-          console.error(`[TradingView Webhook] Error creating HMT GTT for account ${account.id}:`, slError);
-          errors.push({
-            account_id: account.id,
-            error: slError.message
-          });
-          continue;
-        }
-
-        createdOrders.push({
-          account_id: account.id,
-          broker_name: account.broker_name,
-          order_id: slOrder.id,
-          stop_loss: stopLossPrice,
-          target: targetPrice
-        });
-
-        console.log(`[TradingView Webhook] Created HMT GTT for account ${account.id}:`, {
-          symbol: instrument.tradingsymbol,
-          action: action,
-          entry: entryPrice,
-          sl: stopLossPrice,
-          target: targetPrice,
-          quantity: quantity
-        });
-
-        // Create rich notification with all indicator data
-        const volumeRatio = payload.avg_5day_volume
-          ? (payload.current_volume! / payload.avg_5day_volume).toFixed(2)
-          : 'N/A';
-
-        let indicatorsSummary = `ATR: ${atr.toFixed(2)}`;
-        if (payload.adx !== undefined) {
-          indicatorsSummary += ` | ADX: ${payload.adx.toFixed(1)}`;
-          if (payload.last_candle_adx !== undefined) {
-            indicatorsSummary += ` (prev: ${payload.last_candle_adx.toFixed(1)})`;
-          }
-        }
-        if (payload.di_plus !== undefined && payload.di_minus !== undefined) {
-          indicatorsSummary += ` | DI+: ${payload.di_plus.toFixed(1)} | DI-: ${payload.di_minus.toFixed(1)}`;
-        }
-        if (payload.ema21 !== undefined) {
-          const priceVsEma = entryPrice > payload.ema21 ? 'above' : 'below';
-          indicatorsSummary += ` | EMA21: ${payload.ema21.toFixed(2)} (${priceVsEma})`;
-        }
-        if (payload.current_volume !== undefined && payload.avg_5day_volume !== undefined) {
-          indicatorsSummary += ` | Vol: ${volumeRatio}x avg`;
-        }
-
-        const notificationMessage = `${action} signal on ${payload.timeframe || 'unknown'} timeframe
-Entry: ₹${entryPrice.toFixed(2)} | SL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}
-${indicatorsSummary}`;
-
-        await supabase.from('notifications').insert({
-          user_id: strategy.user_id,
-          broker_account_id: account.id,
-          source: 'tradingview',
-          strategy_name: strategy.name,
-          symbol: payload.symbol,
-          title: `TradingView Signal: ${action} ${payload.symbol}`,
-          message: notificationMessage,
-          type: 'trade',
-          metadata: {
-            action: action,
-            timeframe: payload.timeframe,
-            entry_price: entryPrice,
-            stop_loss: stopLossPrice,
-            target: targetPrice,
-            atr: atr,
-            adx: payload.adx,
-            last_candle_adx: payload.last_candle_adx,
-            di_plus: payload.di_plus,
-            di_minus: payload.di_minus,
-            ema21: payload.ema21,
-            current_volume: payload.current_volume,
-            avg_5day_volume: payload.avg_5day_volume,
-            volume_ratio: volumeRatio,
             quantity: quantity,
-            broker_name: account.broker_name,
-            timestamp: payload.timestamp || new Date().toISOString()
+            status: 'OPEN',
+            order_id: orderResult.data.order_id,
+            variety: 'regular',
+            product: 'MIS',
+          });
+
+          // STEP 4: CREATE HMT GTT (ONLY AFTER ORDER SUCCESS)
+          const { data: hmtGtt, error: hmtError } = await supabase
+            .from('hmt_gtt_orders')
+            .insert({
+              user_id: webhookKey.user_id,
+              broker_connection_id: account.id,
+              trading_symbol: instrument.tradingsymbol,
+              exchange: instrument.exchange,
+              instrument_token: instrument.instrument_token,
+              condition_type: 'two-leg',
+              transaction_type: action === 'BUY' ? 'SELL' : 'BUY', // Opposite for exit
+              product_type_1: 'MIS',
+              trigger_price_1: stopLossPrice,
+              order_price_1: stopLossPrice,
+              quantity_1: quantity,
+              product_type_2: 'MIS',
+              trigger_price_2: targetPrice,
+              order_price_2: targetPrice,
+              quantity_2: quantity,
+              status: 'active',
+              metadata: {
+                source: 'tradingview_webhook',
+                webhook_key_name: webhookKey.name,
+                entry_price: entryPrice,
+                atr: atr,
+                timeframe: payload.timeframe
+              }
+            })
+            .select()
+            .single();
+
+          if (!hmtError && hmtGtt) {
+            accountResult.hmt_gtt_created = true;
+            accountResult.hmt_gtt_id = hmtGtt.id;
+            accountResult.stop_loss = stopLossPrice;
+            accountResult.target = targetPrice;
+          } else {
+            accountResult.hmt_gtt_error = hmtError?.message || 'Unknown error';
           }
-        });
+
+          // Create notification
+          await supabase.from('notifications').insert({
+            user_id: webhookKey.user_id,
+            broker_account_id: account.id,
+            type: 'trade',
+            title: `TradingView: ${action} ${instrument.tradingsymbol}`,
+            message: `Order placed: ${action} ${quantity} @ Market\nSL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}\nATR: ${atr.toFixed(2)} | Timeframe: ${payload.timeframe || 'N/A'}`,
+            metadata: {
+              source: 'tradingview',
+              action,
+              symbol: instrument.tradingsymbol,
+              entry_price: entryPrice,
+              quantity,
+              stop_loss: stopLossPrice,
+              target: targetPrice,
+              atr,
+              order_id: orderResult.data.order_id
+            }
+          });
+
+        } else {
+          accountResult.order_error = orderResult.message || 'Order placement failed';
+        }
+
       } catch (error: any) {
-        console.error(`[TradingView Webhook] Exception for account ${account.id}:`, error);
-        errors.push({
-          account_id: account.id,
-          error: error.message
-        });
+        accountResult.error = error.message;
       }
+
+      executionResults.push(accountResult);
     }
+
+    // Log execution
+    const successCount = executionResults.filter(r => r.order_placed).length;
+    await supabase.from('tradingview_webhook_logs').insert({
+      webhook_key_id: webhookKey.id,
+      source_ip: sourceIp,
+      payload,
+      status: successCount > 0 ? 'success' : 'failed',
+      accounts_executed: executionResults
+    });
 
     // Return response
     return new Response(
       JSON.stringify({
         success: true,
-        message: `HMT GTT orders created for ${createdOrders.length} account(s)`,
-        strategy: {
-          id: strategy.id,
-          name: strategy.name,
-        },
+        message: `Executed on ${successCount}/${brokerAccounts.length} account(s)`,
         signal: {
-          action: action,
-          symbol: payload.symbol,
+          action,
+          symbol: instrument.tradingsymbol,
           entry_price: entryPrice,
-          atr: atr,
+          quantity,
           stop_loss: stopLossPrice,
           target: targetPrice,
-          quantity: quantity
+          atr
         },
-        orders: createdOrders,
-        errors: errors.length > 0 ? errors : undefined
+        accounts: executionResults
       }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error: any) {
-    console.error('[TradingView Webhook] Unhandled error:', error);
+    console.error('[TradingView Webhook] Error:', error);
+
+    if (webhookKeyId) {
+      await supabase.from('tradingview_webhook_logs').insert({
+        webhook_key_id: webhookKeyId,
+        source_ip: sourceIp,
+        payload: {},
+        status: 'failed',
+        error_message: error.message
+      });
+    }
+
     return new Response(
-      JSON.stringify({ 
-        error: "Internal server error",
-        message: error.message 
-      }),
+      JSON.stringify({ error: "Internal server error", message: error.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

@@ -1,271 +1,495 @@
 import { useEffect, useState } from 'react';
-import { Plus, Play, Pause, Trash2, TrendingUp, Edit, Webhook, Copy, Check } from 'lucide-react';
+import { Plus, Play, Pause, Trash2, TrendingUp, Key, Copy, Check, RefreshCw, Activity, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { StrategyBuilder } from '../components/strategies/StrategyBuilder';
+
+interface WebhookKey {
+  id: string;
+  name: string;
+  webhook_key: string;
+  is_active: boolean;
+  account_mappings: string[];
+  lot_multiplier: number;
+  sl_multiplier: number;
+  target_multiplier: number;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+interface BrokerAccount {
+  id: string;
+  account_name: string;
+  broker_name: string;
+  is_active: boolean;
+}
 
 export function Strategies() {
   const { user } = useAuth();
-  const [strategies, setStrategies] = useState<any[]>([]);
-  const [showBuilder, setShowBuilder] = useState(false);
-  const [editingStrategy, setEditingStrategy] = useState<any>(null);
-  const [copiedWebhookKey, setCopiedWebhookKey] = useState<string | null>(null);
+  const [webhookKeys, setWebhookKeys] = useState<WebhookKey[]>([]);
+  const [brokerAccounts, setBrokerAccounts] = useState<BrokerAccount[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingKey, setEditingKey] = useState<WebhookKey | null>(null);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
-      loadStrategies();
+      loadWebhookKeys();
+      loadBrokerAccounts();
     }
   }, [user]);
 
-  const loadStrategies = async () => {
+  const loadWebhookKeys = async () => {
     const { data } = await supabase
-      .from('strategies')
+      .from('webhook_keys')
       .select('*')
       .eq('user_id', user?.id)
       .order('created_at', { ascending: false });
 
     if (data) {
-      setStrategies(data);
+      setWebhookKeys(data);
     }
   };
 
-  const handleSaveStrategy = async (strategyData: any) => {
-    if (editingStrategy) {
-      const { error } = await supabase
-        .from('strategies')
-        .update({
-          ...strategyData,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingStrategy.id);
+  const loadBrokerAccounts = async () => {
+    const { data } = await supabase
+      .from('broker_connections')
+      .select('id, account_name, broker_name, is_active')
+      .eq('user_id', user?.id)
+      .eq('is_active', true);
 
-      if (!error) {
-        setShowBuilder(false);
-        setEditingStrategy(null);
-        loadStrategies();
-      }
-    } else {
-      const { error } = await supabase.from('strategies').insert({
-        user_id: user?.id,
-        ...strategyData,
-        is_active: false,
-      });
-
-      if (!error) {
-        setShowBuilder(false);
-        loadStrategies();
-      }
+    if (data) {
+      setBrokerAccounts(data);
     }
   };
 
-  const handleEditStrategy = (strategy: any) => {
-    setEditingStrategy(strategy);
-    setShowBuilder(true);
+  const generateWebhookKey = () => {
+    return 'wk_' + Array.from({ length: 32 }, () =>
+      Math.random().toString(36)[2] || '0'
+    ).join('');
   };
 
-  const toggleActive = async (id: string, currentStatus: boolean) => {
+  const handleCreateKey = async (formData: Partial<WebhookKey>) => {
+    const newKey = generateWebhookKey();
+
+    const { error } = await supabase.from('webhook_keys').insert({
+      user_id: user?.id,
+      webhook_key: newKey,
+      ...formData
+    });
+
+    if (!error) {
+      setShowCreateModal(false);
+      loadWebhookKeys();
+    }
+  };
+
+  const handleUpdateKey = async (id: string, updates: Partial<WebhookKey>) => {
     const { error } = await supabase
-      .from('strategies')
-      .update({ is_active: !currentStatus })
+      .from('webhook_keys')
+      .update(updates)
       .eq('id', id);
 
     if (!error) {
-      loadStrategies();
+      setEditingKey(null);
+      loadWebhookKeys();
     }
   };
 
+  const handleRegenerateKey = async (id: string) => {
+    if (!confirm('Regenerate webhook key? The old key will stop working immediately.')) return;
+
+    const newKey = generateWebhookKey();
+    await handleUpdateKey(id, { webhook_key: newKey });
+  };
+
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+    await handleUpdateKey(id, { is_active: !currentStatus });
+  };
+
   const handleDelete = async (id: string) => {
+    if (!confirm('Delete this webhook key? This action cannot be undone.')) return;
+
     const { error } = await supabase
-      .from('strategies')
+      .from('webhook_keys')
       .delete()
       .eq('id', id);
 
     if (!error) {
-      loadStrategies();
+      loadWebhookKeys();
     }
   };
 
-  const copyWebhookKey = (webhookKey: string) => {
-    navigator.clipboard.writeText(webhookKey);
-    setCopiedWebhookKey(webhookKey);
-    setTimeout(() => setCopiedWebhookKey(null), 2000);
+  const copyWebhookKey = (key: string) => {
+    navigator.clipboard.writeText(key);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const copyWebhookUrl = () => {
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tradingview-webhook`;
+    navigator.clipboard.writeText(url);
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Trading Strategies</h2>
-          <p className="text-sm text-gray-600 mt-1">Create and manage your automated strategies</p>
+          <h2 className="text-2xl font-bold text-gray-900">TradingView Integration</h2>
+          <p className="text-sm text-gray-600 mt-1">Manage webhook keys for automated execution</p>
         </div>
         <button
-          onClick={() => {
-            setEditingStrategy(null);
-            setShowBuilder(true);
-          }}
+          onClick={() => setShowCreateModal(true)}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
         >
           <Plus className="w-5 h-5" />
-          Create Strategy
+          Create Webhook Key
         </button>
       </div>
 
-      {showBuilder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <StrategyBuilder
-            onSave={handleSaveStrategy}
-            onCancel={() => {
-              setShowBuilder(false);
-              setEditingStrategy(null);
-            }}
-            initialData={editingStrategy}
-          />
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {strategies.map((strategy) => (
-          <div key={strategy.id} className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold text-gray-900">{strategy.name}</h3>
-                  {strategy.execution_source === 'tradingview' && (
-                    <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">
-                      <Webhook className="w-3 h-3" />
-                      TradingView
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-gray-600">
-                  {strategy.description || 'No description'}
-                </p>
-              </div>
-              <div className="flex gap-2">
+      {/* Info Banner */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="font-medium text-blue-900 mb-1">How it works</h3>
+            <p className="text-sm text-blue-800 mb-2">
+              TradingView owns your strategy logic. This platform acts as a secure execution gateway:
+            </p>
+            <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+              <li>Create a webhook key and map your accounts</li>
+              <li>Configure ATR multipliers for stop-loss and target</li>
+              <li>TradingView sends signals → Platform places MARKET order → Creates HMT GTT (SL + Target)</li>
+            </ol>
+            <div className="mt-3 pt-3 border-t border-blue-200">
+              <p className="text-xs text-blue-700 font-medium mb-1">Webhook URL:</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-white px-2 py-1 rounded border border-blue-300 font-mono">
+                  {import.meta.env.VITE_SUPABASE_URL}/functions/v1/tradingview-webhook
+                </code>
                 <button
-                  onClick={() => handleEditStrategy(strategy)}
-                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                  onClick={copyWebhookUrl}
+                  className="text-blue-600 hover:text-blue-700 p-1"
+                  title="Copy URL"
                 >
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => toggleActive(strategy.id, strategy.is_active)}
-                  className={`p-2 rounded-lg transition ${
-                    strategy.is_active
-                      ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {strategy.is_active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                </button>
-                <button
-                  onClick={() => handleDelete(strategy.id)}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                >
-                  <Trash2 className="w-4 h-4" />
+                  <Copy className="w-4 h-4" />
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
 
-            <div className="space-y-2 text-sm">
-              {strategy.symbol && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Symbol</span>
-                  <span className="text-gray-900 font-medium">{strategy.symbol} ({strategy.exchange})</span>
+      {/* Webhook Keys List */}
+      <div className="space-y-4">
+        {webhookKeys.map((key) => (
+          <div key={key.id} className="bg-white rounded-lg border border-gray-200">
+            <div className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Key className="w-4 h-4 text-gray-400" />
+                    <h3 className="font-semibold text-gray-900">{key.name}</h3>
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${
+                      key.is_active
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {key.is_active ? 'Active' : 'Disabled'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-gray-600">
+                    <span>{key.account_mappings?.length || 0} accounts</span>
+                    <span>SL: {key.sl_multiplier}x ATR</span>
+                    <span>Target: {key.target_multiplier}x ATR</span>
+                    <span>Lots: {key.lot_multiplier}x</span>
+                    {key.last_used_at && (
+                      <span className="flex items-center gap-1">
+                        <Activity className="w-3 h-3" />
+                        Last used {new Date(key.last_used_at).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditingKey(key)}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                    title="Edit"
+                  >
+                    <Key className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleToggleActive(key.id, key.is_active)}
+                    className={`p-2 rounded-lg transition ${
+                      key.is_active
+                        ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                    title={key.is_active ? 'Disable' : 'Enable'}
+                  >
+                    {key.is_active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(key.id)}
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setExpandedKey(expandedKey === key.id ? null : key.id)}
+                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                  >
+                    {expandedKey === key.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Webhook Key Display */}
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-gray-600">Webhook Key</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => copyWebhookKey(key.webhook_key)}
+                      className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                    >
+                      {copiedKey === key.webhook_key ? (
+                        <><Check className="w-3 h-3" /> Copied</>
+                      ) : (
+                        <><Copy className="w-3 h-3" /> Copy</>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleRegenerateKey(key.id)}
+                      className="text-xs text-orange-600 hover:text-orange-700 flex items-center gap-1"
+                    >
+                      <RefreshCw className="w-3 h-3" /> Regenerate
+                    </button>
+                  </div>
+                </div>
+                <code className="text-xs font-mono text-gray-800 break-all">
+                  {key.webhook_key}
+                </code>
+              </div>
+
+              {/* Expanded Details */}
+              {expandedKey === key.id && (
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600 block mb-1">Mapped Accounts</span>
+                      {key.account_mappings?.length > 0 ? (
+                        <div className="space-y-1">
+                          {key.account_mappings.map(accountId => {
+                            const account = brokerAccounts.find(a => a.id === accountId);
+                            return account ? (
+                              <div key={accountId} className="text-xs bg-gray-50 px-2 py-1 rounded">
+                                {account.account_name}
+                              </div>
+                            ) : null;
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-500">No accounts mapped</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-gray-600 block mb-1">TradingView Payload</span>
+                      <pre className="text-xs bg-gray-50 p-2 rounded border border-gray-200 overflow-auto">
+{`{
+  "webhook_key": "${key.webhook_key.substring(0, 20)}...",
+  "symbol": "NIFTY",
+  "exchange": "NSE",
+  "action": "BUY",
+  "price": 24500.50,
+  "atr": 120.75,
+  "timeframe": "60"
+}`}
+                      </pre>
+                    </div>
+                  </div>
                 </div>
               )}
-              {strategy.timeframe && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Timeframe</span>
-                  <span className="text-gray-900 capitalize">{strategy.timeframe}</span>
-                </div>
-              )}
-
-              {strategy.execution_source === 'tradingview' ? (
-                <>
-                  {strategy.account_mappings && strategy.account_mappings.length > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Accounts</span>
-                      <span className="text-gray-900">{strategy.account_mappings.length}</span>
-                    </div>
-                  )}
-                  {strategy.atr_config && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">ATR Period</span>
-                      <span className="text-gray-900">{strategy.atr_config.period}</span>
-                    </div>
-                  )}
-                  {strategy.webhook_key && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-gray-600 font-medium">Webhook Key</span>
-                        <button
-                          onClick={() => copyWebhookKey(strategy.webhook_key)}
-                          className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                        >
-                          {copiedWebhookKey === strategy.webhook_key ? (
-                            <><Check className="w-3 h-3" /> Copied</>
-                          ) : (
-                            <><Copy className="w-3 h-3" /> Copy</>
-                          )}
-                        </button>
-                      </div>
-                      <div className="text-xs font-mono bg-gray-50 px-2 py-1 rounded border border-gray-200 truncate">
-                        {strategy.webhook_key}
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  {strategy.indicators && strategy.indicators.length > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Indicators</span>
-                      <span className="text-gray-900">{strategy.indicators.length}</span>
-                    </div>
-                  )}
-                </>
-              )}
-
-              <div className="flex justify-between">
-                <span className="text-gray-600">Status</span>
-                <span
-                  className={`px-2 py-1 rounded-full text-xs ${
-                    strategy.is_active
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-gray-100 text-gray-700'
-                  }`}
-                >
-                  {strategy.is_active ? 'Active' : 'Inactive'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Created</span>
-                <span className="text-gray-900">
-                  {new Date(strategy.created_at).toLocaleDateString()}
-                </span>
-              </div>
             </div>
           </div>
         ))}
 
-        {strategies.length === 0 && !showBuilder && (
-          <div className="col-span-full bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center">
-            <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No strategies yet</h3>
-            <p className="text-gray-600 mb-4">Create your first trading strategy</p>
+        {webhookKeys.length === 0 && (
+          <div className="bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center">
+            <Key className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No webhook keys yet</h3>
+            <p className="text-gray-600 mb-4">Create your first webhook key to start automated trading</p>
             <button
-              onClick={() => {
-                setEditingStrategy(null);
-                setShowBuilder(true);
-              }}
+              onClick={() => setShowCreateModal(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
             >
               <Plus className="w-5 h-5" />
-              Create Strategy
+              Create Webhook Key
             </button>
           </div>
         )}
+      </div>
+
+      {/* Create/Edit Modal */}
+      {(showCreateModal || editingKey) && (
+        <WebhookKeyModal
+          key={editingKey?.id || 'new'}
+          initialData={editingKey}
+          brokerAccounts={brokerAccounts}
+          onSave={(data) => {
+            if (editingKey) {
+              handleUpdateKey(editingKey.id, data);
+            } else {
+              handleCreateKey(data);
+            }
+          }}
+          onCancel={() => {
+            setShowCreateModal(false);
+            setEditingKey(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function WebhookKeyModal({
+  initialData,
+  brokerAccounts,
+  onSave,
+  onCancel
+}: {
+  initialData: WebhookKey | null;
+  brokerAccounts: BrokerAccount[];
+  onSave: (data: Partial<WebhookKey>) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(initialData?.name || '');
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(initialData?.account_mappings || []);
+  const [lotMultiplier, setLotMultiplier] = useState(initialData?.lot_multiplier || 1);
+  const [slMultiplier, setSlMultiplier] = useState(initialData?.sl_multiplier || 1.5);
+  const [targetMultiplier, setTargetMultiplier] = useState(initialData?.target_multiplier || 2.0);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave({
+      name,
+      account_mappings: selectedAccounts,
+      lot_multiplier: lotMultiplier,
+      sl_multiplier: slMultiplier,
+      target_multiplier: targetMultiplier
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-md w-full p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          {initialData ? 'Edit Webhook Key' : 'Create Webhook Key'}
+        </h3>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Production Key"
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Accounts
+            </label>
+            <div className="border border-gray-300 rounded-lg p-2 max-h-32 overflow-y-auto">
+              {brokerAccounts.map(account => (
+                <label key={account.id} className="flex items-center gap-2 p-1 hover:bg-gray-50 rounded cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedAccounts.includes(account.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedAccounts([...selectedAccounts, account.id]);
+                      } else {
+                        setSelectedAccounts(selectedAccounts.filter(id => id !== account.id));
+                      }
+                    }}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="text-sm">{account.account_name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Lot Multiplier
+              </label>
+              <input
+                type="number"
+                value={lotMultiplier}
+                onChange={(e) => setLotMultiplier(Number(e.target.value))}
+                min="1"
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                SL (ATR x)
+              </label>
+              <input
+                type="number"
+                value={slMultiplier}
+                onChange={(e) => setSlMultiplier(Number(e.target.value))}
+                step="0.1"
+                min="0.1"
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Target (ATR x)
+              </label>
+              <input
+                type="number"
+                value={targetMultiplier}
+                onChange={(e) => setTargetMultiplier(Number(e.target.value))}
+                step="0.1"
+                min="0.1"
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              {initialData ? 'Update' : 'Create'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
