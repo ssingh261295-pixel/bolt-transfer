@@ -31,7 +31,7 @@ let wsManager: WebSocketManager | null = null;
 let orderExecutor: OrderExecutor | null = null;
 let engineStartTime: Date | null = null;
 let isEngineRunning = false;
-let engineInstanceId: string = crypto.randomUUID();
+let engineInstanceId: string = '';
 
 // Stats tracking
 const stats: EngineStats = {
@@ -660,6 +660,11 @@ function ensureEngineStarted(): Promise<void> {
 }
 
 Deno.serve(async (req: Request) => {
+  // Initialize engine instance ID on first request
+  if (!engineInstanceId) {
+    engineInstanceId = crypto.randomUUID();
+  }
+
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",

@@ -265,17 +265,16 @@ Deno.serve(async (req: Request) => {
     const targetMultiplier = keyData.target_multiplier || 2.0;
 
     const entryPrice = normalized.price;
-    const atr = normalized.atr;
 
     let stopLossPrice: number;
     let targetPrice: number;
 
     if (normalized.trade_type === 'BUY') {
-      stopLossPrice = entryPrice - (atr * slMultiplier);
-      targetPrice = entryPrice + (atr * targetMultiplier);
+      stopLossPrice = entryPrice - (normalized.atr * slMultiplier);
+      targetPrice = entryPrice + (normalized.atr * targetMultiplier);
     } else {
-      stopLossPrice = entryPrice + (atr * slMultiplier);
-      targetPrice = entryPrice - (atr * targetMultiplier);
+      stopLossPrice = entryPrice + (normalized.atr * slMultiplier);
+      targetPrice = entryPrice - (normalized.atr * targetMultiplier);
     }
 
     const executionResults = [];
@@ -353,7 +352,7 @@ Deno.serve(async (req: Request) => {
                 source: 'tradingview_webhook',
                 webhook_key_name: keyData.name,
                 entry_price: entryPrice,
-                atr: atr,
+                atr: normalized.atr,
                 timeframe: rawPayload.timeframe || null
               }
             })
@@ -374,7 +373,7 @@ Deno.serve(async (req: Request) => {
             broker_account_id: account.id,
             type: 'trade',
             title: `TradingView: ${normalized.trade_type} ${instrument.tradingsymbol}`,
-            message: `Order placed: ${normalized.trade_type} ${quantity} @ Market\nSL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}\nATR: ${atr.toFixed(2)} | Timeframe: ${rawPayload.timeframe || 'N/A'}`,
+            message: `Order placed: ${normalized.trade_type} ${quantity} @ Market\nSL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}\nATR: ${normalized.atr.toFixed(2)} | Timeframe: ${rawPayload.timeframe || 'N/A'}`,
             metadata: {
               source: 'tradingview',
               trade_type: normalized.trade_type,
@@ -383,7 +382,7 @@ Deno.serve(async (req: Request) => {
               quantity,
               stop_loss: stopLossPrice,
               target: targetPrice,
-              atr,
+              atr: normalized.atr,
               order_id: orderResult.data.order_id
             }
           });
@@ -419,7 +418,7 @@ Deno.serve(async (req: Request) => {
           quantity,
           stop_loss: stopLossPrice,
           target: targetPrice,
-          atr
+          atr: normalized.atr
         },
         accounts: executionResults
       }),
