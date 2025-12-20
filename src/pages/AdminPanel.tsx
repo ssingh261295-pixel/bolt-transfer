@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, CheckCircle, XCircle, Clock, Shield } from 'lucide-react';
+import { Users, CheckCircle, XCircle, Clock, Shield, Database, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -22,6 +22,8 @@ export function AdminPanel() {
   const [filter, setFilter] = useState<'all' | 'pending' | 'active' | 'disabled'>('all');
   const [isAdmin, setIsAdmin] = useState(false);
   const [message, setMessage] = useState('');
+  const [syncingInstruments, setSyncingInstruments] = useState(false);
+  const [instrumentCount, setInstrumentCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -32,6 +34,7 @@ export function AdminPanel() {
   useEffect(() => {
     if (isAdmin) {
       loadUsers();
+      loadInstrumentCount();
     }
   }, [isAdmin, filter]);
 
@@ -75,6 +78,54 @@ export function AdminPanel() {
       setTimeout(() => setMessage(''), 5000);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadInstrumentCount = async () => {
+    try {
+      const { count, error } = await supabase
+        .from('nfo_instruments')
+        .select('*', { count: 'exact', head: true });
+
+      if (error) throw error;
+      setInstrumentCount(count || 0);
+    } catch (err) {
+      console.error('Failed to load instrument count:', err);
+    }
+  };
+
+  const syncInstruments = async () => {
+    setSyncingInstruments(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.access_token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-nfo-instruments`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        setMessage(`Successfully synced ${result.total} NFO instruments`);
+        await loadInstrumentCount();
+      } else {
+        throw new Error(result.error || 'Sync failed');
+      }
+    } catch (err: any) {
+      setMessage(`Failed to sync instruments: ${err.message}`);
+    } finally {
+      setSyncingInstruments(false);
+      setTimeout(() => setMessage(''), 5000);
     }
   };
 
@@ -220,6 +271,32 @@ export function AdminPanel() {
             </div>
             <XCircle className="w-8 h-8 text-red-500" />
           </div>
+        </div>
+      </div>
+
+      <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl border border-blue-200 p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-white rounded-lg p-3 shadow-sm">
+              <Database className="w-8 h-8 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">NFO Instruments Database</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                {instrumentCount === null ? 'Loading...' :
+                 instrumentCount === 0 ? 'No instruments synced yet. Click sync to get started.' :
+                 `${instrumentCount.toLocaleString()} instruments available for trading`}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={syncInstruments}
+            disabled={syncingInstruments}
+            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+          >
+            <RefreshCw className={`w-5 h-5 ${syncingInstruments ? 'animate-spin' : ''}`} />
+            {syncingInstruments ? 'Syncing...' : 'Sync Now'}
+          </button>
         </div>
       </div>
 
