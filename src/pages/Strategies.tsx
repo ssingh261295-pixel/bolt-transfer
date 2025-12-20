@@ -410,24 +410,40 @@ function WebhookKeyModal({
               Accounts
             </label>
             <div className="border border-gray-300 rounded-lg p-2 max-h-32 overflow-y-auto">
-              {brokerAccounts.map(account => (
-                <label key={account.id} className="flex items-center gap-2 p-1 hover:bg-gray-50 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedAccounts.includes(account.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedAccounts([...selectedAccounts, account.id]);
-                      } else {
-                        setSelectedAccounts(selectedAccounts.filter(id => id !== account.id));
-                      }
-                    }}
-                    className="rounded border-gray-300"
-                  />
-                  <span className="text-sm">{account.account_name}</span>
-                </label>
-              ))}
+              {brokerAccounts.length > 0 ? (
+                brokerAccounts.map(account => (
+                  <label key={account.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedAccounts.includes(account.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedAccounts([...selectedAccounts, account.id]);
+                        } else {
+                          setSelectedAccounts(selectedAccounts.filter(id => id !== account.id));
+                        }
+                      }}
+                      className="rounded border-gray-300"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">{account.account_name}</div>
+                      <div className="text-xs text-gray-500">{account.broker_name}</div>
+                    </div>
+                  </label>
+                ))
+              ) : (
+                <div className="text-center py-4">
+                  <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600 mb-1">No broker accounts found</p>
+                  <p className="text-xs text-gray-500">Please connect a broker account first</p>
+                </div>
+              )}
             </div>
+            {brokerAccounts.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                {selectedAccounts.length} account(s) selected
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-3">
