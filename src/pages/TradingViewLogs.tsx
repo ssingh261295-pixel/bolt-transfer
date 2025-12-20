@@ -21,7 +21,7 @@ export function TradingViewLogs() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState<string>('today');
+  const [dateFilter, setDateFilter] = useState<string>('all');
   const [selectedLog, setSelectedLog] = useState<WebhookLog | null>(null);
 
   useEffect(() => {
@@ -33,54 +33,73 @@ export function TradingViewLogs() {
   const loadLogs = async () => {
     setLoading(true);
 
-    let query = supabase
-      .from('tradingview_webhook_logs')
-      .select(`
-        *,
-        webhook_keys!inner(
-          user_id,
-          name
-        )
-      `)
-      .eq('webhook_keys.user_id', user?.id)
-      .order('received_at', { ascending: false });
+    try {
+      console.log('Loading logs for user:', user?.id);
 
-    if (statusFilter !== 'all') {
-      query = query.eq('status', statusFilter);
-    }
+      let query = supabase
+        .from('tradingview_webhook_logs')
+        .select(`
+          *,
+          webhook_keys!inner(
+            user_id,
+            name
+          )
+        `)
+        .eq('webhook_keys.user_id', user?.id)
+        .order('received_at', { ascending: false });
 
-    if (dateFilter !== 'all') {
-      const now = new Date();
-      let startDate: Date;
-
-      switch (dateFilter) {
-        case 'today':
-          startDate = new Date(now.setHours(0, 0, 0, 0));
-          break;
-        case 'week':
-          startDate = new Date(now.setDate(now.getDate() - 7));
-          break;
-        case 'month':
-          startDate = new Date(now.setMonth(now.getMonth() - 1));
-          break;
-        default:
-          startDate = new Date(0);
+      if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter);
       }
 
-      query = query.gte('received_at', startDate.toISOString());
+      if (dateFilter !== 'all') {
+        let startDate: Date;
+
+        switch (dateFilter) {
+          case 'today':
+            startDate = new Date();
+            startDate.setHours(0, 0, 0, 0);
+            break;
+          case 'week':
+            startDate = new Date();
+            startDate.setDate(startDate.getDate() - 7);
+            break;
+          case 'month':
+            startDate = new Date();
+            startDate.setMonth(startDate.getMonth() - 1);
+            break;
+          default:
+            startDate = new Date(0);
+        }
+
+        console.log('Date filter:', dateFilter, 'Start date:', startDate.toISOString());
+        query = query.gte('received_at', startDate.toISOString());
+      }
+
+      const { data, error } = await query.limit(500);
+
+      console.log('Query result:', { data, error, count: data?.length });
+
+      if (error) {
+        console.error('Error loading logs:', error);
+      }
+
+      if (data) {
+        const formattedLogs = data.map((log: any) => ({
+          ...log,
+          webhook_key_name: log.webhook_keys?.name || 'Unknown'
+        }));
+        console.log('Formatted logs:', formattedLogs.length);
+        setLogs(formattedLogs);
+      } else {
+        setLogs([]);
+      }
+    } catch (err) {
+      console.error('Exception loading logs:', err);
+      setLogs([]);
+    } finally {
+      setLoading(false);
     }
-
-    const { data, error } = await query.limit(500);
-
-    if (!error && data) {
-      const formattedLogs = data.map((log: any) => ({
-        ...log,
-        webhook_key_name: log.webhook_keys?.name || 'Unknown'
-      }));
-      setLogs(formattedLogs);
-    }
-
-    setLoading(false);
   };
 
   const getStatusIcon = (status: string) => {
@@ -149,6 +168,9 @@ export function TradingViewLogs() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">TradingView Webhook Logs</h1>
           <p className="text-gray-600 mt-1">Monitor all incoming webhook signals and execution status</p>
+          {user && (
+            <p className="text-xs text-gray-500 mt-1">User ID: {user.id}</p>
+          )}
         </div>
         <button
           onClick={loadLogs}
@@ -233,10 +255,10 @@ export function TradingViewLogs() {
               onChange={(e) => setDateFilter(e.target.value)}
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
+              <option value="all">All Time</option>
               <option value="today">Today</option>
               <option value="week">Last 7 Days</option>
               <option value="month">Last 30 Days</option>
-              <option value="all">All Time</option>
             </select>
           </div>
         </div>
