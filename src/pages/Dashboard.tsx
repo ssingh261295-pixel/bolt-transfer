@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 interface AccountData {
+  id: string;
   broker_id: string;
   broker_name: string;
   account_name: string;
@@ -30,14 +31,110 @@ export function Dashboard() {
   useEffect(() => {
     if (user) {
       loadBrokers();
+      loadCachedMetrics();
     }
   }, [user]);
 
   useEffect(() => {
-    if (brokers.length > 0 && accountsData.length === 0 && !loading) {
-      fetchAccountsData(brokers);
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel('dashboard_metrics_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'dashboard_metrics_cache',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const newMetric = payload.new as any;
+          patchAccountData(newMetric);
+        } else if (payload.eventType === 'DELETE') {
+          const oldMetric = payload.old as any;
+          setAccountsData(prev => prev.filter(acc => acc.id !== oldMetric.id));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
+  const patchAccountData = (metric: any) => {
+    setAccountsData(prev => {
+      const broker = brokers.find(b => b.id === metric.broker_connection_id);
+      const newAccount: AccountData = {
+        id: metric.id,
+        broker_id: metric.broker_connection_id,
+        broker_name: broker?.broker_name || 'zerodha',
+        account_name: broker?.account_name || '',
+        account_holder_name: broker?.account_holder_name || '',
+        client_id: broker?.client_id || '',
+        available_margin: parseFloat(metric.available_margin || 0),
+        used_margin: parseFloat(metric.used_margin || 0),
+        available_cash: parseFloat(metric.available_cash || 0),
+        today_pnl: parseFloat(metric.today_pnl || 0),
+        active_trades: metric.active_trades || 0,
+        active_gtt: metric.active_gtt || 0,
+        last_updated: new Date(metric.last_updated),
+      };
+
+      const existingIndex = prev.findIndex(acc => acc.id === metric.id);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = newAccount;
+        return updated;
+      } else {
+        return [...prev, newAccount];
+      }
+    });
+    setLastFetch(new Date());
+  };
+
+  const loadCachedMetrics = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('dashboard_metrics_cache')
+        .select('*')
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const accountResults: AccountData[] = await Promise.all(
+          data.map(async (metric) => {
+            const { data: broker } = await supabase
+              .from('broker_connections')
+              .select('*')
+              .eq('id', metric.broker_connection_id)
+              .maybeSingle();
+
+            return {
+              id: metric.id,
+              broker_id: metric.broker_connection_id,
+              broker_name: broker?.broker_name || 'zerodha',
+              account_name: broker?.account_name || '',
+              account_holder_name: broker?.account_holder_name || '',
+              client_id: broker?.client_id || '',
+              available_margin: parseFloat(metric.available_margin || 0),
+              used_margin: parseFloat(metric.used_margin || 0),
+              available_cash: parseFloat(metric.available_cash || 0),
+              today_pnl: parseFloat(metric.today_pnl || 0),
+              active_trades: metric.active_trades || 0,
+              active_gtt: metric.active_gtt || 0,
+              last_updated: new Date(metric.last_updated),
+            };
+          })
+        );
+
+        setAccountsData(accountResults);
+        setLastFetch(new Date(data[0].last_updated));
+      }
+    } catch (err) {
+      console.error('Error loading cached metrics:', err);
     }
-  }, [brokers]);
+  };
 
   const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 10000) => {
     const controller = new AbortController();
@@ -115,20 +212,27 @@ export function Dashboard() {
             const gttOrders = gttResult.success ? (gttResult.data || []) : [];
             const activeGtt = gttOrders.filter((gtt: any) => gtt.status === 'active').length;
 
-            return {
-              broker_id: broker.id,
-              broker_name: broker.broker_name,
-              account_name: broker.account_name || '',
-              account_holder_name: broker.account_holder_name || '',
-              client_id: broker.client_id || '',
+            const metrics = {
               available_margin: parseFloat(equity.available?.live_balance || equity.available?.adhoc_margin || 0),
               used_margin: parseFloat(equity.utilised?.debits || 0),
               available_cash: parseFloat(equity.available?.cash || 0),
               today_pnl: todayPnl,
               active_trades: activeTrades,
               active_gtt: activeGtt,
-              last_updated: new Date(),
+              last_updated: new Date().toISOString(),
             };
+
+            await supabase
+              .from('dashboard_metrics_cache')
+              .upsert({
+                user_id: user?.id,
+                broker_connection_id: broker.id,
+                ...metrics
+              }, {
+                onConflict: 'user_id,broker_connection_id'
+              });
+
+            return null;
           } else {
             const accountName = broker.account_holder_name || broker.client_id || broker.id;
             console.error(`API error for ${accountName}:`, result.error || result.message);
@@ -148,15 +252,14 @@ export function Dashboard() {
         }
       });
 
-      const results = await Promise.all(accountPromises);
-      const accountResults = results.filter((result): result is AccountData => result !== null);
-
-      setAccountsData(accountResults);
+      await Promise.all(accountPromises);
       setLastFetch(new Date());
 
       if (failedAccounts.length > 0) {
         const accountList = failedAccounts.join(', ');
         setError(`Failed to fetch data for: ${accountList}. Token may have expired - reconnect accounts from Brokers page.`);
+      } else {
+        setError('');
       }
     } catch (err) {
       console.error('Error fetching accounts data:', err);

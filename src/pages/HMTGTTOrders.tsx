@@ -91,17 +91,17 @@ export function HMTGTTOrders() {
         filter: `user_id=eq.${user.id}`
       }, async (payload) => {
         const newOrder = payload.new as any;
-        const { data: brokerData } = await supabase
-          .from('broker_connections')
-          .select('id, account_name, account_holder_name, client_id')
-          .eq('id', newOrder.broker_connection_id)
-          .single();
+        const broker = brokers.find(b => b.id === newOrder.broker_connection_id);
 
-        if (brokerData) {
-          newOrder.broker_connections = brokerData;
+        if (broker) {
+          newOrder.broker_connections = {
+            id: broker.id,
+            account_name: broker.account_name,
+            account_holder_name: broker.account_holder_name,
+            client_id: broker.client_id
+          };
+          setHmtGttOrders(prev => sortHMTGTTOrders([...prev, newOrder]));
         }
-
-        setHmtGttOrders(prev => sortHMTGTTOrders([...prev, newOrder]));
       })
       .on('postgres_changes', {
         event: 'UPDATE',
@@ -109,13 +109,23 @@ export function HMTGTTOrders() {
         table: 'hmt_gtt_orders',
         filter: `user_id=eq.${user.id}`
       }, (payload) => {
-        const updatedOrder = payload.new as any;
+        const updatedFields = payload.new as any;
         setHmtGttOrders(prev => {
-          const updated = prev.map(order =>
-            order.id === updatedOrder.id
-              ? { ...order, ...updatedOrder }
-              : order
-          );
+          const updated = prev.map(order => {
+            if (order.id === updatedFields.id) {
+              return {
+                ...order,
+                status: updatedFields.status,
+                trigger_price_1: updatedFields.trigger_price_1,
+                trigger_price_2: updatedFields.trigger_price_2,
+                quantity_1: updatedFields.quantity_1,
+                quantity_2: updatedFields.quantity_2,
+                transaction_type: updatedFields.transaction_type,
+                updated_at: updatedFields.updated_at
+              };
+            }
+            return order;
+          });
           return sortHMTGTTOrders(updated);
         });
       })
@@ -138,7 +148,7 @@ export function HMTGTTOrders() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, sortField, sortDirection]);
+  }, [user?.id, sortField, sortDirection, brokers]);
 
   const loadBrokers = async () => {
     const { data } = await supabase

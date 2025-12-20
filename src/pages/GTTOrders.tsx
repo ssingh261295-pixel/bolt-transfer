@@ -79,6 +79,50 @@ export function GTTOrders() {
   }, [selectedBrokerId, brokers, connect, disconnect]);
 
   useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel('gtt_orders_changes')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'gtt_orders',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const updatedOrder = payload.new as any;
+        setGttOrders(prev => {
+          const updated = prev.map(order => {
+            if (order.id === updatedOrder.zerodha_gtt_id && order.broker_info?.id === updatedOrder.broker_connection_id) {
+              return {
+                ...order,
+                status: updatedOrder.status,
+                ...updatedOrder.raw_data
+              };
+            }
+            return order;
+          });
+          return sortGTTOrders(updated.filter(o => o.status !== 'triggered'));
+        });
+      })
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'gtt_orders',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const deletedOrder = payload.old as any;
+        setGttOrders(prev => prev.filter(order =>
+          !(order.id === deletedOrder.zerodha_gtt_id && order.broker_info?.id === deletedOrder.broker_connection_id)
+        ));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, sortField, sortDirection]);
+
+  useEffect(() => {
     if (isConnected && gttOrders.length > 0) {
       const tokens = gttOrders
         .map(order => order.condition?.instrument_token)
@@ -482,16 +526,9 @@ export function GTTOrders() {
 
     if (successCount > 0) {
       setSelectedOrders(new Set());
-      try {
-        await loadGTTOrders(true);
-        setDeleteMessage(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
-        setDeleteError('');
-        setTimeout(() => setDeleteMessage(''), 5000);
-      } catch (err: any) {
-        setDeleteMessage('');
-        setDeleteError(`Deleted ${successCount} order(s) but failed to refresh list. Please reload the page.`);
-        setTimeout(() => setDeleteError(''), 5000);
-      }
+      setDeleteMessage(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
+      setDeleteError('');
+      setTimeout(() => setDeleteMessage(''), 5000);
     } else {
       const firstError = results.find(r => !r.success)?.error || 'Unknown error';
       setDeleteError(`Failed to delete GTT orders: ${firstError}`);
@@ -531,7 +568,6 @@ export function GTTOrders() {
       if (result.success) {
         setDeleteMessage('Successfully deleted GTT order');
         setTimeout(() => setDeleteMessage(''), 5000);
-        await loadGTTOrders();
       } else {
         setDeleteError('Failed to delete GTT order: ' + result.error);
         setTimeout(() => setDeleteError(''), 5000);
@@ -905,7 +941,7 @@ export function GTTOrders() {
             }
           }}
           onSuccess={() => {
-            loadGTTOrders(false, true);
+            syncWithZerodha();
           }}
           brokerConnectionId={selectedBrokerId}
           editingGTT={editingGTT}

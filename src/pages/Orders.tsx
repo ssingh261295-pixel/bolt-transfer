@@ -35,6 +35,99 @@ export function Orders() {
   }, [user, filter, selectedBrokerId]);
 
   useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel('orders_changes')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'orders',
+        filter: `user_id=eq.${user.id}`
+      }, async (payload) => {
+        const newOrder = payload.new as any;
+        const broker = brokers.find(b => b.id === newOrder.broker_connection_id);
+
+        if (broker && shouldShowOrder(newOrder.status)) {
+          newOrder.broker_connections = {
+            account_name: broker.account_name,
+            broker_name: broker.broker_name,
+            account_holder_name: broker.account_holder_name,
+            client_id: broker.client_id
+          };
+
+          if (selectedBrokerId === 'all' || newOrder.broker_connection_id === selectedBrokerId) {
+            setOrders(prev => sortOrders([newOrder, ...prev]));
+          }
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'orders',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const updatedFields = payload.new as any;
+
+        setOrders(prev => {
+          if (!shouldShowOrder(updatedFields.status)) {
+            return prev.filter(order => order.id !== updatedFields.id);
+          }
+
+          const updated = prev.map(order => {
+            if (order.id === updatedFields.id) {
+              return {
+                ...order,
+                status: updatedFields.status,
+                executed_quantity: updatedFields.executed_quantity,
+                executed_price: updatedFields.executed_price,
+                updated_at: updatedFields.updated_at
+              };
+            }
+            return order;
+          });
+
+          const exists = prev.some(order => order.id === updatedFields.id);
+          if (!exists && (selectedBrokerId === 'all' || updatedFields.broker_connection_id === selectedBrokerId)) {
+            const broker = brokers.find(b => b.id === updatedFields.broker_connection_id);
+            if (broker) {
+              updatedFields.broker_connections = {
+                account_name: broker.account_name,
+                broker_name: broker.broker_name,
+                account_holder_name: broker.account_holder_name,
+                client_id: broker.client_id
+              };
+              return sortOrders([updatedFields, ...prev]);
+            }
+          }
+
+          return sortOrders(updated);
+        });
+      })
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'orders',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const deletedId = payload.old.id;
+        setOrders(prev => prev.filter(order => order.id !== deletedId));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, filter, selectedBrokerId, sortField, sortDirection, brokers]);
+
+  const shouldShowOrder = (status: string) => {
+    if (filter === 'all') {
+      return !['COMPLETE', 'REJECTED', 'CANCELLED'].includes(status);
+    }
+    return status === filter.toUpperCase();
+  };
+
+  useEffect(() => {
     if (brokers.length > 0 && !initialLoadDone) {
       fetchInitialOrders();
     }
@@ -142,7 +235,6 @@ export function Orders() {
 
       if (result.success) {
         setCancelMessage(`Order for ${order.symbol} cancelled successfully`);
-        await loadOrders();
         setTimeout(() => setCancelMessage(''), 3000);
       } else {
         throw new Error(result.error || 'Failed to cancel order');
