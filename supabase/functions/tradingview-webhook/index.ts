@@ -49,9 +49,9 @@ function isWithinTradingWindow(): { allowed: boolean; currentTime: string; reaso
   const currentTimeIST = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 
   const startHour = 9;
-  const startMinute = 15;
-  const endHour = 14;
-  const endMinute = 15;
+  const startMinute = 30;
+  const endHour = 15;
+  const endMinute = 0;
 
   const currentMinutes = hours * 60 + minutes;
   const startMinutes = startHour * 60 + startMinute;
@@ -61,7 +61,7 @@ function isWithinTradingWindow(): { allowed: boolean; currentTime: string; reaso
     return {
       allowed: false,
       currentTime: currentTimeIST,
-      reason: 'BEFORE_09_15_IST'
+      reason: 'BEFORE_09_30_IST'
     };
   }
 
@@ -69,7 +69,7 @@ function isWithinTradingWindow(): { allowed: boolean; currentTime: string; reaso
     return {
       allowed: false,
       currentTime: currentTimeIST,
-      reason: 'AFTER_14_15_IST'
+      reason: 'AFTER_15_00_IST'
     };
   }
 
@@ -200,7 +200,7 @@ Deno.serve(async (req: Request) => {
           source_ip: sourceIp,
           payload: rawPayload,
           status: 'rejected_time_window',
-          error_message: `Trading window closed. Current time: ${tradingWindow.currentTime} IST. Trading allowed only 09:15-14:15 IST. Reason: ${tradingWindow.reason}`
+          error_message: `Trading window closed. Current time: ${tradingWindow.currentTime} IST. Trading allowed only 09:30-15:00 IST. Reason: ${tradingWindow.reason}`
         });
 
         const accountIds = keyData.account_mappings || [];
@@ -211,7 +211,7 @@ Deno.serve(async (req: Request) => {
               broker_account_id: accountId,
               type: 'trade_blocked',
               title: 'Trade Blocked: Outside Trading Window',
-              message: `TradingView signal rejected for ${normalized.symbol}.\n\nReason: Trading window closed\nCurrent Time: ${tradingWindow.currentTime} IST\nAllowed Window: 09:15 AM - 02:15 PM IST\n\nTrade Type: ${normalized.trade_type}\nPrice: ₹${normalized.price}\nATR: ${normalized.atr}`,
+              message: `TradingView signal rejected for ${normalized.symbol}.\n\nReason: Trading window closed\nCurrent Time: ${tradingWindow.currentTime} IST\nAllowed Window: 09:30 AM - 03:00 PM IST\n\nTrade Type: ${normalized.trade_type}\nPrice: ₹${normalized.price}\nATR: ${normalized.atr}`,
               metadata: {
                 source: 'tradingview_webhook',
                 webhook_key_name: keyData.name,
@@ -241,9 +241,9 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           success: false,
           blocked_by_platform: true,
-          reason: 'Trading window closed (09:15-14:15 IST)',
+          reason: 'Trading window closed (09:30-15:00 IST)',
           current_time_ist: tradingWindow.currentTime,
-          allowed_window: '09:15 AM - 02:15 PM IST',
+          allowed_window: '09:30 AM - 03:00 PM IST',
           message: 'Platform rejected trade. Market orders only allowed during trading window.'
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
