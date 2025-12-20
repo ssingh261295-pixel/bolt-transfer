@@ -6,22 +6,28 @@
  *
  * Flow:
  * 1. Validate webhook_key + log request
- * 2. Resolve accounts mapped to key
- * 3. Resolve NFO FUT symbol + lot size
- * 4. Place MARKET order (MANDATORY FIRST)
- * 5. Create HMT GTT (SL + Target) after order success
- * 6. Notify user in real-time
+ * 2. Normalize and validate payload
+ * 3. Resolve accounts mapped to key
+ * 4. Resolve NFO FUT symbol + lot size
+ * 5. Place MARKET order (MANDATORY FIRST)
+ * 6. Create HMT GTT (SL + Target) after order success
+ * 7. Notify user in real-time
  *
- * Expected payload:
+ * REQUIRED payload fields:
  * {
  *   "webhook_key": "wk_...",
  *   "symbol": "NIFTY", // CASH symbol
- *   "exchange": "NSE",
- *   "timeframe": "60",
- *   "action": "BUY" | "SELL",
+ *   "trade_type": "BUY" | "SELL", // or "action"
  *   "price": 24500.50,
- *   "atr": 120.75,
- *   "event_time": 1710000000000
+ *   "atr": 120.75
+ * }
+ *
+ * OPTIONAL fields:
+ * {
+ *   "exchange": "NSE", // defaults to NSE
+ *   "timeframe": "60",
+ *   "event_time": 1710000000000,
+ *   ... any other fields (ignored but logged)
  * }
  */
 
@@ -38,15 +44,14 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-interface TradingViewPayload {
-  webhook_key: string;
+interface NormalizedPayload {
   symbol: string;
   exchange: string;
-  timeframe?: string;
-  action: 'BUY' | 'SELL';
+  trade_type: 'BUY' | 'SELL';
   price: number;
   atr: number;
-  event_time?: number;
+  webhook_key: string;
+  raw_payload: any;
 }
 
 Deno.serve(async (req: Request) => {
@@ -63,47 +68,106 @@ Deno.serve(async (req: Request) => {
 
   const sourceIp = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
   let webhookKeyId: string | null = null;
+  let rawPayload: any = {};
 
   try {
-    // Parse payload
-    const payload: TradingViewPayload = await req.json();
-
-    console.log('[TradingView Webhook] Received:', {
-      symbol: payload.symbol,
-      action: payload.action,
-      price: payload.price,
-      ip: sourceIp
-    });
+    // Parse raw payload (accept ANY JSON structure)
+    rawPayload = await req.json();
 
     // ============================================================
-    // STEP 0: VALIDATE & AUDIT
+    // STEP 0: NORMALIZE & VALIDATE PAYLOAD
     // ============================================================
 
-    if (!payload.webhook_key || !payload.action || !payload.symbol || !payload.price || !payload.atr) {
+    // Extract and validate required fields
+    const webhookKey = rawPayload.webhook_key;
+    const symbol = rawPayload.symbol ? String(rawPayload.symbol).toUpperCase().trim() : '';
+    const exchange = rawPayload.exchange ? String(rawPayload.exchange).toUpperCase().trim() : 'NSE';
+
+    // Support both "trade_type" and "action" fields (prioritize trade_type)
+    const tradeTypeRaw = rawPayload.trade_type || rawPayload.action;
+    const tradeType = tradeTypeRaw ? String(tradeTypeRaw).toUpperCase().trim() : '';
+
+    const price = typeof rawPayload.price === 'number' ? rawPayload.price : parseFloat(rawPayload.price);
+    const atr = typeof rawPayload.atr === 'number' ? rawPayload.atr : parseFloat(rawPayload.atr);
+
+    // Validate required fields
+    if (!webhookKey || !symbol || !tradeType || !price || !atr) {
       await supabase.from('tradingview_webhook_logs').insert({
         source_ip: sourceIp,
-        payload,
+        payload: rawPayload,
         status: 'rejected',
-        error_message: 'Missing required fields: webhook_key, action, symbol, price, atr'
+        error_message: 'Missing required fields: webhook_key, symbol, trade_type (or action), price, atr'
       });
 
       return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
+        JSON.stringify({ error: "Missing required fields: webhook_key, symbol, trade_type, price, atr" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Validate webhook_key
-    const { data: webhookKey, error: keyError } = await supabase
-      .from('webhook_keys')
-      .select('id, user_id, name, is_active, account_mappings, lot_multiplier, sl_multiplier, target_multiplier')
-      .eq('webhook_key', payload.webhook_key)
-      .maybeSingle();
-
-    if (keyError || !webhookKey) {
+    // Validate numeric fields
+    if (isNaN(price) || isNaN(atr) || price <= 0 || atr <= 0) {
       await supabase.from('tradingview_webhook_logs').insert({
         source_ip: sourceIp,
-        payload,
+        payload: rawPayload,
+        status: 'rejected',
+        error_message: 'Invalid numeric values: price and atr must be positive numbers'
+      });
+
+      return new Response(
+        JSON.stringify({ error: "Invalid numeric values" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate trade_type
+    if (tradeType !== 'BUY' && tradeType !== 'SELL') {
+      await supabase.from('tradingview_webhook_logs').insert({
+        source_ip: sourceIp,
+        payload: rawPayload,
+        status: 'rejected',
+        error_message: "Invalid trade_type. Must be 'BUY' or 'SELL'"
+      });
+
+      return new Response(
+        JSON.stringify({ error: "Invalid trade_type. Must be 'BUY' or 'SELL'" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Create normalized payload
+    const normalized: NormalizedPayload = {
+      symbol,
+      exchange,
+      trade_type: tradeType as 'BUY' | 'SELL',
+      price,
+      atr,
+      webhook_key: webhookKey,
+      raw_payload: rawPayload
+    };
+
+    console.log('[TradingView Webhook] Normalized:', {
+      symbol: normalized.symbol,
+      trade_type: normalized.trade_type,
+      price: normalized.price,
+      exchange: normalized.exchange,
+      ip: sourceIp
+    });
+
+    // ============================================================
+    // STEP 1: VALIDATE WEBHOOK KEY
+    // ============================================================
+
+    const { data: keyData, error: keyError } = await supabase
+      .from('webhook_keys')
+      .select('id, user_id, name, is_active, account_mappings, lot_multiplier, sl_multiplier, target_multiplier')
+      .eq('webhook_key', normalized.webhook_key)
+      .maybeSingle();
+
+    if (keyError || !keyData) {
+      await supabase.from('tradingview_webhook_logs').insert({
+        source_ip: sourceIp,
+        payload: rawPayload,
         status: 'rejected',
         error_message: 'Invalid webhook_key'
       });
@@ -114,11 +178,11 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (!webhookKey.is_active) {
+    if (!keyData.is_active) {
       await supabase.from('tradingview_webhook_logs').insert({
-        webhook_key_id: webhookKey.id,
+        webhook_key_id: keyData.id,
         source_ip: sourceIp,
-        payload,
+        payload: rawPayload,
         status: 'rejected',
         error_message: 'Webhook key is disabled'
       });
@@ -129,41 +193,24 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    webhookKeyId = webhookKey.id;
+    webhookKeyId = keyData.id;
 
     // Update last_used_at
     await supabase
       .from('webhook_keys')
       .update({ last_used_at: new Date().toISOString() })
-      .eq('id', webhookKey.id);
-
-    // Normalize action
-    const action = payload.action.toUpperCase();
-    if (action !== 'BUY' && action !== 'SELL') {
-      await supabase.from('tradingview_webhook_logs').insert({
-        webhook_key_id: webhookKey.id,
-        source_ip: sourceIp,
-        payload,
-        status: 'rejected',
-        error_message: "Invalid action. Must be 'BUY' or 'SELL'"
-      });
-
-      return new Response(
-        JSON.stringify({ error: "Invalid action" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+      .eq('id', keyData.id);
 
     // ============================================================
-    // STEP 1: RESOLVE ACCOUNTS
+    // STEP 2: RESOLVE ACCOUNTS
     // ============================================================
 
-    const accountIds = webhookKey.account_mappings || [];
+    const accountIds = keyData.account_mappings || [];
     if (accountIds.length === 0) {
       await supabase.from('tradingview_webhook_logs').insert({
-        webhook_key_id: webhookKey.id,
+        webhook_key_id: keyData.id,
         source_ip: sourceIp,
-        payload,
+        payload: rawPayload,
         status: 'rejected',
         error_message: 'No accounts mapped to webhook key'
       });
@@ -182,9 +229,9 @@ Deno.serve(async (req: Request) => {
 
     if (brokerError || !brokerAccounts || brokerAccounts.length === 0) {
       await supabase.from('tradingview_webhook_logs').insert({
-        webhook_key_id: webhookKey.id,
+        webhook_key_id: keyData.id,
         source_ip: sourceIp,
-        payload,
+        payload: rawPayload,
         status: 'failed',
         error_message: 'No active broker accounts found'
       });
@@ -196,7 +243,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ============================================================
-    // STEP 2: RESOLVE NFO FUT SYMBOL
+    // STEP 3: RESOLVE NFO FUT SYMBOL
     // ============================================================
 
     const now = new Date();
@@ -213,7 +260,7 @@ Deno.serve(async (req: Request) => {
     const month = monthNames[expiryDate.getMonth()];
 
     // Build FUT tradingsymbol
-    const futSymbol = `${payload.symbol}${year}${month}FUT`;
+    const futSymbol = `${normalized.symbol}${year}${month}FUT`;
 
     console.log('[TradingView Webhook] Resolved FUT symbol:', futSymbol);
 
@@ -225,9 +272,9 @@ Deno.serve(async (req: Request) => {
 
     if (instrumentError || !instrument) {
       await supabase.from('tradingview_webhook_logs').insert({
-        webhook_key_id: webhookKey.id,
+        webhook_key_id: keyData.id,
         source_ip: sourceIp,
-        payload,
+        payload: rawPayload,
         status: 'failed',
         error_message: `Instrument not found: ${futSymbol}`
       });
@@ -238,21 +285,21 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Calculate quantity
-    const lotMultiplier = webhookKey.lot_multiplier || 1;
+    // Calculate quantity using server-side multiplier (NEVER trust client)
+    const lotMultiplier = keyData.lot_multiplier || 1;
     const quantity = instrument.lot_size * lotMultiplier;
 
-    // Calculate SL and Target
-    const slMultiplier = webhookKey.sl_multiplier || 1.5;
-    const targetMultiplier = webhookKey.target_multiplier || 2.0;
+    // Calculate SL and Target using server-side ATR multipliers (NEVER trust client)
+    const slMultiplier = keyData.sl_multiplier || 1.5;
+    const targetMultiplier = keyData.target_multiplier || 2.0;
 
-    const entryPrice = payload.price;
-    const atr = payload.atr;
+    const entryPrice = normalized.price;
+    const atr = normalized.atr;
 
     let stopLossPrice: number;
     let targetPrice: number;
 
-    if (action === 'BUY') {
+    if (normalized.trade_type === 'BUY') {
       stopLossPrice = entryPrice - (atr * slMultiplier);
       targetPrice = entryPrice + (atr * targetMultiplier);
     } else {
@@ -261,7 +308,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ============================================================
-    // STEP 3 & 4: EXECUTE FOR EACH ACCOUNT
+    // STEP 4: EXECUTE FOR EACH ACCOUNT
     // ============================================================
 
     const executionResults = [];
@@ -276,11 +323,11 @@ Deno.serve(async (req: Request) => {
       };
 
       try {
-        // STEP 3: PLACE MARKET ORDER (MANDATORY FIRST)
+        // PLACE MARKET ORDER (MANDATORY FIRST)
         const orderParams: any = {
           tradingsymbol: instrument.tradingsymbol,
           exchange: instrument.exchange,
-          transaction_type: action,
+          transaction_type: normalized.trade_type,
           quantity: quantity.toString(),
           order_type: 'MARKET',
           product: 'MIS',
@@ -305,12 +352,12 @@ Deno.serve(async (req: Request) => {
 
           // Insert into orders table
           await supabase.from('orders').insert({
-            user_id: webhookKey.user_id,
+            user_id: keyData.user_id,
             broker_connection_id: account.id,
             symbol: instrument.tradingsymbol,
             exchange: instrument.exchange,
             order_type: 'MARKET',
-            transaction_type: action,
+            transaction_type: normalized.trade_type,
             quantity: quantity,
             status: 'OPEN',
             order_id: orderResult.data.order_id,
@@ -318,17 +365,17 @@ Deno.serve(async (req: Request) => {
             product: 'MIS',
           });
 
-          // STEP 4: CREATE HMT GTT (ONLY AFTER ORDER SUCCESS)
+          // CREATE HMT GTT (ONLY AFTER ORDER SUCCESS)
           const { data: hmtGtt, error: hmtError } = await supabase
             .from('hmt_gtt_orders')
             .insert({
-              user_id: webhookKey.user_id,
+              user_id: keyData.user_id,
               broker_connection_id: account.id,
               trading_symbol: instrument.tradingsymbol,
               exchange: instrument.exchange,
               instrument_token: instrument.instrument_token,
               condition_type: 'two-leg',
-              transaction_type: action === 'BUY' ? 'SELL' : 'BUY', // Opposite for exit
+              transaction_type: normalized.trade_type === 'BUY' ? 'SELL' : 'BUY', // Opposite for exit
               product_type_1: 'MIS',
               trigger_price_1: stopLossPrice,
               order_price_1: stopLossPrice,
@@ -340,10 +387,10 @@ Deno.serve(async (req: Request) => {
               status: 'active',
               metadata: {
                 source: 'tradingview_webhook',
-                webhook_key_name: webhookKey.name,
+                webhook_key_name: keyData.name,
                 entry_price: entryPrice,
                 atr: atr,
-                timeframe: payload.timeframe
+                timeframe: rawPayload.timeframe || null
               }
             })
             .select()
@@ -360,14 +407,14 @@ Deno.serve(async (req: Request) => {
 
           // Create notification
           await supabase.from('notifications').insert({
-            user_id: webhookKey.user_id,
+            user_id: keyData.user_id,
             broker_account_id: account.id,
             type: 'trade',
-            title: `TradingView: ${action} ${instrument.tradingsymbol}`,
-            message: `Order placed: ${action} ${quantity} @ Market\nSL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}\nATR: ${atr.toFixed(2)} | Timeframe: ${payload.timeframe || 'N/A'}`,
+            title: `TradingView: ${normalized.trade_type} ${instrument.tradingsymbol}`,
+            message: `Order placed: ${normalized.trade_type} ${quantity} @ Market\nSL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}\nATR: ${atr.toFixed(2)} | Timeframe: ${rawPayload.timeframe || 'N/A'}`,
             metadata: {
               source: 'tradingview',
-              action,
+              trade_type: normalized.trade_type,
               symbol: instrument.tradingsymbol,
               entry_price: entryPrice,
               quantity,
@@ -389,12 +436,12 @@ Deno.serve(async (req: Request) => {
       executionResults.push(accountResult);
     }
 
-    // Log execution
+    // Log execution (with full raw payload for audit)
     const successCount = executionResults.filter(r => r.order_placed).length;
     await supabase.from('tradingview_webhook_logs').insert({
-      webhook_key_id: webhookKey.id,
+      webhook_key_id: keyData.id,
       source_ip: sourceIp,
-      payload,
+      payload: rawPayload,
       status: successCount > 0 ? 'success' : 'failed',
       accounts_executed: executionResults
     });
@@ -405,7 +452,7 @@ Deno.serve(async (req: Request) => {
         success: true,
         message: `Executed on ${successCount}/${brokerAccounts.length} account(s)`,
         signal: {
-          action,
+          trade_type: normalized.trade_type,
           symbol: instrument.tradingsymbol,
           entry_price: entryPrice,
           quantity,
@@ -421,11 +468,19 @@ Deno.serve(async (req: Request) => {
   } catch (error: any) {
     console.error('[TradingView Webhook] Error:', error);
 
+    // Always log failures with full raw payload
     if (webhookKeyId) {
       await supabase.from('tradingview_webhook_logs').insert({
         webhook_key_id: webhookKeyId,
         source_ip: sourceIp,
-        payload: {},
+        payload: rawPayload,
+        status: 'failed',
+        error_message: error.message
+      });
+    } else {
+      await supabase.from('tradingview_webhook_logs').insert({
+        source_ip: sourceIp,
+        payload: rawPayload,
         status: 'failed',
         error_message: error.message
       });
