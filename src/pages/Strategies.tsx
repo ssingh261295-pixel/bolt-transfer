@@ -20,6 +20,8 @@ interface BrokerAccount {
   id: string;
   account_name: string;
   broker_name: string;
+  account_holder_name: string | null;
+  client_id: string | null;
   is_active: boolean;
 }
 
@@ -54,7 +56,7 @@ export function Strategies() {
   const loadBrokerAccounts = async () => {
     const { data } = await supabase
       .from('broker_connections')
-      .select('id, account_name, broker_name, is_active')
+      .select('id, account_name, broker_name, account_holder_name, client_id, is_active')
       .eq('user_id', user?.id)
       .eq('is_active', true);
 
@@ -286,7 +288,9 @@ export function Strategies() {
                             const account = brokerAccounts.find(a => a.id === accountId);
                             return account ? (
                               <div key={accountId} className="text-xs bg-gray-50 px-2 py-1 rounded">
-                                {account.account_name}
+                                {account.account_holder_name
+                                  ? `${account.account_holder_name}${account.client_id ? ` (${account.client_id})` : ''}`
+                                  : account.account_name || `${account.broker_name} Account`}
                               </div>
                             ) : null;
                           })}
@@ -426,7 +430,11 @@ function WebhookKeyModal({
                       className="rounded border-gray-300"
                     />
                     <div className="flex-1">
-                      <div className="text-sm font-medium text-gray-900">{account.account_name}</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {account.account_holder_name
+                          ? `${account.account_holder_name}${account.client_id ? ` (${account.client_id})` : ''}`
+                          : account.account_name || `${account.broker_name} Account`}
+                      </div>
                       <div className="text-xs text-gray-500">{account.broker_name}</div>
                     </div>
                   </label>
