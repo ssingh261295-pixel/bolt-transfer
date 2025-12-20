@@ -70,26 +70,18 @@ Deno.serve(async (req: Request) => {
   let rawPayload: any = {};
 
   try {
-    // Parse raw payload (accept ANY JSON structure)
     rawPayload = await req.json();
 
-    // ============================================================
-    // STEP 0: NORMALIZE & VALIDATE PAYLOAD
-    // ============================================================
-
-    // Extract and validate required fields
     const webhookKey = rawPayload.webhook_key;
     const symbol = rawPayload.symbol ? String(rawPayload.symbol).toUpperCase().trim() : '';
     const exchange = rawPayload.exchange ? String(rawPayload.exchange).toUpperCase().trim() : 'NSE';
 
-    // Support both "trade_type" and "action" fields (prioritize trade_type)
     const tradeTypeRaw = rawPayload.trade_type || rawPayload.action;
     const tradeType = tradeTypeRaw ? String(tradeTypeRaw).toUpperCase().trim() : '';
 
     const price = typeof rawPayload.price === 'number' ? rawPayload.price : parseFloat(rawPayload.price);
     const atr = typeof rawPayload.atr === 'number' ? rawPayload.atr : parseFloat(rawPayload.atr);
 
-    // Validate required fields
     if (!webhookKey || !symbol || !tradeType || !price || !atr) {
       await supabase.from('tradingview_webhook_logs').insert({
         source_ip: sourceIp,
@@ -104,7 +96,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Validate numeric fields
     if (isNaN(price) || isNaN(atr) || price <= 0 || atr <= 0) {
       await supabase.from('tradingview_webhook_logs').insert({
         source_ip: sourceIp,
@@ -119,7 +110,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Validate trade_type
     if (tradeType !== 'BUY' && tradeType !== 'SELL') {
       await supabase.from('tradingview_webhook_logs').insert({
         source_ip: sourceIp,
@@ -134,7 +124,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Create normalized payload
     const normalized: NormalizedPayload = {
       symbol,
       exchange,
@@ -152,10 +141,6 @@ Deno.serve(async (req: Request) => {
       exchange: normalized.exchange,
       ip: sourceIp
     });
-
-    // ============================================================
-    // STEP 1: VALIDATE WEBHOOK KEY
-    // ============================================================
 
     const { data: keyData, error: keyError } = await supabase
       .from('webhook_keys')
@@ -194,15 +179,10 @@ Deno.serve(async (req: Request) => {
 
     webhookKeyId = keyData.id;
 
-    // Update last_used_at
     await supabase
       .from('webhook_keys')
       .update({ last_used_at: new Date().toISOString() })
       .eq('id', keyData.id);
-
-    // ============================================================
-    // STEP 2: RESOLVE ACCOUNTS
-    // ============================================================
 
     const accountIds = keyData.account_mappings || [];
     if (accountIds.length === 0) {
@@ -241,14 +221,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // ============================================================
-    // STEP 3: RESOLVE NFO FUT SYMBOL
-    // ============================================================
-
     const now = new Date();
     const day = now.getDate();
 
-    // Determine expiry month (current if day <= 15, else next)
     let expiryDate = new Date(now.getFullYear(), now.getMonth(), 1);
     if (day > 15) {
       expiryDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -258,7 +233,6 @@ Deno.serve(async (req: Request) => {
     const year = expiryDate.getFullYear().toString().slice(-2);
     const month = monthNames[expiryDate.getMonth()];
 
-    // Build FUT tradingsymbol
     const futSymbol = `${normalized.symbol}${year}${month}FUT`;
 
     console.log('[TradingView Webhook] Resolved FUT symbol:', futSymbol);
@@ -284,11 +258,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Calculate quantity using server-side multiplier (NEVER trust client)
     const lotMultiplier = keyData.lot_multiplier || 1;
     const quantity = instrument.lot_size * lotMultiplier;
 
-    // Calculate SL and Target using server-side ATR multipliers (NEVER trust client)
     const slMultiplier = keyData.sl_multiplier || 1.5;
     const targetMultiplier = keyData.target_multiplier || 2.0;
 
@@ -306,10 +278,6 @@ Deno.serve(async (req: Request) => {
       targetPrice = entryPrice - (atr * targetMultiplier);
     }
 
-    // ============================================================
-    // STEP 4: EXECUTE FOR EACH ACCOUNT
-    // ============================================================
-
     const executionResults = [];
 
     for (const account of brokerAccounts) {
@@ -322,7 +290,6 @@ Deno.serve(async (req: Request) => {
       };
 
       try {
-        // PLACE MARKET ORDER (MANDATORY FIRST)
         const orderParams: any = {
           tradingsymbol: instrument.tradingsymbol,
           exchange: instrument.exchange,
@@ -349,7 +316,6 @@ Deno.serve(async (req: Request) => {
           accountResult.order_placed = true;
           accountResult.order_id = orderResult.data.order_id;
 
-          // Insert into orders table
           await supabase.from('orders').insert({
             user_id: keyData.user_id,
             broker_connection_id: account.id,
@@ -364,7 +330,6 @@ Deno.serve(async (req: Request) => {
             product: 'MIS',
           });
 
-          // CREATE HMT GTT (ONLY AFTER ORDER SUCCESS)
           const { data: hmtGtt, error: hmtError } = await supabase
             .from('hmt_gtt_orders')
             .insert({
@@ -374,7 +339,7 @@ Deno.serve(async (req: Request) => {
               exchange: instrument.exchange,
               instrument_token: instrument.instrument_token,
               condition_type: 'two-leg',
-              transaction_type: normalized.trade_type === 'BUY' ? 'SELL' : 'BUY', // Opposite for exit
+              transaction_type: normalized.trade_type === 'BUY' ? 'SELL' : 'BUY',
               product_type_1: 'MIS',
               trigger_price_1: stopLossPrice,
               order_price_1: stopLossPrice,
@@ -404,7 +369,6 @@ Deno.serve(async (req: Request) => {
             accountResult.hmt_gtt_error = hmtError?.message || 'Unknown error';
           }
 
-          // Create notification
           await supabase.from('notifications').insert({
             user_id: keyData.user_id,
             broker_account_id: account.id,
@@ -435,7 +399,6 @@ Deno.serve(async (req: Request) => {
       executionResults.push(accountResult);
     }
 
-    // Log execution (with full raw payload for audit)
     const successCount = executionResults.filter(r => r.order_placed).length;
     await supabase.from('tradingview_webhook_logs').insert({
       webhook_key_id: keyData.id,
@@ -445,7 +408,6 @@ Deno.serve(async (req: Request) => {
       accounts_executed: executionResults
     });
 
-    // Return response
     return new Response(
       JSON.stringify({
         success: true,
@@ -467,7 +429,6 @@ Deno.serve(async (req: Request) => {
   } catch (error: any) {
     console.error('[TradingView Webhook] Error:', error);
 
-    // Always log failures with full raw payload
     if (webhookKeyId) {
       await supabase.from('tradingview_webhook_logs').insert({
         webhook_key_id: webhookKeyId,

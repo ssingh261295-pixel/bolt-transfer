@@ -20,7 +20,7 @@ export interface HMTTrigger {
   order_price_2: number | null;
   quantity_2: number | null;
   status: 'active' | 'processing' | 'triggered' | 'failed' | 'cancelled' | 'expired';
-  parent_id: string | null; // Links OCO legs together
+  parent_id: string | null;
   metadata?: {
     strategy_name?: string;
     [key: string]: any;
