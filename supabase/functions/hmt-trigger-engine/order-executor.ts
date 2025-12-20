@@ -51,13 +51,13 @@ export class OrderExecutor {
 
           // Create success notification
           // Leg 1 = Stop Loss, Leg 2 = Target
-          const action = execution.leg === '1' ? 'sl_hit' : (execution.leg === '2' ? 'target_hit' : 'placed');
+          const action = execution.triggered_leg === '1' ? 'sl_hit' : (execution.triggered_leg === '2' ? 'target_hit' : 'placed');
           const notif = formatOrderNotification(
             action,
             execution.trigger.trading_symbol,
             execution.trigger.transaction_type,
             execution.order_data.quantity,
-            execution.order_data.price
+            execution.ltp
           );
 
           await createNotification(this.supabase, {
@@ -72,7 +72,7 @@ export class OrderExecutor {
             metadata: {
               order_id: result.order_id,
               trigger_id: execution.trigger_id,
-              leg: execution.leg
+              leg: execution.triggered_leg
             }
           });
 
@@ -98,7 +98,7 @@ export class OrderExecutor {
       execution.trigger.trading_symbol,
       execution.trigger.transaction_type,
       execution.order_data.quantity,
-      execution.order_data.price,
+      execution.ltp,
       lastError
     );
 
@@ -113,7 +113,7 @@ export class OrderExecutor {
       type: notif.type,
       metadata: {
         trigger_id: execution.trigger_id,
-        leg: execution.leg,
+        leg: execution.triggered_leg,
         error: lastError
       }
     });

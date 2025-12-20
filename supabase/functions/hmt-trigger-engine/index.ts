@@ -139,7 +139,6 @@ async function initializeEngine(): Promise<void> {
     engineError = 'No active broker connection found. Please connect a broker account first.';
     console.error('[Engine]', engineError);
     stats.websocket_status = 'disconnected';
-    // Keep engine "running" but without WebSocket - will retry when broker is added
     return;
   }
 
@@ -183,9 +182,6 @@ async function initializeEngine(): Promise<void> {
   console.log(`[Engine] Started successfully with ${stats.active_triggers} active triggers`);
 }
 
-/**
- * Load active triggers from database into memory
- */
 async function loadActiveTriggers(): Promise<void> {
   try {
     const { data: triggers, error } = await getSupabase()
@@ -210,9 +206,6 @@ async function loadActiveTriggers(): Promise<void> {
   }
 }
 
-/**
- * Get active broker connection
- */
 async function getActiveBroker(): Promise<BrokerConnection | null> {
   try {
     const { data: brokers, error } = await getSupabase()
@@ -233,10 +226,6 @@ async function getActiveBroker(): Promise<BrokerConnection | null> {
   }
 }
 
-/**
- * Handle incoming WebSocket tick (MAIN HOT PATH)
- * This function must be extremely fast (< 1ms per tick)
- */
 function handleTick(tick: WebSocketTick): void {
   if (!triggerManager || !orderExecutor) return;
 
@@ -244,36 +233,27 @@ function handleTick(tick: WebSocketTick): void {
   stats.last_tick_time = tick.timestamp || new Date();
   stats.websocket_status = 'connected';
 
-  // O(1) lookup: get all triggers for this instrument
   const triggers = triggerManager.getTriggersForInstrument(tick.instrument_token);
   if (triggers.length === 0) return;
 
-  // Evaluate each trigger
   for (const trigger of triggers) {
-    // Check if already processing (prevent duplicate execution)
     if (!triggerManager.markProcessing(trigger.id)) {
       continue;
     }
 
-    // Evaluate trigger condition
     const execution = TriggerEvaluator.evaluate(trigger, tick.last_price);
 
     if (execution) {
-      // Trigger condition met - execute order asynchronously
       executeTriggerAsync(execution, trigger).catch(error => {
         console.error(`[Engine] Error executing trigger ${trigger.id}:`, error);
         triggerManager?.unmarkProcessing(trigger.id);
       });
     } else {
-      // Condition not met - unmark as processing
       triggerManager.unmarkProcessing(trigger.id);
     }
   }
 }
 
-/**
- * Execute trigger asynchronously (non-blocking)
- */
 async function executeTriggerAsync(
   execution: any,
   trigger: HMTTrigger
@@ -281,7 +261,6 @@ async function executeTriggerAsync(
   if (!triggerManager || !orderExecutor) return;
 
   try {
-    // Get broker connection
     const { data: broker, error: brokerError } = await getSupabase()
       .from('broker_connections')
       .select('*')
@@ -294,7 +273,6 @@ async function executeTriggerAsync(
       return;
     }
 
-    // RISK SAFETY: Check user risk limits before placing order
     const riskCheckPassed = await checkRiskLimits(trigger.user_id);
     if (!riskCheckPassed) {
       console.error(`[Engine] Risk limits exceeded for user ${trigger.user_id}`);
@@ -302,11 +280,9 @@ async function executeTriggerAsync(
       return;
     }
 
-    // Place order
     const result = await orderExecutor.execute(execution, broker);
 
     if (result.success) {
-      // Order placed successfully
       await markTriggerTriggered(
         trigger.id,
         execution.triggered_leg,
@@ -314,19 +290,13 @@ async function executeTriggerAsync(
         result.order_id!
       );
 
-      // Log trade for audit and risk tracking
       await logTrade(trigger, execution, result.order_id!);
-
-      // Remove from memory (for single-row OCO, marking as 'triggered' prevents the other leg from executing)
       triggerManager.removeTrigger(trigger.id);
-
       stats.triggered_orders++;
       console.log(`[Engine] Trigger ${trigger.id} executed: ${result.order_id}`);
     } else {
-      // Order placement failed
       await markTriggerFailed(trigger.id, result.error || 'Unknown error');
       triggerManager.removeTrigger(trigger.id);
-
       stats.failed_orders++;
       console.error(`[Engine] Trigger ${trigger.id} failed: ${result.error}`);
     }
@@ -340,9 +310,6 @@ async function executeTriggerAsync(
   }
 }
 
-/**
- * Mark trigger as triggered in database
- */
 async function markTriggerTriggered(
   triggerId: string,
   triggeredLeg: string,
@@ -363,9 +330,6 @@ async function markTriggerTriggered(
     .eq('id', triggerId);
 }
 
-/**
- * Mark trigger as failed in database
- */
 async function markTriggerFailed(triggerId: string, errorMessage: string): Promise<void> {
   await getSupabase()
     .from('hmt_gtt_orders')
@@ -377,9 +341,6 @@ async function markTriggerFailed(triggerId: string, errorMessage: string): Promi
     .eq('id', triggerId);
 }
 
-/**
- * Cancel trigger (for OCO sibling)
- */
 async function cancelTrigger(triggerId: string, reason: string = 'Cancelled'): Promise<void> {
   await getSupabase()
     .from('hmt_gtt_orders')
@@ -389,12 +350,9 @@ async function cancelTrigger(triggerId: string, reason: string = 'Cancelled'): P
       updated_at: new Date().toISOString()
     })
     .eq('id', triggerId)
-    .eq('status', 'active'); // Only cancel if still active (OCO atomicity guard)
+    .eq('status', 'active');
 }
 
-/**
- * Check risk limits before order placement (RISK SAFETY)
- */
 async function checkRiskLimits(userId: string): Promise<boolean> {
   try {
     const { data: limits, error } = await getSupabase()
@@ -408,17 +366,14 @@ async function checkRiskLimits(userId: string): Promise<boolean> {
       return false;
     }
 
-    // Check kill switch
     if (limits.kill_switch_enabled) {
       console.error(`[Engine] Kill switch enabled for user ${userId}`);
       return false;
     }
 
-    // Reset daily counters if needed
     const today = new Date().toISOString().split('T')[0];
     if (limits.last_reset_date !== today) {
       await getSupabase().rpc('reset_daily_risk_counters');
-      // Reload limits after reset
       const { data: refreshedLimits } = await getSupabase()
         .from('risk_limits')
         .select('*')
@@ -429,19 +384,16 @@ async function checkRiskLimits(userId: string): Promise<boolean> {
       }
     }
 
-    // Check max trades per day
     if (limits.daily_trades_count >= limits.max_trades_per_day) {
       console.error(`[Engine] Max trades per day exceeded for user ${userId}`);
       return false;
     }
 
-    // Check max loss per day
     if (limits.daily_pnl <= -Math.abs(limits.max_loss_per_day)) {
       console.error(`[Engine] Max loss per day exceeded for user ${userId}`);
       return false;
     }
 
-    // Check auto square-off time
     const now = new Date();
     const currentTime = now.toTimeString().split(' ')[0];
     if (currentTime >= limits.auto_square_off_time) {
@@ -456,9 +408,6 @@ async function checkRiskLimits(userId: string): Promise<boolean> {
   }
 }
 
-/**
- * Log trade for audit trail and risk tracking
- */
 async function logTrade(
   trigger: HMTTrigger,
   execution: any,
@@ -481,16 +430,12 @@ async function logTrade(
         order_status: 'COMPLETE'
       });
 
-    // Update risk limits counters
     await getSupabase().rpc('increment_daily_trade_count', { p_user_id: trigger.user_id });
   } catch (error) {
     console.error('[Engine] Error logging trade:', error);
   }
 }
 
-/**
- * Check if this instance already holds the lock
- */
 async function checkIfAlreadyRunning(): Promise<boolean> {
   try {
     const { data, error } = await getSupabase()
@@ -507,15 +452,10 @@ async function checkIfAlreadyRunning(): Promise<boolean> {
   }
 }
 
-/**
- * Acquire distributed lock for singleton enforcement
- */
 async function acquireEngineLock(): Promise<{ acquired: boolean; healthy_instance: boolean }> {
   try {
-    // Calculate stale threshold: 2 × health check interval
     const staleThreshold = 2 * getConfig().health_check_interval_ms;
 
-    // First check if another instance is already running
     const { data: currentState, error: stateError } = await getSupabase()
       .from('hmt_engine_state')
       .select('*')
@@ -549,9 +489,6 @@ async function acquireEngineLock(): Promise<{ acquired: boolean; healthy_instanc
   }
 }
 
-/**
- * Release distributed lock
- */
 async function releaseEngineLock(): Promise<void> {
   try {
     await getSupabase()
@@ -562,9 +499,6 @@ async function releaseEngineLock(): Promise<void> {
   }
 }
 
-/**
- * Subscribe to real-time trigger changes (for CRUD operations from UI)
- */
 function subscribeToTriggerChanges(): void {
   getSupabase()
     .channel('hmt_triggers')
@@ -594,16 +528,12 @@ function subscribeToTriggerChanges(): void {
   console.log('[Engine] Subscribed to trigger changes');
 }
 
-/**
- * Handle trigger insert from database
- */
 function handleTriggerInsert(trigger: HMTTrigger): void {
   if (!triggerManager || !wsManager || trigger.status !== 'active') return;
 
   console.log(`[Engine] New trigger added: ${trigger.id}`);
   triggerManager.addTrigger(trigger);
 
-  // Subscribe to new instrument if needed
   const currentInstruments = new Set(triggerManager.getSubscribedInstruments());
   if (!currentInstruments.has(trigger.instrument_token)) {
     wsManager.subscribe([trigger.instrument_token]);
@@ -613,13 +543,9 @@ function handleTriggerInsert(trigger: HMTTrigger): void {
   stats.active_triggers = triggerManager.getActiveTriggerCount();
 }
 
-/**
- * Handle trigger update from database
- */
 function handleTriggerUpdate(trigger: HMTTrigger): void {
   if (!triggerManager) return;
 
-  // Remove old version and add new if still active
   triggerManager.removeTrigger(trigger.id);
 
   if (trigger.status === 'active') {
@@ -629,9 +555,6 @@ function handleTriggerUpdate(trigger: HMTTrigger): void {
   stats.active_triggers = triggerManager.getActiveTriggerCount();
 }
 
-/**
- * Handle trigger delete from database
- */
 function handleTriggerDelete(triggerId: string): void {
   if (!triggerManager) return;
 
@@ -640,9 +563,6 @@ function handleTriggerDelete(triggerId: string): void {
   stats.active_triggers = triggerManager.getActiveTriggerCount();
 }
 
-/**
- * Start health check monitor
- */
 function startHealthCheckMonitor(): void {
   setInterval(() => {
     if (engineStartTime) {
@@ -653,7 +573,6 @@ function startHealthCheckMonitor(): void {
       stats.websocket_status = wsManager.isConnected() ? 'connected' : 'disconnected';
     }
 
-    // Check for stale connection (no ticks in last 60 seconds)
     if (stats.last_tick_time) {
       const timeSinceLastTick = Date.now() - stats.last_tick_time.getTime();
       if (timeSinceLastTick > 60000 && stats.websocket_status === 'connected') {
@@ -661,26 +580,15 @@ function startHealthCheckMonitor(): void {
       }
     }
 
-    // Heartbeat log (every health check interval)
     console.log(`[Engine] Heartbeat | Uptime: ${stats.uptime_seconds}s | Ticks: ${stats.processed_ticks} | Orders: ${stats.triggered_orders} | Active: ${stats.active_triggers} | WS: ${stats.websocket_status}`);
   }, getConfig().health_check_interval_ms);
 }
 
-/**
- * Start heartbeat updates to database
- * Updates every 10 seconds to ensure visibility even if health check is 30s
- */
 function startHeartbeatUpdates(): void {
-  // Emit heartbeat immediately on start
   updateHeartbeat();
-
-  // Then emit every 10 seconds (more frequent than health check for reliability)
   heartbeatInterval = setInterval(updateHeartbeat, 10000);
 }
 
-/**
- * Update heartbeat in database (non-blocking)
- */
 async function updateHeartbeat(): Promise<void> {
   try {
     await getSupabase().rpc('update_engine_heartbeat', {
@@ -697,14 +605,10 @@ async function updateHeartbeat(): Promise<void> {
   }
 }
 
-/**
- * Shutdown engine gracefully
- */
 async function shutdownEngine(): Promise<void> {
   console.log('[Engine] Shutting down...');
   isEngineRunning = false;
 
-  // Stop heartbeat updates
   if (heartbeatInterval !== null) {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;
@@ -723,15 +627,11 @@ async function shutdownEngine(): Promise<void> {
   orderExecutor = null;
   engineStartTime = null;
 
-  // Release distributed lock and update status to STOPPED
   await releaseEngineLock();
 
   console.log('[Engine] Shutdown complete - status set to STOPPED');
 }
 
-/**
- * Auto-start the engine on first invocation
- */
 let autoStartPromise: Promise<void> | null = null;
 
 function ensureEngineStarted(): Promise<void> {
@@ -751,7 +651,6 @@ function ensureEngineStarted(): Promise<void> {
     .catch((error) => {
       console.error('[Engine] Auto-start failed:', error);
       autoStartPromise = null;
-      // Retry after delay
       setTimeout(() => {
         ensureEngineStarted();
       }, getConfig().reconnect_delay_ms);
@@ -760,9 +659,6 @@ function ensureEngineStarted(): Promise<void> {
   return autoStartPromise;
 }
 
-/**
- * HTTP Handler
- */
 Deno.serve(async (req: Request) => {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -774,25 +670,20 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
-  // Ensure engine is started on every request (self-healing)
   await ensureEngineStarted();
 
   const url = new URL(req.url);
   const path = url.pathname;
 
-  // Health check endpoint
   if (path.endsWith('/health')) {
-    // Fetch actual engine state from database
     const { data: dbState } = await getSupabase()
       .from('hmt_engine_state')
       .select('*')
       .eq('id', 'singleton')
       .maybeSingle();
 
-    // Calculate stale threshold: 2 × health check interval
     const staleThreshold = 2 * getConfig().health_check_interval_ms;
 
-    // Determine if any engine instance is running
     let actualStatus = 'stopped';
     let actualError = engineError;
     let timeSinceHeartbeat = 0;
@@ -839,7 +730,6 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // Start engine endpoint
   if (path.endsWith('/start')) {
     if (!isEngineRunning) {
       try {
@@ -859,7 +749,6 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // Stop engine endpoint
   if (path.endsWith('/stop')) {
     await shutdownEngine();
     return new Response(JSON.stringify({ success: true, message: 'Engine stopped' }), {
@@ -867,7 +756,6 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // Stats endpoint
   if (path.endsWith('/stats')) {
     return new Response(JSON.stringify({
       ...stats,
