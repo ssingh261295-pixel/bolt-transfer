@@ -39,6 +39,43 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+function isWithinTradingWindow(): { allowed: boolean; currentTime: string; reason?: string } {
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istTime = new Date(now.getTime() + istOffset);
+
+  const hours = istTime.getUTCHours();
+  const minutes = istTime.getUTCMinutes();
+  const currentTimeIST = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+  const startHour = 9;
+  const startMinute = 30;
+  const endHour = 15;
+  const endMinute = 0;
+
+  const currentMinutes = hours * 60 + minutes;
+  const startMinutes = startHour * 60 + startMinute;
+  const endMinutes = endHour * 60 + endMinute;
+
+  if (currentMinutes < startMinutes) {
+    return {
+      allowed: false,
+      currentTime: currentTimeIST,
+      reason: 'BEFORE_09_30_IST'
+    };
+  }
+
+  if (currentMinutes > endMinutes) {
+    return {
+      allowed: false,
+      currentTime: currentTimeIST,
+      reason: 'AFTER_15_00_IST'
+    };
+  }
+
+  return { allowed: true, currentTime: currentTimeIST };
+}
+
 interface NormalizedPayload {
   symbol: string;
   exchange: string;
@@ -141,6 +178,79 @@ Deno.serve(async (req: Request) => {
       exchange: normalized.exchange,
       ip: sourceIp
     });
+
+    const tradingWindow = isWithinTradingWindow();
+    if (!tradingWindow.allowed) {
+      console.log('[TradingView Webhook] REJECTED - Outside trading window:', {
+        current_time_ist: tradingWindow.currentTime,
+        reason: tradingWindow.reason,
+        symbol: normalized.symbol,
+        trade_type: normalized.trade_type
+      });
+
+      const { data: keyData } = await supabase
+        .from('webhook_keys')
+        .select('id, user_id, name, account_mappings')
+        .eq('webhook_key', normalized.webhook_key)
+        .maybeSingle();
+
+      if (keyData) {
+        await supabase.from('tradingview_webhook_logs').insert({
+          webhook_key_id: keyData.id,
+          source_ip: sourceIp,
+          payload: rawPayload,
+          status: 'rejected_time_window',
+          error_message: `Trading window closed. Current time: ${tradingWindow.currentTime} IST. Trading allowed only 09:30-15:00 IST. Reason: ${tradingWindow.reason}`
+        });
+
+        const accountIds = keyData.account_mappings || [];
+        if (accountIds.length > 0) {
+          const notificationPromises = accountIds.map((accountId: string) =>
+            supabase.from('notifications').insert({
+              user_id: keyData.user_id,
+              broker_account_id: accountId,
+              type: 'trade_blocked',
+              title: 'Trade Blocked: Outside Trading Window',
+              message: `TradingView signal rejected for ${normalized.symbol}.\n\nReason: Trading window closed\nCurrent Time: ${tradingWindow.currentTime} IST\nAllowed Window: 09:30 AM - 03:00 PM IST\n\nTrade Type: ${normalized.trade_type}\nPrice: ₹${normalized.price}\nATR: ${normalized.atr}`,
+              metadata: {
+                source: 'tradingview_webhook',
+                webhook_key_name: keyData.name,
+                blocked_reason: tradingWindow.reason,
+                current_time_ist: tradingWindow.currentTime,
+                symbol: normalized.symbol,
+                trade_type: normalized.trade_type,
+                price: normalized.price,
+                atr: normalized.atr,
+                event_time: rawPayload.event_time || null
+              }
+            })
+          );
+
+          await Promise.all(notificationPromises);
+        }
+      } else {
+        await supabase.from('tradingview_webhook_logs').insert({
+          source_ip: sourceIp,
+          payload: rawPayload,
+          status: 'rejected_time_window',
+          error_message: `Trading window closed. Current time: ${tradingWindow.currentTime} IST. Reason: ${tradingWindow.reason}`
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          blocked_by_platform: true,
+          reason: 'Trading window closed (09:30-15:00 IST)',
+          current_time_ist: tradingWindow.currentTime,
+          allowed_window: '09:30 AM - 03:00 PM IST',
+          message: 'Platform rejected trade. Market orders only allowed during trading window.'
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log('[TradingView Webhook] Trading window check passed:', tradingWindow.currentTime, 'IST');
 
     const { data: keyData, error: keyError } = await supabase
       .from('webhook_keys')
@@ -314,7 +424,7 @@ Deno.serve(async (req: Request) => {
           transaction_type: normalized.trade_type,
           quantity: quantity.toString(),
           order_type: 'MARKET',
-          product: 'MIS',
+          product: 'NRML',
           validity: 'DAY',
         };
 
@@ -345,7 +455,7 @@ Deno.serve(async (req: Request) => {
             status: 'OPEN',
             order_id: orderResult.data.order_id,
             variety: 'regular',
-            product: 'MIS',
+            product: 'NRML',
           });
 
           const { data: hmtGtt, error: hmtError } = await supabase
@@ -358,11 +468,11 @@ Deno.serve(async (req: Request) => {
               instrument_token: instrument.instrument_token,
               condition_type: 'two-leg',
               transaction_type: normalized.trade_type === 'BUY' ? 'SELL' : 'BUY',
-              product_type_1: 'MIS',
+              product_type_1: 'NRML',
               trigger_price_1: stopLossPrice,
               order_price_1: stopLossPrice,
               quantity_1: quantity,
-              product_type_2: 'MIS',
+              product_type_2: 'NRML',
               trigger_price_2: targetPrice,
               order_price_2: targetPrice,
               quantity_2: quantity,
