@@ -424,7 +424,7 @@ Deno.serve(async (req: Request) => {
           transaction_type: normalized.trade_type,
           quantity: quantity.toString(),
           order_type: 'MARKET',
-          product: 'MIS',
+          product: 'NRML',
           validity: 'DAY',
         };
 
@@ -455,7 +455,7 @@ Deno.serve(async (req: Request) => {
             status: 'OPEN',
             order_id: orderResult.data.order_id,
             variety: 'regular',
-            product: 'MIS',
+            product: 'NRML',
           });
 
           const { data: hmtGtt, error: hmtError } = await supabase
@@ -468,11 +468,11 @@ Deno.serve(async (req: Request) => {
               instrument_token: instrument.instrument_token,
               condition_type: 'two-leg',
               transaction_type: normalized.trade_type === 'BUY' ? 'SELL' : 'BUY',
-              product_type_1: 'MIS',
+              product_type_1: 'NRML',
               trigger_price_1: stopLossPrice,
               order_price_1: stopLossPrice,
               quantity_1: quantity,
-              product_type_2: 'MIS',
+              product_type_2: 'NRML',
               trigger_price_2: targetPrice,
               order_price_2: targetPrice,
               quantity_2: quantity,
