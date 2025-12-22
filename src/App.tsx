@@ -14,8 +14,6 @@ import { Watchlist } from './pages/Watchlist';
 import { Settings } from './pages/Settings';
 import { ZerodhaCallback } from './pages/ZerodhaCallback';
 import { AdminPanel } from './pages/AdminPanel';
-import { Notifications } from './pages/Notifications';
-import { TradingViewLogs } from './pages/TradingViewLogs';
 import TopNavigation from './components/layout/TopNavigation';
 import WatchlistSidebar from './components/layout/WatchlistSidebar';
 import { PlaceOrderModal } from './components/orders/PlaceOrderModal';
@@ -111,8 +109,6 @@ function ProtectedLayout() {
             <Route path="/hmt-gtt" element={<HMTGTTOrders />} />
             <Route path="/positions" element={<Positions />} />
             <Route path="/watchlist" element={<Watchlist />} />
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/tradingview-logs" element={<TradingViewLogs />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/admin" element={<AdminPanel />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

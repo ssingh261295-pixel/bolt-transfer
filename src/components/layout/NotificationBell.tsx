@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, X, Check, CheckCheck, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Bell, X, Check, CheckCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -28,7 +27,6 @@ interface BrokerAccount {
 
 export function NotificationBell() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [brokerAccounts, setBrokerAccounts] = useState<BrokerAccount[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>('all');
@@ -168,27 +166,10 @@ export function NotificationBell() {
     }
   };
 
-  const clearAll = async () => {
-    if (!confirm('Are you sure you want to delete all notifications?')) {
-      return;
-    }
-
-    const { error } = await supabase.rpc('clear_all_notifications', {
-      p_user_id: user?.id
-    });
-
-    if (!error) {
-      setNotifications([]);
-      setUnreadCount(0);
-    }
-  };
-
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'trade':
         return '📈';
-      case 'trade_blocked':
-        return '🚫';
       case 'order':
         return '📊';
       case 'alert':
@@ -203,7 +184,6 @@ export function NotificationBell() {
   const getSourceBadgeColor = (source: string) => {
     switch (source) {
       case 'tradingview':
-      case 'tradingview_webhook':
         return 'bg-purple-100 text-purple-700';
       case 'hmt_engine':
         return 'bg-blue-100 text-blue-700';
@@ -271,15 +251,6 @@ export function NotificationBell() {
                 >
                   <CheckCheck className="w-3 h-3" />
                   Mark all read
-                </button>
-              )}
-              {notifications.length > 0 && (
-                <button
-                  onClick={clearAll}
-                  className="text-xs text-red-600 hover:text-red-700 flex items-center gap-1"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Clear all
                 </button>
               )}
               <button
@@ -365,7 +336,7 @@ export function NotificationBell() {
                         </p>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`px-2 py-0.5 text-xs font-medium rounded ${getSourceBadgeColor(notification.source)}`}>
-                            {notification.source === 'tradingview' || notification.source === 'tradingview_webhook' ? 'TradingView' :
+                            {notification.source === 'tradingview' ? 'TradingView' :
                              notification.source === 'hmt_engine' ? 'HMT Engine' :
                              notification.source === 'zerodha' ? 'Zerodha' :
                              notification.source}
@@ -394,13 +365,7 @@ export function NotificationBell() {
 
           {notifications.length > 0 && (
             <div className="px-4 py-2 border-t border-gray-200 text-center">
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  navigate('/notifications');
-                }}
-                className="text-sm text-blue-600 hover:text-blue-700"
-              >
+              <button className="text-sm text-blue-600 hover:text-blue-700">
                 View all notifications
               </button>
             </div>

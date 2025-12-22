@@ -43,7 +43,6 @@ export default function TopNavigation() {
     { label: 'HMT GTT', path: '/hmt-gtt' },
     { label: 'Watchlist', path: '/watchlist' },
     { label: 'Strategies', path: '/strategies' },
-    { label: 'TradingView Logs', path: '/tradingview-logs' },
   ];
 
   const handleSignOut = async () => {
