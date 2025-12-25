@@ -10,8 +10,10 @@
  * 3. Resolve accounts mapped to key
  * 4. Resolve NFO FUT symbol + lot size
  * 5. Place MARKET order (MANDATORY FIRST)
- * 6. Create HMT GTT (SL + Target) after order success
- * 7. Notify user in real-time
+ * 6. Fetch executed price from Zerodha API
+ * 7. Calculate SL/Target based on EXECUTED price (not CASH price)
+ * 8. Create HMT GTT (SL + Target) after order success
+ * 9. Notify user in real-time
  *
  * REQUIRED payload fields:
  * {
@@ -393,19 +395,6 @@ Deno.serve(async (req: Request) => {
     const slMultiplier = keyData.sl_multiplier || 1.5;
     const targetMultiplier = keyData.target_multiplier || 2.0;
 
-    const entryPrice = normalized.price;
-
-    let stopLossPrice: number;
-    let targetPrice: number;
-
-    if (normalized.trade_type === 'BUY') {
-      stopLossPrice = entryPrice - (normalized.atr * slMultiplier);
-      targetPrice = entryPrice + (normalized.atr * targetMultiplier);
-    } else {
-      stopLossPrice = entryPrice + (normalized.atr * slMultiplier);
-      targetPrice = entryPrice - (normalized.atr * targetMultiplier);
-    }
-
     const executionResults = [];
 
     for (const account of brokerAccounts) {
@@ -458,6 +447,51 @@ Deno.serve(async (req: Request) => {
             product: 'NRML',
           });
 
+          let executedPrice = normalized.price;
+          let maxRetries = 10;
+          let retryCount = 0;
+
+          while (retryCount < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const orderDetailsResponse = await fetch(`https://api.kite.trade/orders`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `token ${account.api_key}:${account.access_token}`,
+                'X-Kite-Version': '3',
+              },
+            });
+
+            const orderDetailsResult = await orderDetailsResponse.json();
+
+            if (orderDetailsResult.status === 'success' && orderDetailsResult.data) {
+              const placedOrder = orderDetailsResult.data.find((o: any) => o.order_id === orderResult.data.order_id);
+
+              if (placedOrder && placedOrder.status === 'COMPLETE' && placedOrder.average_price > 0) {
+                executedPrice = placedOrder.average_price;
+                console.log(`[TradingView Webhook] Order executed at: ${executedPrice} (attempt ${retryCount + 1})`);
+                break;
+              }
+            }
+
+            retryCount++;
+          }
+
+          if (retryCount === maxRetries) {
+            console.warn(`[TradingView Webhook] Failed to fetch executed price for order ${orderResult.data.order_id}, using CASH price as fallback`);
+          }
+
+          let stopLossPrice: number;
+          let targetPrice: number;
+
+          if (normalized.trade_type === 'BUY') {
+            stopLossPrice = executedPrice - (normalized.atr * slMultiplier);
+            targetPrice = executedPrice + (normalized.atr * targetMultiplier);
+          } else {
+            stopLossPrice = executedPrice + (normalized.atr * slMultiplier);
+            targetPrice = executedPrice - (normalized.atr * targetMultiplier);
+          }
+
           const { data: hmtGtt, error: hmtError } = await supabase
             .from('hmt_gtt_orders')
             .insert({
@@ -480,7 +514,8 @@ Deno.serve(async (req: Request) => {
               metadata: {
                 source: 'tradingview_webhook',
                 webhook_key_name: keyData.name,
-                entry_price: entryPrice,
+                entry_price: executedPrice,
+                cash_price: normalized.price,
                 atr: normalized.atr,
                 timeframe: rawPayload.timeframe || null
               }
@@ -493,6 +528,7 @@ Deno.serve(async (req: Request) => {
             accountResult.hmt_gtt_id = hmtGtt.id;
             accountResult.stop_loss = stopLossPrice;
             accountResult.target = targetPrice;
+            accountResult.executed_price = executedPrice;
           } else {
             accountResult.hmt_gtt_error = hmtError?.message || 'Unknown error';
           }
@@ -502,12 +538,13 @@ Deno.serve(async (req: Request) => {
             broker_account_id: account.id,
             type: 'trade',
             title: `TradingView: ${normalized.trade_type} ${instrument.tradingsymbol}`,
-            message: `Order placed: ${normalized.trade_type} ${quantity} @ Market\nSL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}\nATR: ${normalized.atr.toFixed(2)} | Timeframe: ${rawPayload.timeframe || 'N/A'}`,
+            message: `Order placed: ${normalized.trade_type} ${quantity} @ ₹${executedPrice.toFixed(2)}\nSL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}\nATR: ${normalized.atr.toFixed(2)} | Timeframe: ${rawPayload.timeframe || 'N/A'}`,
             metadata: {
               source: 'tradingview',
               trade_type: normalized.trade_type,
               symbol: instrument.tradingsymbol,
-              entry_price: entryPrice,
+              entry_price: executedPrice,
+              cash_price: normalized.price,
               quantity,
               stop_loss: stopLossPrice,
               target: targetPrice,
@@ -536,19 +573,26 @@ Deno.serve(async (req: Request) => {
       accounts_executed: executionResults
     });
 
+    const firstSuccessfulExecution = executionResults.find(r => r.order_placed);
+    const responseSignal: any = {
+      trade_type: normalized.trade_type,
+      symbol: instrument.tradingsymbol,
+      cash_price: normalized.price,
+      quantity,
+      atr: normalized.atr
+    };
+
+    if (firstSuccessfulExecution) {
+      responseSignal.executed_price = firstSuccessfulExecution.executed_price;
+      responseSignal.stop_loss = firstSuccessfulExecution.stop_loss;
+      responseSignal.target = firstSuccessfulExecution.target;
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         message: `Executed on ${successCount}/${brokerAccounts.length} account(s)`,
-        signal: {
-          trade_type: normalized.trade_type,
-          symbol: instrument.tradingsymbol,
-          entry_price: entryPrice,
-          quantity,
-          stop_loss: stopLossPrice,
-          target: targetPrice,
-          atr: normalized.atr
-        },
+        signal: responseSignal,
         accounts: executionResults
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
