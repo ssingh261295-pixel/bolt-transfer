@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { AlertTriangle } from 'lucide-react';
 
 interface ExitPositionModalProps {
   isOpen: boolean;
@@ -8,10 +9,82 @@ interface ExitPositionModalProps {
   onSuccess: () => void;
 }
 
+interface AssociatedOrder {
+  id: string;
+  symbol: string;
+  type: 'GTT' | 'HMT GTT';
+  trigger_price?: number;
+  target_price?: number;
+  stop_loss?: number;
+}
+
 export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: ExitPositionModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
+  const [associatedOrders, setAssociatedOrders] = useState<AssociatedOrder[]>([]);
+  const [deleteOrders, setDeleteOrders] = useState(true);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (isOpen && positions && positions.length > 0) {
+      loadAssociatedOrders();
+    }
+  }, [isOpen, positions]);
+
+  const loadAssociatedOrders = async () => {
+    setLoading(true);
+    try {
+      const positionIds = positions.map(p => p.id);
+      const symbols = positions.map(p => p.symbol);
+      const instrumentTokens = positions.map(p => p.instrument_token).filter(Boolean);
+
+      const orders: AssociatedOrder[] = [];
+
+      const { data: gttOrders } = await supabase
+        .from('gtt_orders')
+        .select('id, symbol, trigger_price')
+        .or(`position_id.in.(${positionIds.join(',')}),symbol.in.(${symbols.join(',')})`);
+
+      if (gttOrders) {
+        orders.push(...gttOrders.map(order => ({
+          id: order.id,
+          symbol: order.symbol,
+          type: 'GTT' as const,
+          trigger_price: order.trigger_price
+        })));
+      }
+
+      let hmtQuery = supabase
+        .from('hmt_gtt_orders')
+        .select('id, symbol, target_price, stop_loss')
+        .eq('status', 'active');
+
+      if (instrumentTokens.length > 0) {
+        hmtQuery = hmtQuery.or(`instrument_token.in.(${instrumentTokens.join(',')}),symbol.in.(${symbols.join(',')})`);
+      } else {
+        hmtQuery = hmtQuery.in('symbol', symbols);
+      }
+
+      const { data: hmtOrders } = await hmtQuery;
+
+      if (hmtOrders) {
+        orders.push(...hmtOrders.map(order => ({
+          id: order.id,
+          symbol: order.symbol,
+          type: 'HMT GTT' as const,
+          target_price: order.target_price,
+          stop_loss: order.stop_loss
+        })));
+      }
+
+      setAssociatedOrders(orders);
+    } catch (err) {
+      console.error('Error loading associated orders:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!isOpen || !positions || positions.length === 0) return null;
 
@@ -68,6 +141,29 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
         }
       }
 
+      if (deleteOrders && associatedOrders.length > 0) {
+        try {
+          const gttOrderIds = associatedOrders.filter(o => o.type === 'GTT').map(o => o.id);
+          const hmtOrderIds = associatedOrders.filter(o => o.type === 'HMT GTT').map(o => o.id);
+
+          if (gttOrderIds.length > 0) {
+            await supabase
+              .from('gtt_orders')
+              .delete()
+              .in('id', gttOrderIds);
+          }
+
+          if (hmtOrderIds.length > 0) {
+            await supabase
+              .from('hmt_gtt_orders')
+              .update({ status: 'cancelled' })
+              .in('id', hmtOrderIds);
+          }
+        } catch (deleteErr) {
+          console.error('Error deleting associated orders:', deleteErr);
+        }
+      }
+
       if (successCount > 0) {
         onSuccess();
         onClose();
@@ -94,6 +190,48 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4">
                 {error}
               </div>
+            )}
+
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : (
+              <>
+                {associatedOrders.length > 0 && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-yellow-900 mb-2">
+                          Associated GTT/HMT GTT Orders Found
+                        </h4>
+                        <div className="space-y-1 mb-3">
+                          {associatedOrders.map(order => (
+                            <div key={order.id} className="text-xs text-yellow-800">
+                              <span className="font-medium">{order.type}</span> - {order.symbol}
+                              {order.trigger_price && ` (Trigger: ₹${order.trigger_price})`}
+                              {order.target_price && ` (Target: ₹${order.target_price})`}
+                              {order.stop_loss && ` (SL: ₹${order.stop_loss})`}
+                            </div>
+                          ))}
+                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={deleteOrders}
+                            onChange={(e) => setDeleteOrders(e.target.checked)}
+                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-yellow-900">
+                            Delete these GTT/HMT GTT orders when exiting positions
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="overflow-x-auto">
