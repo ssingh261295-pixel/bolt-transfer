@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Search, Filter, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -23,12 +23,15 @@ export function TradingViewLogs() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [selectedLog, setSelectedLog] = useState<WebhookLog | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 50;
 
   useEffect(() => {
     if (user) {
       loadLogs();
     }
-  }, [user, dateFilter, statusFilter]);
+  }, [user, dateFilter, statusFilter, currentPage]);
 
   const loadLogs = async () => {
     setLoading(true);
@@ -44,7 +47,7 @@ export function TradingViewLogs() {
             user_id,
             name
           )
-        `)
+        `, { count: 'exact' })
         .eq('webhook_keys.user_id', user?.id)
         .order('received_at', { ascending: false });
 
@@ -76,9 +79,12 @@ export function TradingViewLogs() {
         query = query.gte('received_at', startDate.toISOString());
       }
 
-      const { data, error } = await query.limit(500);
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
 
-      console.log('Query result:', { data, error, count: data?.length });
+      const { data, error, count } = await query.range(from, to);
+
+      console.log('Query result:', { data, error, count: data?.length, totalCount: count });
 
       if (error) {
         console.error('Error loading logs:', error);
@@ -91,12 +97,15 @@ export function TradingViewLogs() {
         }));
         console.log('Formatted logs:', formattedLogs.length);
         setLogs(formattedLogs);
+        setTotalCount(count || 0);
       } else {
         setLogs([]);
+        setTotalCount(0);
       }
     } catch (err) {
       console.error('Exception loading logs:', err);
       setLogs([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
@@ -341,6 +350,35 @@ export function TradingViewLogs() {
             </table>
           )}
         </div>
+
+        {!loading && totalCount > pageSize && (
+          <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount} results
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Previous
+              </button>
+              <span className="px-3 py-1.5 text-sm text-gray-700">
+                Page {currentPage} of {Math.ceil(totalCount / pageSize)}
+              </span>
+              <button
+                onClick={() => setCurrentPage(Math.min(Math.ceil(totalCount / pageSize), currentPage + 1))}
+                disabled={currentPage >= Math.ceil(totalCount / pageSize)}
+                className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {selectedLog && (

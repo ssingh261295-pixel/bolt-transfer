@@ -389,11 +389,70 @@ Deno.serve(async (req: Request) => {
       day_of_month: day
     });
 
-    const lotMultiplier = keyData.lot_multiplier || 1;
-    const quantity = instrument.lot_size * lotMultiplier;
+    const today = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istTime = new Date(today.getTime() + istOffset);
+    const executionDate = istTime.toISOString().split('T')[0];
 
-    const slMultiplier = keyData.sl_multiplier || 1.5;
-    const targetMultiplier = keyData.target_multiplier || 2.0;
+    const payloadHash = `${normalized.symbol}_${normalized.trade_type}_${Math.floor(normalized.price)}`;
+
+    const { data: existingExecution } = await supabase
+      .from('webhook_execution_tracker')
+      .select('id')
+      .eq('webhook_key_id', keyData.id)
+      .eq('symbol', normalized.symbol)
+      .eq('trade_type', normalized.trade_type)
+      .eq('execution_date', executionDate)
+      .maybeSingle();
+
+    if (existingExecution) {
+      console.log('[TradingView Webhook] DUPLICATE SIGNAL BLOCKED:', {
+        symbol: normalized.symbol,
+        trade_type: normalized.trade_type,
+        execution_date: executionDate
+      });
+
+      await supabase.from('tradingview_webhook_logs').insert({
+        webhook_key_id: keyData.id,
+        source_ip: sourceIp,
+        payload: rawPayload,
+        status: 'rejected',
+        error_message: `Duplicate signal blocked: Same ${normalized.trade_type} signal for ${normalized.symbol} already executed today (${executionDate})`
+      });
+
+      const accountIds = keyData.account_mappings || [];
+      if (accountIds.length > 0) {
+        const notificationPromises = accountIds.map((accountId: string) =>
+          supabase.from('notifications').insert({
+            user_id: keyData.user_id,
+            broker_account_id: accountId,
+            type: 'trade_blocked',
+            title: 'Duplicate Signal Blocked',
+            message: `TradingView ${normalized.trade_type} signal for ${normalized.symbol} was blocked.\n\nReason: Same signal already executed today\nPrice: ₹${normalized.price}\nATR: ${normalized.atr}\n\nThis prevents multiple entries from the same signal.`,
+            metadata: {
+              source: 'tradingview_webhook',
+              webhook_key_name: keyData.name,
+              blocked_reason: 'duplicate_signal',
+              symbol: normalized.symbol,
+              trade_type: normalized.trade_type,
+              price: normalized.price,
+              execution_date: executionDate
+            }
+          })
+        );
+        await Promise.all(notificationPromises);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          blocked_by_platform: true,
+          reason: 'Duplicate signal',
+          message: `Same ${normalized.trade_type} signal for ${normalized.symbol} already executed today.`
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const executionResults = [];
 
@@ -407,6 +466,95 @@ Deno.serve(async (req: Request) => {
       };
 
       try {
+        const { data: symbolSettings } = await supabase
+          .from('nfo_symbol_settings')
+          .select('*')
+          .eq('user_id', keyData.user_id)
+          .eq('symbol', normalized.symbol)
+          .or(`broker_connection_id.eq.${account.id},broker_connection_id.is.null`)
+          .order('broker_connection_id', { ascending: false, nullsLast: true })
+          .limit(1)
+          .maybeSingle();
+
+        const atrMultiplier = symbolSettings?.atr_multiplier ?? 1.5;
+        const slMultiplier = symbolSettings?.sl_multiplier ?? (keyData.sl_multiplier || 1.0);
+        const targetMultiplier = symbolSettings?.target_multiplier ?? (keyData.target_multiplier || 2.0);
+        const lotMultiplier = symbolSettings?.lot_multiplier ?? (keyData.lot_multiplier || 1);
+        const isEnabled = symbolSettings?.is_enabled ?? true;
+
+        if (!isEnabled) {
+          console.log(`[TradingView Webhook] Symbol ${normalized.symbol} is disabled for account ${account.id}`);
+          accountResult.error = `Symbol ${normalized.symbol} trading is disabled`;
+          executionResults.push(accountResult);
+          continue;
+        }
+
+        const adjustedATR = normalized.atr * atrMultiplier;
+        const quantity = instrument.lot_size * lotMultiplier;
+
+        console.log('[TradingView Webhook] Using settings:', {
+          account_id: account.id,
+          symbol: normalized.symbol,
+          atr_multiplier: atrMultiplier,
+          sl_multiplier: slMultiplier,
+          target_multiplier: targetMultiplier,
+          lot_multiplier: lotMultiplier,
+          quantity,
+          adjusted_atr: adjustedATR,
+          is_account_specific: symbolSettings?.broker_connection_id === account.id
+        });
+
+        const positionsResponse = await fetch('https://api.kite.trade/portfolio/positions', {
+          method: 'GET',
+          headers: {
+            'Authorization': `token ${account.api_key}:${account.access_token}`,
+            'X-Kite-Version': '3',
+          },
+        });
+
+        const positionsResult = await positionsResponse.json();
+
+        if (positionsResult.status === 'success' && positionsResult.data) {
+          const existingPosition = positionsResult.data.net?.find((pos: any) =>
+            pos.tradingsymbol === instrument.tradingsymbol &&
+            pos.quantity !== 0
+          );
+
+          if (existingPosition) {
+            const positionDirection = existingPosition.quantity > 0 ? 'LONG' : 'SHORT';
+            const signalDirection = normalized.trade_type === 'BUY' ? 'LONG' : 'SHORT';
+
+            if (positionDirection === signalDirection) {
+              console.log('[TradingView Webhook] POSITION ALREADY EXISTS:', {
+                symbol: instrument.tradingsymbol,
+                existing_position: existingPosition.quantity,
+                signal_type: normalized.trade_type
+              });
+
+              await supabase.from('notifications').insert({
+                user_id: keyData.user_id,
+                broker_account_id: account.id,
+                type: 'trade_blocked',
+                title: 'Position Already Exists',
+                message: `TradingView ${normalized.trade_type} signal blocked for ${instrument.tradingsymbol}.\n\nReason: You already have a ${positionDirection} position\nExisting Quantity: ${Math.abs(existingPosition.quantity)}\nAverage Price: ₹${existingPosition.average_price}\n\nClose existing position before entering new one.`,
+                metadata: {
+                  source: 'tradingview_webhook',
+                  webhook_key_name: keyData.name,
+                  blocked_reason: 'existing_position',
+                  symbol: instrument.tradingsymbol,
+                  trade_type: normalized.trade_type,
+                  existing_quantity: existingPosition.quantity,
+                  existing_avg_price: existingPosition.average_price
+                }
+              });
+
+              accountResult.error = `Position already exists: ${positionDirection} ${Math.abs(existingPosition.quantity)}`;
+              executionResults.push(accountResult);
+              continue;
+            }
+          }
+        }
+
         const orderParams: any = {
           tradingsymbol: instrument.tradingsymbol,
           exchange: instrument.exchange,
@@ -485,11 +633,11 @@ Deno.serve(async (req: Request) => {
           let targetPrice: number;
 
           if (normalized.trade_type === 'BUY') {
-            stopLossPrice = executedPrice - (normalized.atr * slMultiplier);
-            targetPrice = executedPrice + (normalized.atr * targetMultiplier);
+            stopLossPrice = executedPrice - (adjustedATR * slMultiplier);
+            targetPrice = executedPrice + (adjustedATR * targetMultiplier);
           } else {
-            stopLossPrice = executedPrice + (normalized.atr * slMultiplier);
-            targetPrice = executedPrice - (normalized.atr * targetMultiplier);
+            stopLossPrice = executedPrice + (adjustedATR * slMultiplier);
+            targetPrice = executedPrice - (adjustedATR * targetMultiplier);
           }
 
           const { data: hmtGtt, error: hmtError } = await supabase
@@ -565,6 +713,18 @@ Deno.serve(async (req: Request) => {
     }
 
     const successCount = executionResults.filter(r => r.order_placed).length;
+
+    if (successCount > 0) {
+      await supabase.from('webhook_execution_tracker').insert({
+        webhook_key_id: keyData.id,
+        symbol: normalized.symbol,
+        trade_type: normalized.trade_type,
+        price: normalized.price,
+        execution_date: executionDate,
+        payload_hash: payloadHash
+      });
+    }
+
     await supabase.from('tradingview_webhook_logs').insert({
       webhook_key_id: keyData.id,
       source_ip: sourceIp,

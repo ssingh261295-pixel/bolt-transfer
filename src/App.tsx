@@ -16,6 +16,7 @@ import { ZerodhaCallback } from './pages/ZerodhaCallback';
 import { AdminPanel } from './pages/AdminPanel';
 import { Notifications } from './pages/Notifications';
 import { TradingViewLogs } from './pages/TradingViewLogs';
+import { NFOSymbolSettings } from './pages/NFOSymbolSettings';
 import TopNavigation from './components/layout/TopNavigation';
 import WatchlistSidebar from './components/layout/WatchlistSidebar';
 import { PlaceOrderModal } from './components/orders/PlaceOrderModal';
@@ -113,6 +114,7 @@ function ProtectedLayout() {
             <Route path="/watchlist" element={<Watchlist />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/tradingview-logs" element={<TradingViewLogs />} />
+            <Route path="/nfo-settings" element={<NFOSymbolSettings />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/admin" element={<AdminPanel />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
