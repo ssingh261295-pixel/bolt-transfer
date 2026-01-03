@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, ArrowUpDown, Activity, Power, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { Plus, Edit2, Trash2, ArrowUpDown, Activity, Power, AlertCircle, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
-import { formatIndianCurrency } from '../lib/formatters';
 import { MultiSelectFilter } from '../components/common/MultiSelectFilter';
+import { HMTGTTRow } from '../components/hmt-gtt/HMTGTTRow';
 
 type SortField = 'symbol' | 'trigger_price' | 'created_at' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -176,21 +176,13 @@ export function HMTGTTOrders() {
     }
   };
 
-  const getPositionForGTT = (gtt: any) => {
+  const getPositionForGTT = useCallback((gtt: any) => {
     return positions.find(pos =>
       pos.symbol === gtt.trading_symbol &&
       pos.exchange === gtt.exchange &&
       pos.broker_connection_id === gtt.broker_connection_id
     );
-  };
-
-  const calculatePnL = (gtt: any, currentPrice: number) => {
-    const position = getPositionForGTT(gtt);
-    if (!position) return null;
-
-    const pnl = (currentPrice - position.average_price) * position.quantity;
-    return pnl;
-  };
+  }, [positions]);
 
   const loadHMTGTTOrders = async (silent = false) => {
     if (!selectedBrokerId || brokers.length === 0) return;
@@ -281,7 +273,7 @@ export function HMTGTTOrders() {
     }
   }, [sortField, sortDirection]);
 
-  const toggleOrderSelection = (orderId: string) => {
+  const toggleOrderSelection = useCallback((orderId: string) => {
     setSelectedOrders(prev => {
       const newSet = new Set(prev);
       if (newSet.has(orderId)) {
@@ -291,35 +283,19 @@ export function HMTGTTOrders() {
       }
       return newSet;
     });
-  };
+  }, []);
 
-  const uniqueInstruments = Array.from(
-    new Set(hmtGttOrders.map(order => order.trading_symbol).filter(Boolean))
-  ).sort();
+  const uniqueInstruments = useMemo(() =>
+    Array.from(new Set(hmtGttOrders.map(order => order.trading_symbol).filter(Boolean))).sort(),
+    [hmtGttOrders]
+  );
 
-  const filteredHmtGttOrders = selectedInstruments.length === 0
-    ? hmtGttOrders
-    : hmtGttOrders.filter(order => selectedInstruments.includes(order.trading_symbol));
-
-  const isStopLossAboveBreakeven = (gtt: any, currentPrice: number): boolean => {
-    const position = getPositionForGTT(gtt);
-    if (!position) return false;
-
-    const isOCO = gtt.condition_type === 'two-leg';
-    if (!isOCO) return false;
-
-    const trigger1 = parseFloat(gtt.trigger_price_1) || 0;
-    const trigger2 = parseFloat(gtt.trigger_price_2) || 0;
-    const stopLoss = Math.min(trigger1, trigger2);
-
-    if (gtt.transaction_type === 'SELL' && position.quantity > 0) {
-      return stopLoss > position.average_price;
-    } else if (gtt.transaction_type === 'BUY' && position.quantity < 0) {
-      return stopLoss < position.average_price;
-    }
-
-    return false;
-  };
+  const filteredHmtGttOrders = useMemo(() =>
+    selectedInstruments.length === 0
+      ? hmtGttOrders
+      : hmtGttOrders.filter(order => selectedInstruments.includes(order.trading_symbol)),
+    [hmtGttOrders, selectedInstruments]
+  );
 
   const toggleSelectAll = () => {
     if (selectedOrders.size === filteredHmtGttOrders.length) {
@@ -372,11 +348,20 @@ export function HMTGTTOrders() {
     setDeleting(false);
   };
 
-  const handleDelete = async (orderId: string) => {
+  const handleDelete = useCallback((orderId: string) => {
     setDeleteType('single');
     setDeleteTarget(orderId);
     setShowDeleteConfirm(true);
-  };
+  }, []);
+
+  const handleEdit = useCallback((gtt: any) => {
+    setFilterStateBeforeEdit({
+      brokerId: selectedBrokerId,
+      instruments: selectedInstruments
+    });
+    setEditingGTT(gtt);
+    setShowCreateModal(true);
+  }, [selectedBrokerId, selectedInstruments]);
 
   const confirmSingleDelete = async () => {
     if (!deleteTarget) return;
@@ -402,13 +387,6 @@ export function HMTGTTOrders() {
     }
   };
 
-  const calculatePercentage = (triggerValue: number, currentPrice: number): string => {
-    if (!currentPrice || currentPrice === 0) return '0% of LTP';
-    const percentOfLTP = ((triggerValue - currentPrice) / currentPrice) * 100;
-    const absPercent = Math.abs(percentOfLTP);
-    const sign = percentOfLTP > 0 ? '+' : '-';
-    return `${sign}${absPercent.toFixed(1)}% of LTP`;
-  };
 
   const loadEngineStatus = async () => {
     try {
@@ -746,154 +724,20 @@ export function HMTGTTOrders() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredHmtGttOrders.map((gtt) => {
-                const isOCO = gtt.condition_type === 'two-leg';
-                const ltp = getLTP(gtt.instrument_token);
-                const currentPrice = ltp ?? 0;
-
-                return (
-                  <tr key={gtt.id} className="hover:bg-gray-50 transition">
-                    <td className="px-4 py-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={selectedOrders.has(gtt.id)}
-                        onChange={() => toggleOrderSelection(gtt.id)}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {new Date(gtt.created_at).toLocaleDateString('en-IN', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit'
-                      })}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm font-medium text-gray-900">
-                          {gtt.trading_symbol || 'N/A'}
-                          {isConnected && ltp && (
-                            <span className="ml-1 text-xs text-green-600">●</span>
-                          )}
-                          <span className="text-xs text-gray-500 ml-1">
-                            {gtt.exchange}
-                          </span>
-                        </div>
-                        {isStopLossAboveBreakeven(gtt, currentPrice) && (
-                          <div
-                            className="flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium"
-                            title="Stop Loss above breakeven"
-                          >
-                            <TrendingUp className="w-3 h-3" />
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    {selectedBrokerId === 'all' && (
-                      <td className="px-4 py-3">
-                        <div className="text-sm text-gray-900">
-                          {(gtt.broker_connections?.account_holder_name || gtt.broker_connections?.account_name || 'Account')} ({gtt.broker_connections?.client_id || 'No ID'})
-                        </div>
-                      </td>
-                    )}
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
-                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium w-fit ${
-                          isOCO ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'
-                        }`}>
-                          {isOCO ? 'OCO' : 'SINGLE'}
-                        </span>
-                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium w-fit ${
-                          gtt.transaction_type === 'BUY' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
-                        }`}>
-                          {gtt.transaction_type}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {isOCO ? (
-                        <div className="text-sm space-y-1">
-                          <div className="text-gray-900">
-                            ₹{gtt.trigger_price_1?.toFixed(2)}
-                            <span className="text-xs text-gray-500 ml-1">
-                              {calculatePercentage(gtt.trigger_price_1, currentPrice)}
-                            </span>
-                          </div>
-                          <div className="text-gray-900">
-                            ₹{gtt.trigger_price_2?.toFixed(2)}
-                            <span className="text-xs text-gray-500 ml-1">
-                              {calculatePercentage(gtt.trigger_price_2, currentPrice)}
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-sm text-gray-900">
-                          ₹{gtt.trigger_price_1?.toFixed(2)}
-                          <span className="text-xs text-gray-500 ml-1">
-                            {calculatePercentage(gtt.trigger_price_1, currentPrice)}
-                          </span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      ₹{currentPrice?.toFixed(2) || 'N/A'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {gtt.quantity_1}
-                    </td>
-                    <td className="px-4 py-3">
-                      {(() => {
-                        const pnl = calculatePnL(gtt, currentPrice);
-                        if (pnl === null) {
-                          return <span className="text-sm text-gray-400">-</span>;
-                        }
-                        return (
-                          <span className={`text-sm font-medium ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {pnl >= 0 ? '+' : ''}{formatIndianCurrency(pnl)}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-1 rounded text-xs font-medium uppercase ${
-                        gtt.status === 'active' ? 'bg-green-100 text-green-700' :
-                        gtt.status === 'triggered' ? 'bg-blue-100 text-blue-700' :
-                        gtt.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
-                        gtt.status === 'failed' ? 'bg-red-100 text-red-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {gtt.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            setFilterStateBeforeEdit({
-                              brokerId: selectedBrokerId,
-                              instruments: selectedInstruments
-                            });
-                            setEditingGTT(gtt);
-                            setShowCreateModal(true);
-                          }}
-                          disabled={gtt.status !== 'active'}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Edit HMT GTT"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(gtt.id)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition"
-                          title="Delete HMT GTT"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {filteredHmtGttOrders.map((gtt) => (
+                <HMTGTTRow
+                  key={gtt.id}
+                  gtt={gtt}
+                  isSelected={selectedOrders.has(gtt.id)}
+                  onToggleSelect={toggleOrderSelection}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  showAccount={selectedBrokerId === 'all'}
+                  ltp={getLTP(gtt.instrument_token)}
+                  isConnected={isConnected}
+                  position={getPositionForGTT(gtt)}
+                />
+              ))}
             </tbody>
           </table>
         </div>
