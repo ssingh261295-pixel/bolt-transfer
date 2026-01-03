@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, ArrowUpDown, Activity, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, ArrowUpDown, Activity, RefreshCw, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
 import { formatIndianCurrency } from '../lib/formatters';
+import { MultiSelectFilter } from '../components/common/MultiSelectFilter';
 
 type SortField = 'symbol' | 'trigger_price' | 'created_at' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -33,13 +34,13 @@ export function GTTOrders() {
   const [brokers, setBrokers] = useState<any[]>([]);
   const [positions, setPositions] = useState<any[]>([]);
   const [selectedBrokerId, setSelectedBrokerId] = useState<string>('all');
-  const [selectedInstrument, setSelectedInstrument] = useState<string>('all');
+  const [selectedInstruments, setSelectedInstruments] = useState<string[]>([]);
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBrokerId !== 'all' ? selectedBrokerId : brokers[0]?.id);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingGTT, setEditingGTT] = useState<any>(null);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
-  const [filterStateBeforeEdit, setFilterStateBeforeEdit] = useState<{ brokerId: string; instrument: string } | null>(null);
+  const [filterStateBeforeEdit, setFilterStateBeforeEdit] = useState<{ brokerId: string; instruments: string[] } | null>(null);
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [deleteMessage, setDeleteMessage] = useState('');
@@ -447,9 +448,30 @@ export function GTTOrders() {
     new Set(gttOrders.map(order => order.condition?.tradingsymbol).filter(Boolean))
   ).sort();
 
-  const filteredGttOrders = selectedInstrument === 'all'
+  const filteredGttOrders = selectedInstruments.length === 0
     ? gttOrders
-    : gttOrders.filter(order => order.condition?.tradingsymbol === selectedInstrument);
+    : gttOrders.filter(order => selectedInstruments.includes(order.condition?.tradingsymbol));
+
+  const isStopLossAboveBreakeven = (gtt: any, currentPrice: number): boolean => {
+    const position = getPositionForGTT(gtt);
+    if (!position) return false;
+
+    const isOCO = gtt.type === 'two-leg';
+    if (!isOCO) return false;
+
+    const trigger1 = gtt.condition?.trigger_values?.[0] || 0;
+    const trigger2 = gtt.condition?.trigger_values?.[1] || 0;
+    const stopLoss = Math.min(trigger1, trigger2);
+
+    const transactionType = gtt.orders?.[0]?.transaction_type;
+    if (transactionType === 'SELL' && position.quantity > 0) {
+      return stopLoss > position.average_price;
+    } else if (transactionType === 'BUY' && position.quantity < 0) {
+      return stopLoss < position.average_price;
+    }
+
+    return false;
+  };
 
   const toggleSelectAll = () => {
     if (selectedOrders.size === filteredGttOrders.length) {
@@ -632,18 +654,13 @@ export function GTTOrders() {
             </select>
           )}
           {uniqueInstruments.length > 0 && (
-            <select
-              value={selectedInstrument}
-              onChange={(e) => setSelectedInstrument(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
-            >
-              <option value="all">All Instruments</option>
-              {uniqueInstruments.map((instrument) => (
-                <option key={instrument} value={instrument}>
-                  {instrument}
-                </option>
-              ))}
-            </select>
+            <MultiSelectFilter
+              label="Instruments"
+              options={uniqueInstruments}
+              selectedValues={selectedInstruments}
+              onChange={setSelectedInstruments}
+              placeholder="All Instruments"
+            />
           )}
           <button
             onClick={() => {
@@ -681,13 +698,37 @@ export function GTTOrders() {
           <span className="text-sm text-blue-800 font-medium">
             {selectedOrders.size} order(s) selected
           </span>
-          <button
-            onClick={handleBulkDelete}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete Selected
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const selectedGTTs = filteredGttOrders.filter(gtt => selectedOrders.has(gtt.id.toString()));
+                const symbols = new Set(selectedGTTs.map(g => g.condition?.tradingsymbol));
+                const brokers = new Set(selectedGTTs.map(g => g.broker_info?.id));
+
+                if (symbols.size === 1 && brokers.size >= 1) {
+                  setFilterStateBeforeEdit({
+                    brokerId: selectedBrokerId,
+                    instruments: selectedInstruments
+                  });
+                  setEditingGTT({ bulkEdit: true, orders: selectedGTTs });
+                  setShowCreateModal(true);
+                } else {
+                  alert('Please select orders for the same instrument');
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+            >
+              <Edit2 className="w-4 h-4" />
+              Edit Selected
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Selected
+            </button>
+          </div>
         </div>
       )}
 
@@ -807,8 +848,18 @@ export function GTTOrders() {
                       })}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-gray-900">
-                        {gtt.condition?.tradingsymbol || 'N/A'}
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium text-gray-900">
+                          {gtt.condition?.tradingsymbol || 'N/A'}
+                        </div>
+                        {isStopLossAboveBreakeven(gtt, currentPrice) && (
+                          <div
+                            className="flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium"
+                            title="Stop Loss above breakeven"
+                          >
+                            <TrendingUp className="w-3 h-3" />
+                          </div>
+                        )}
                       </div>
                     </td>
                     {selectedBrokerId === 'all' && (
@@ -892,7 +943,7 @@ export function GTTOrders() {
                           onClick={() => {
                             setFilterStateBeforeEdit({
                               brokerId: selectedBrokerId,
-                              instrument: selectedInstrument
+                              instruments: selectedInstruments
                             });
                             if (gtt.broker_info?.id) {
                               setSelectedBrokerId(gtt.broker_info.id);
@@ -930,7 +981,7 @@ export function GTTOrders() {
             setEditingGTT(null);
             if (filterStateBeforeEdit) {
               setSelectedBrokerId(filterStateBeforeEdit.brokerId);
-              setSelectedInstrument(filterStateBeforeEdit.instrument);
+              setSelectedInstruments(filterStateBeforeEdit.instruments);
               setFilterStateBeforeEdit(null);
             }
           }}

@@ -814,6 +814,28 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-sm font-medium text-gray-900">{symbol}</span>
                 <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{exchange}</span>
+                {editingGTT && !editingGTT.bulkEdit && allBrokers && brokerConnectionId && (
+                  <>
+                    <span className="text-gray-300">•</span>
+                    <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                      {(() => {
+                        const broker = allBrokers.find(b => b.id === (editingGTT.broker_connection_id || brokerConnectionId));
+                        if (broker) {
+                          return `${broker.account_holder_name || broker.account_name || 'Account'} (${broker.client_id || 'No ID'})`;
+                        }
+                        return 'Unknown Account';
+                      })()}
+                    </span>
+                  </>
+                )}
+                {editingGTT?.bulkEdit && (
+                  <>
+                    <span className="text-gray-300">•</span>
+                    <span className="text-xs font-medium text-orange-700 bg-orange-100 px-2 py-0.5 rounded">
+                      Bulk Edit ({editingGTT.orders.length} orders)
+                    </span>
+                  </>
+                )}
                 {currentLTP && (
                   <>
                     <span className="text-sm font-semibold text-gray-700">LTP: {currentLTP.toFixed(2)}</span>

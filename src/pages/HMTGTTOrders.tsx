@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, ArrowUpDown, Activity, Power, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, ArrowUpDown, Activity, Power, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
 import { formatIndianCurrency } from '../lib/formatters';
+import { MultiSelectFilter } from '../components/common/MultiSelectFilter';
 
 type SortField = 'symbol' | 'trigger_price' | 'created_at' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -15,13 +16,13 @@ export function HMTGTTOrders() {
   const [brokers, setBrokers] = useState<any[]>([]);
   const [positions, setPositions] = useState<any[]>([]);
   const [selectedBrokerId, setSelectedBrokerId] = useState<string>('all');
-  const [selectedInstrument, setSelectedInstrument] = useState<string>('all');
+  const [selectedInstruments, setSelectedInstruments] = useState<string[]>([]);
   const { isConnected, connect, disconnect, subscribe, getLTP } = useZerodhaWebSocket(selectedBrokerId !== 'all' ? selectedBrokerId : brokers[0]?.id);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingGTT, setEditingGTT] = useState<any>(null);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
-  const [filterStateBeforeEdit, setFilterStateBeforeEdit] = useState<{ brokerId: string; instrument: string } | null>(null);
+  const [filterStateBeforeEdit, setFilterStateBeforeEdit] = useState<{ brokerId: string; instruments: string[] } | null>(null);
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [deleteMessage, setDeleteMessage] = useState('');
@@ -296,9 +297,29 @@ export function HMTGTTOrders() {
     new Set(hmtGttOrders.map(order => order.trading_symbol).filter(Boolean))
   ).sort();
 
-  const filteredHmtGttOrders = selectedInstrument === 'all'
+  const filteredHmtGttOrders = selectedInstruments.length === 0
     ? hmtGttOrders
-    : hmtGttOrders.filter(order => order.trading_symbol === selectedInstrument);
+    : hmtGttOrders.filter(order => selectedInstruments.includes(order.trading_symbol));
+
+  const isStopLossAboveBreakeven = (gtt: any, currentPrice: number): boolean => {
+    const position = getPositionForGTT(gtt);
+    if (!position) return false;
+
+    const isOCO = gtt.condition_type === 'two-leg';
+    if (!isOCO) return false;
+
+    const trigger1 = parseFloat(gtt.trigger_price_1) || 0;
+    const trigger2 = parseFloat(gtt.trigger_price_2) || 0;
+    const stopLoss = Math.min(trigger1, trigger2);
+
+    if (gtt.transaction_type === 'SELL' && position.quantity > 0) {
+      return stopLoss > position.average_price;
+    } else if (gtt.transaction_type === 'BUY' && position.quantity < 0) {
+      return stopLoss < position.average_price;
+    }
+
+    return false;
+  };
 
   const toggleSelectAll = () => {
     if (selectedOrders.size === filteredHmtGttOrders.length) {
@@ -527,18 +548,13 @@ export function HMTGTTOrders() {
             </select>
           )}
           {uniqueInstruments.length > 0 && (
-            <select
-              value={selectedInstrument}
-              onChange={(e) => setSelectedInstrument(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
-            >
-              <option value="all">All Instruments</option>
-              {uniqueInstruments.map((instrument) => (
-                <option key={instrument} value={instrument}>
-                  {instrument}
-                </option>
-              ))}
-            </select>
+            <MultiSelectFilter
+              label="Instruments"
+              options={uniqueInstruments}
+              selectedValues={selectedInstruments}
+              onChange={setSelectedInstruments}
+              placeholder="All Instruments"
+            />
           )}
           <button
             onClick={() => {
@@ -606,13 +622,38 @@ export function HMTGTTOrders() {
           <span className="text-sm text-blue-800 font-medium">
             {selectedOrders.size} order(s) selected
           </span>
-          <button
-            onClick={handleBulkDelete}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete Selected
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const selectedGTTs = filteredHmtGttOrders.filter(gtt => selectedOrders.has(gtt.id));
+                const symbols = new Set(selectedGTTs.map(g => g.trading_symbol));
+                const brokers = new Set(selectedGTTs.map(g => g.broker_connection_id));
+
+                if (symbols.size === 1 && brokers.size >= 1) {
+                  setFilterStateBeforeEdit({
+                    brokerId: selectedBrokerId,
+                    instruments: selectedInstruments
+                  });
+                  setEditingGTT({ bulkEdit: true, orders: selectedGTTs });
+                  setShowCreateModal(true);
+                } else {
+                  alert('Please select orders for the same instrument');
+                }
+              }}
+              disabled={selectedOrders.size === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Edit2 className="w-4 h-4" />
+              Edit Selected
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Selected
+            </button>
+          </div>
         </div>
       )}
 
@@ -728,14 +769,24 @@ export function HMTGTTOrders() {
                       })}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-gray-900">
-                        {gtt.trading_symbol || 'N/A'}
-                        {isConnected && ltp && (
-                          <span className="ml-1 text-xs text-green-600">●</span>
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium text-gray-900">
+                          {gtt.trading_symbol || 'N/A'}
+                          {isConnected && ltp && (
+                            <span className="ml-1 text-xs text-green-600">●</span>
+                          )}
+                          <span className="text-xs text-gray-500 ml-1">
+                            {gtt.exchange}
+                          </span>
+                        </div>
+                        {isStopLossAboveBreakeven(gtt, currentPrice) && (
+                          <div
+                            className="flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium"
+                            title="Stop Loss above breakeven"
+                          >
+                            <TrendingUp className="w-3 h-3" />
+                          </div>
                         )}
-                        <span className="text-xs text-gray-500 ml-1">
-                          {gtt.exchange}
-                        </span>
                       </div>
                     </td>
                     {selectedBrokerId === 'all' && (
@@ -820,7 +871,7 @@ export function HMTGTTOrders() {
                           onClick={() => {
                             setFilterStateBeforeEdit({
                               brokerId: selectedBrokerId,
-                              instrument: selectedInstrument
+                              instruments: selectedInstruments
                             });
                             setEditingGTT(gtt);
                             setShowCreateModal(true);
@@ -856,7 +907,7 @@ export function HMTGTTOrders() {
             setEditingGTT(null);
             if (filterStateBeforeEdit) {
               setSelectedBrokerId(filterStateBeforeEdit.brokerId);
-              setSelectedInstrument(filterStateBeforeEdit.instrument);
+              setSelectedInstruments(filterStateBeforeEdit.instruments);
               setFilterStateBeforeEdit(null);
             }
           }}

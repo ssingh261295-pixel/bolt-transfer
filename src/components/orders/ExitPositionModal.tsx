@@ -276,7 +276,12 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
                               {exitTransactionType}
                             </span>
                             <div className="text-sm text-gray-900 font-medium">{position.symbol}</div>
-                            <div className="text-xs text-gray-500 mt-0.5">{position.exchange}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {position.exchange}
+                              {position.account_name && (
+                                <span className="ml-1">• {position.account_name}</span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="py-4 text-sm text-right pr-4">{exitQuantity}</td>
