@@ -39,28 +39,36 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
       const positionIds = positions.map(p => p.id);
       const symbols = positions.map(p => p.symbol);
       const instrumentTokens = positions.map(p => p.instrument_token).filter(Boolean);
+      const brokerConnectionIds = positions.map(p => p.broker_connection_id).filter(Boolean);
 
       const orders: AssociatedOrder[] = [];
 
-      const { data: gttOrders } = await supabase
-        .from('gtt_orders')
-        .select('id, symbol, trigger_price')
-        .or(`position_id.in.(${positionIds.join(',')}),symbol.in.(${symbols.join(',')})`);
+      // Query GTT orders for the specific broker connections and symbols
+      if (brokerConnectionIds.length > 0 && symbols.length > 0) {
+        const { data: gttOrders } = await supabase
+          .from('gtt_orders')
+          .select('id, symbol, trigger_price')
+          .eq('status', 'active')
+          .in('broker_connection_id', brokerConnectionIds)
+          .in('symbol', symbols);
 
-      if (gttOrders) {
-        orders.push(...gttOrders.map(order => ({
-          id: order.id,
-          symbol: order.symbol,
-          type: 'GTT' as const,
-          trigger_price: order.trigger_price
-        })));
+        if (gttOrders) {
+          orders.push(...gttOrders.map(order => ({
+            id: order.id,
+            symbol: order.symbol,
+            type: 'GTT' as const,
+            trigger_price: order.trigger_price
+          })));
+        }
       }
 
-      if (instrumentTokens.length > 0 || symbols.length > 0) {
+      // Query HMT GTT orders for the specific broker connections and instruments
+      if (brokerConnectionIds.length > 0 && (instrumentTokens.length > 0 || symbols.length > 0)) {
         let hmtQuery = supabase
           .from('hmt_gtt_orders')
-          .select('id, trading_symbol, trigger_price_1, trigger_price_2, condition_type')
-          .eq('status', 'active');
+          .select('id, trading_symbol, trigger_price_1, trigger_price_2, condition_type, broker_connection_id')
+          .eq('status', 'active')
+          .in('broker_connection_id', brokerConnectionIds);
 
         if (instrumentTokens.length > 0) {
           hmtQuery = hmtQuery.in('instrument_token', instrumentTokens);
