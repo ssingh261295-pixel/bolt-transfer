@@ -91,7 +91,16 @@ export function EditOrderModal({ isOpen, onClose, onSuccess, order }: EditOrderM
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">Edit Order</h3>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Edit Order</h3>
+            {order?.broker_connections && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                  {order.broker_connections.account_holder_name || order.broker_connections.account_name || 'Account'} ({order.broker_connections.client_id || 'No ID'})
+                </span>
+              </div>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition"

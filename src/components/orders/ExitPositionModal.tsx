@@ -104,6 +104,16 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
 
   if (!isOpen || !positions || positions.length === 0) return null;
 
+  const uniqueBrokerAccounts = Array.from(
+    new Set(
+      positions.map((p) => {
+        const accountName = p.broker_connections?.account_holder_name || p.broker_connections?.account_name || p.account_holder_name || p.account_name || 'Account';
+        const clientId = p.broker_connections?.client_id || p.client_id || 'No ID';
+        return `${accountName} (${clientId})`;
+      })
+    )
+  );
+
   const handleSubmit = async () => {
     setShowConfirm(false);
     setIsSubmitting(true);
@@ -199,6 +209,15 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
         <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
           <div className="p-6 border-b">
             <h2 className="text-xl font-semibold text-gray-900">Exit positions</h2>
+            {uniqueBrokerAccounts.length > 0 && (
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                {uniqueBrokerAccounts.map((accountInfo, index) => (
+                  <span key={index} className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-1 rounded">
+                    {accountInfo}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-6">

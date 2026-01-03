@@ -297,7 +297,24 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl h-[95vh] md:h-auto md:max-h-[90vh] flex flex-col">
         <div className="bg-white border-b border-gray-200 px-3 py-2.5 flex items-center justify-between flex-shrink-0">
-          <h2 className="text-lg font-semibold text-gray-900">Place Order</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Place Order</h2>
+            {brokerConnectionId && brokers.length > 0 && (
+              <div className="flex items-center gap-2 mt-1">
+                {(() => {
+                  const broker = brokers.find(b => b.id === brokerConnectionId);
+                  if (broker) {
+                    return (
+                      <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                        {broker.account_holder_name || broker.account_name || 'Account'} ({broker.client_id || 'No ID'})
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition p-1"
