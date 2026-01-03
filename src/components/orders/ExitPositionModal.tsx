@@ -14,8 +14,9 @@ interface AssociatedOrder {
   symbol: string;
   type: 'GTT' | 'HMT GTT';
   trigger_price?: number;
-  target_price?: number;
-  stop_loss?: number;
+  trigger_price_1?: number;
+  trigger_price_2?: number;
+  condition_type?: string;
 }
 
 export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: ExitPositionModalProps) {
@@ -55,27 +56,34 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
         })));
       }
 
-      let hmtQuery = supabase
-        .from('hmt_gtt_orders')
-        .select('id, symbol, target_price, stop_loss')
-        .eq('status', 'active');
+      if (instrumentTokens.length > 0 || symbols.length > 0) {
+        let hmtQuery = supabase
+          .from('hmt_gtt_orders')
+          .select('id, trading_symbol, trigger_price_1, trigger_price_2, condition_type')
+          .eq('status', 'active');
 
-      if (instrumentTokens.length > 0) {
-        hmtQuery = hmtQuery.or(`instrument_token.in.(${instrumentTokens.join(',')}),symbol.in.(${symbols.join(',')})`);
-      } else {
-        hmtQuery = hmtQuery.in('symbol', symbols);
-      }
+        if (instrumentTokens.length > 0) {
+          hmtQuery = hmtQuery.in('instrument_token', instrumentTokens);
+        } else if (symbols.length > 0) {
+          hmtQuery = hmtQuery.in('trading_symbol', symbols);
+        }
 
-      const { data: hmtOrders } = await hmtQuery;
+        const { data: hmtOrders, error: hmtError } = await hmtQuery;
 
-      if (hmtOrders) {
-        orders.push(...hmtOrders.map(order => ({
-          id: order.id,
-          symbol: order.symbol,
-          type: 'HMT GTT' as const,
-          target_price: order.target_price,
-          stop_loss: order.stop_loss
-        })));
+        if (hmtError) {
+          console.error('Error loading HMT GTT orders:', hmtError);
+        }
+
+        if (hmtOrders && hmtOrders.length > 0) {
+          orders.push(...hmtOrders.map(order => ({
+            id: order.id,
+            symbol: order.trading_symbol,
+            type: 'HMT GTT' as const,
+            trigger_price_1: parseFloat(order.trigger_price_1),
+            trigger_price_2: order.trigger_price_2 ? parseFloat(order.trigger_price_2) : undefined,
+            condition_type: order.condition_type
+          })));
+        }
       }
 
       setAssociatedOrders(orders);
@@ -211,8 +219,9 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
                             <div key={order.id} className="text-xs text-yellow-800">
                               <span className="font-medium">{order.type}</span> - {order.symbol}
                               {order.trigger_price && ` (Trigger: ₹${order.trigger_price})`}
-                              {order.target_price && ` (Target: ₹${order.target_price})`}
-                              {order.stop_loss && ` (SL: ₹${order.stop_loss})`}
+                              {order.trigger_price_1 && order.condition_type === 'single' && ` (Trigger: ₹${order.trigger_price_1})`}
+                              {order.trigger_price_1 && order.trigger_price_2 && order.condition_type === 'two-leg' &&
+                                ` (Leg1: ₹${order.trigger_price_1}, Leg2: ₹${order.trigger_price_2})`}
                             </div>
                           ))}
                         </div>
