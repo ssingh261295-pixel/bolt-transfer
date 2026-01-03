@@ -159,24 +159,33 @@ export function Strategies() {
               TradingView owns your strategy logic. This platform acts as a secure execution gateway:
             </p>
             <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-              <li>Create a webhook key and map your accounts</li>
-              <li>Configure ATR multipliers for stop-loss and target</li>
-              <li>TradingView sends signals → Platform places MARKET order → Creates HMT GTT (SL + Target)</li>
+              <li>Create a webhook key and map your broker accounts</li>
+              <li>Configure per-symbol settings in <strong>NFO Settings</strong> page (ATR multiplier, SL/Target ratios, lot size)</li>
+              <li>TradingView sends signals → Platform validates & places MARKET order → Creates HMT GTT (SL + Target)</li>
             </ol>
             <div className="mt-3 pt-3 border-t border-blue-200">
-              <p className="text-xs text-blue-700 font-medium mb-1">Webhook URL:</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs bg-white px-2 py-1 rounded border border-blue-300 font-mono">
-                  {import.meta.env.VITE_SUPABASE_URL}/functions/v1/tradingview-webhook
-                </code>
-                <button
-                  onClick={copyWebhookUrl}
-                  className="text-blue-600 hover:text-blue-700 p-1"
-                  title="Copy URL"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <p className="text-xs text-blue-700 font-medium mb-1">Webhook URL:</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-white px-2 py-1 rounded border border-blue-300 font-mono">
+                      {import.meta.env.VITE_SUPABASE_URL}/functions/v1/tradingview-webhook
+                    </code>
+                    <button
+                      onClick={copyWebhookUrl}
+                      className="text-blue-600 hover:text-blue-700 p-1"
+                      title="Copy URL"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
               </div>
+            </div>
+            <div className="mt-2 p-2 bg-white rounded border border-blue-200">
+              <p className="text-xs text-blue-700">
+                <strong>Note:</strong> Trading parameters (ATR, SL, Target, Lots) are now configured per NFO symbol in <a href="/nfo-settings" className="underline font-medium">NFO Settings</a> page, with support for global and account-specific overrides.
+              </p>
             </div>
           </div>
         </div>
@@ -201,16 +210,19 @@ export function Strategies() {
                     </span>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-gray-600">
-                    <span>{key.account_mappings?.length || 0} accounts</span>
-                    <span>SL: {key.sl_multiplier}x ATR</span>
-                    <span>Target: {key.target_multiplier}x ATR</span>
-                    <span>Lots: {key.lot_multiplier}x</span>
+                    <span className="flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3" />
+                      {key.account_mappings?.length || 0} account{(key.account_mappings?.length || 0) !== 1 ? 's' : ''} mapped
+                    </span>
                     {key.last_used_at && (
                       <span className="flex items-center gap-1">
                         <Activity className="w-3 h-3" />
                         Last used {new Date(key.last_used_at).toLocaleString()}
                       </span>
                     )}
+                    <span className="text-blue-600">
+                      Settings: Per symbol in NFO Settings
+                    </span>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -372,18 +384,15 @@ function WebhookKeyModal({
 }) {
   const [name, setName] = useState(initialData?.name || '');
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(initialData?.account_mappings || []);
-  const [lotMultiplier, setLotMultiplier] = useState(initialData?.lot_multiplier || 1);
-  const [slMultiplier, setSlMultiplier] = useState(initialData?.sl_multiplier || 1.5);
-  const [targetMultiplier, setTargetMultiplier] = useState(initialData?.target_multiplier || 2.0);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
       name,
       account_mappings: selectedAccounts,
-      lot_multiplier: lotMultiplier,
-      sl_multiplier: slMultiplier,
-      target_multiplier: targetMultiplier
+      lot_multiplier: 1,
+      sl_multiplier: 1.0,
+      target_multiplier: 1.0
     });
   };
 
@@ -454,47 +463,16 @@ function WebhookKeyModal({
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Lot Multiplier
-              </label>
-              <input
-                type="number"
-                value={lotMultiplier}
-                onChange={(e) => setLotMultiplier(Number(e.target.value))}
-                min="1"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                SL (ATR x)
-              </label>
-              <input
-                type="number"
-                value={slMultiplier}
-                onChange={(e) => setSlMultiplier(Number(e.target.value))}
-                step="0.1"
-                min="0.1"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Target (ATR x)
-              </label>
-              <input
-                type="number"
-                value={targetMultiplier}
-                onChange={(e) => setTargetMultiplier(Number(e.target.value))}
-                step="0.1"
-                min="0.1"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-xs font-medium text-blue-900 mb-1">Trading Parameters</p>
+                <p className="text-xs text-blue-700">
+                  ATR multiplier, SL/Target ratios, and lot sizes are now configured per NFO symbol in the <a href="/nfo-settings" className="underline font-semibold">NFO Settings</a> page.
+                  This allows granular control over each symbol with global and account-specific overrides.
+                </p>
+              </div>
             </div>
           </div>
 
