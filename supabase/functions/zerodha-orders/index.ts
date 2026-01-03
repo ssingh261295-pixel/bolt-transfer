@@ -416,6 +416,87 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    if (req.method === 'PUT' && url.pathname.endsWith('/modify')) {
+      const brokerId = url.searchParams.get('broker_id');
+      const modifyData = await req.json();
+
+      if (!brokerId || !modifyData.order_id) {
+        throw new Error('Missing broker_id or order_id');
+      }
+
+      let brokerQuery = supabase
+        .from('broker_connections')
+        .select('api_key, access_token, user_id')
+        .eq('id', brokerId);
+
+      if (!isServiceRole && user) {
+        brokerQuery = brokerQuery.eq('user_id', user.id);
+      }
+
+      const { data: brokerConnection } = await brokerQuery.single();
+
+      if (!brokerConnection || !brokerConnection.access_token) {
+        throw new Error('Broker not connected');
+      }
+
+      const variety = modifyData.variety || 'regular';
+      const params: any = {
+        quantity: modifyData.quantity.toString(),
+        order_type: modifyData.order_type,
+      };
+
+      if (modifyData.price) {
+        params.price = modifyData.price.toString();
+      }
+
+      if (modifyData.trigger_price) {
+        params.trigger_price = modifyData.trigger_price.toString();
+      }
+
+      const response = await fetch(`https://api.kite.trade/orders/${variety}/${modifyData.order_id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `token ${brokerConnection.api_key}:${brokerConnection.access_token}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Kite-Version': '3',
+        },
+        body: new URLSearchParams(params),
+      });
+
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        let updateQuery = supabase
+          .from('orders')
+          .update({
+            quantity: modifyData.quantity,
+            order_type: modifyData.order_type,
+            price: modifyData.price || null,
+            trigger_price: modifyData.trigger_price || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('order_id', modifyData.order_id);
+
+        if (!isServiceRole && user) {
+          updateQuery = updateQuery.eq('user_id', user.id);
+        }
+
+        await updateQuery;
+
+        return new Response(
+          JSON.stringify({ success: true, message: 'Order modified successfully' }),
+          {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      } else {
+        throw new Error(result.message || 'Order modification failed');
+      }
+    }
+
     if (req.method === 'DELETE') {
       const brokerId = url.searchParams.get('broker_id');
       const orderId = url.searchParams.get('order_id');

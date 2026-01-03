@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ShoppingCart, Filter, Plus, ArrowUpDown, X } from 'lucide-react';
+import { ShoppingCart, Filter, Plus, ArrowUpDown, X, RefreshCw, Edit } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { PlaceOrderModal } from '../components/orders/PlaceOrderModal';
+import { EditOrderModal } from '../components/orders/EditOrderModal';
 
 type SortField = 'created_at' | 'symbol' | 'quantity' | 'price' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -21,6 +22,10 @@ export function Orders() {
   const [cancelError, setCancelError] = useState('');
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+  const [showEditOrder, setShowEditOrder] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<any>(null);
 
   useEffect(() => {
     if (user) {
@@ -256,6 +261,56 @@ export function Orders() {
     return cancellableStatuses.includes(status);
   };
 
+  const canEditOrder = (status: string) => {
+    const editableStatuses = ['OPEN', 'TRIGGER PENDING', 'PENDING'];
+    return editableStatuses.includes(status);
+  };
+
+  const handleEditOrder = (order: any) => {
+    setEditingOrder(order);
+    setShowEditOrder(true);
+  };
+
+  const handleSyncOrders = async () => {
+    if (syncing || brokers.length === 0) return;
+
+    setSyncing(true);
+    setSyncMessage('');
+    setCancelError('');
+
+    try {
+      let totalSynced = 0;
+      const syncPromises = brokers.map(async (broker) => {
+        try {
+          const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/sync?broker_id=${broker.id}`;
+          const response = await fetch(apiUrl, {
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          const result = await response.json();
+
+          if (result.success) {
+            totalSynced += result.synced || 0;
+          }
+        } catch (err) {
+          console.error(`Error syncing orders for broker ${broker.id}:`, err);
+        }
+      });
+
+      await Promise.all(syncPromises);
+      await loadOrders();
+      setSyncMessage(`Successfully synced ${totalSynced} order(s)`);
+      setTimeout(() => setSyncMessage(''), 3000);
+    } catch (error: any) {
+      setCancelError(`Failed to sync orders: ${error.message}`);
+      setTimeout(() => setCancelError(''), 5000);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -368,6 +423,15 @@ export function Orders() {
                 ))}
               </select>
               <button
+                onClick={handleSyncOrders}
+                disabled={syncing}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Sync orders from Zerodha"
+              >
+                <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Syncing...' : 'Sync'}
+              </button>
+              <button
                 onClick={() => setShowPlaceOrder(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
               >
@@ -394,9 +458,9 @@ export function Orders() {
         </div>
       </div>
 
-      {cancelMessage && (
+      {(cancelMessage || syncMessage) && (
         <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
-          {cancelMessage}
+          {cancelMessage || syncMessage}
         </div>
       )}
 
@@ -410,6 +474,20 @@ export function Orders() {
         isOpen={showPlaceOrder}
         onClose={() => setShowPlaceOrder(false)}
         onSuccess={loadOrders}
+      />
+
+      <EditOrderModal
+        isOpen={showEditOrder}
+        onClose={() => {
+          setShowEditOrder(false);
+          setEditingOrder(null);
+        }}
+        onSuccess={() => {
+          loadOrders();
+          setSyncMessage('Order updated successfully');
+          setTimeout(() => setSyncMessage(''), 3000);
+        }}
+        order={editingOrder}
       />
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -533,17 +611,29 @@ export function Orders() {
                       {new Date(order.created_at).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {canCancelOrder(order.status) && (
-                        <button
-                          onClick={() => handleCancelOrder(order)}
-                          disabled={cancellingOrders.has(order.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Cancel Order"
-                        >
-                          <X className="w-4 h-4" />
-                          {cancellingOrders.has(order.id) ? 'Cancelling...' : 'Cancel'}
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {canEditOrder(order.status) && (
+                          <button
+                            onClick={() => handleEditOrder(order)}
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded transition"
+                            title="Edit Order"
+                          >
+                            <Edit className="w-4 h-4" />
+                            Edit
+                          </button>
+                        )}
+                        {canCancelOrder(order.status) && (
+                          <button
+                            onClick={() => handleCancelOrder(order)}
+                            disabled={cancellingOrders.has(order.id)}
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Cancel Order"
+                          >
+                            <X className="w-4 h-4" />
+                            {cancellingOrders.has(order.id) ? 'Cancelling...' : 'Cancel'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
