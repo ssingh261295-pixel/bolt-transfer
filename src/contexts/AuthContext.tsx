@@ -23,11 +23,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log('=== FETCHING PROFILE ===');
+      console.log('User ID:', userId);
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
+
+      console.log('Profile data received:', data);
+      console.log('Profile error:', error);
+      if (data) {
+        console.log('is_admin value:', data.is_admin);
+        console.log('is_admin type:', typeof data.is_admin);
+        console.log('All profile fields:', Object.keys(data));
+      }
+      console.log('=======================');
 
       if (error) {
         console.error('Error fetching profile:', error);
