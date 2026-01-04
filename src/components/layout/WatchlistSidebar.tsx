@@ -29,8 +29,13 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [brokerId, setBrokerId] = useState<string | null>(null);
+  const [indicesExpanded, setIndicesExpanded] = useState(true);
 
   const { isConnected, connect, subscribe, unsubscribe, getTick } = useZerodhaWebSocket(brokerId || undefined);
+
+  // NIFTY 50: 256265, SENSEX: 265
+  const niftyToken = 256265;
+  const sensexToken = 265;
 
   useEffect(() => {
     if (user) {
@@ -46,12 +51,14 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
   }, [brokerId, isConnected, connect]);
 
   useEffect(() => {
-    if (isConnected && watchlistItems.length > 0) {
+    if (isConnected) {
       const tokens = watchlistItems.map(item => item.instrument_token);
-      subscribe(tokens, 'full');
+      // Always subscribe to indices
+      const allTokens = [niftyToken, sensexToken, ...tokens];
+      subscribe(allTokens, 'full');
 
       return () => {
-        unsubscribe(tokens);
+        unsubscribe(allTokens);
       };
     }
   }, [isConnected, watchlistItems, subscribe, unsubscribe]);
@@ -170,6 +177,75 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
           </div>
         )}
       </div>
+
+      {/* Indices Section */}
+      {brokerId && (
+        <div className="border-b border-gray-200">
+          <button
+            onClick={() => setIndicesExpanded(!indicesExpanded)}
+            className="w-full flex items-center justify-between px-4 py-2 hover:bg-gray-50 transition-colors"
+          >
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Indices</span>
+            {indicesExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+          </button>
+
+          {indicesExpanded && (
+            <div className="px-4 pb-3 space-y-1">
+              {/* NIFTY 50 */}
+              {(() => {
+                const tick = getTick(niftyToken);
+                const lastPrice = tick?.last_price || 0;
+                const previousClose = tick?.close || 0;
+                const change = previousClose > 0 ? (lastPrice - previousClose) : 0;
+                const changePercent = previousClose > 0 ? ((change / previousClose) * 100) : 0;
+
+                return (
+                  <div className="flex items-center justify-between py-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-gray-900">NIFTY 50</span>
+                      <span className="font-bold text-sm text-gray-900">
+                        ₹{lastPrice > 0 ? lastPrice.toFixed(2) : '--'}
+                      </span>
+                    </div>
+                    {change !== 0 && (
+                      <div className={`flex items-center gap-1 text-xs font-semibold ${getPriceColor(change)}`}>
+                        {change > 0 ? '+' : ''}{change.toFixed(2)}
+                        <span className="text-[10px]">({changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* SENSEX */}
+              {(() => {
+                const tick = getTick(sensexToken);
+                const lastPrice = tick?.last_price || 0;
+                const previousClose = tick?.close || 0;
+                const change = previousClose > 0 ? (lastPrice - previousClose) : 0;
+                const changePercent = previousClose > 0 ? ((change / previousClose) * 100) : 0;
+
+                return (
+                  <div className="flex items-center justify-between py-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-gray-900">SENSEX</span>
+                      <span className="font-bold text-sm text-gray-900">
+                        ₹{lastPrice > 0 ? lastPrice.toFixed(2) : '--'}
+                      </span>
+                    </div>
+                    {change !== 0 && (
+                      <div className={`flex items-center gap-1 text-xs font-semibold ${getPriceColor(change)}`}>
+                        {change > 0 ? '+' : ''}{change.toFixed(2)}
+                        <span className="text-[10px]">({changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Items List */}
       <div className="flex-1 overflow-y-auto">

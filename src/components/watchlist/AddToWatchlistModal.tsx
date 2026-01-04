@@ -33,7 +33,7 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
     try {
       const session = await supabase.auth.getSession();
 
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NFO&search=${encodeURIComponent(searchTerm)}`;
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NSE&search=${encodeURIComponent(searchTerm)}`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -44,13 +44,14 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.instruments) {
-          // Filter only FUT (futures) instruments, exclude CE/PE options
-          const futuresOnly = data.instruments.filter((inst: any) =>
-            inst.instrument_type === 'FUT' ||
-            (inst.tradingsymbol && inst.tradingsymbol.toUpperCase().includes('FUT'))
+          // Filter only EQ (equity/cash) instruments
+          const equityOnly = data.instruments.filter((inst: any) =>
+            inst.instrument_type === 'EQ' ||
+            inst.segment === 'NSE' ||
+            (!inst.instrument_type || inst.instrument_type === '')
           );
 
-          const sortedInstruments = futuresOnly.sort((a: any, b: any) => {
+          const sortedInstruments = equityOnly.sort((a: any, b: any) => {
             return a.tradingsymbol.localeCompare(b.tradingsymbol);
           });
           setFilteredInstruments(sortedInstruments.slice(0, 50));
@@ -92,7 +93,7 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
           watchlist_id: watchlistId,
           instrument_token: instrument.instrument_token,
           tradingsymbol: instrument.tradingsymbol,
-          exchange: instrument.exchange || 'NFO',
+          exchange: instrument.exchange || 'NSE',
           sort_order: 0,
         });
 
@@ -134,7 +135,7 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search futures (min 2 chars, e.g., FEDERALBNK, NIFTY)"
+              placeholder="Search NSE stocks (min 2 chars, e.g., RELIANCE, TCS, INFY)"
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               autoFocus
             />
@@ -150,7 +151,7 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
             </div>
           ) : filteredInstruments.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              Start typing to search futures contracts (minimum 2 characters)
+              Start typing to search NSE cash stocks (minimum 2 characters)
             </div>
           ) : (
             <div className="space-y-2">
@@ -164,8 +165,8 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
                       <div className="font-medium text-gray-900">
                         {instrument.tradingsymbol}
                       </div>
-                      <span className="px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 rounded">
-                        FUT
+                      <span className="px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700 rounded">
+                        EQ
                       </span>
                     </div>
                     {instrument.name && (
@@ -173,7 +174,6 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
                     )}
                     <div className="text-xs text-gray-400">
                       {instrument.exchange}
-                      {instrument.expiry && ` • Expiry: ${new Date(instrument.expiry).toLocaleDateString()}`}
                     </div>
                   </div>
                   <button
