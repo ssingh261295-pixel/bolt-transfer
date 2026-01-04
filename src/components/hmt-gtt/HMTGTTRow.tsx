@@ -33,7 +33,7 @@ const HMTGTTRowComponent = ({
     const percentOfLTP = ((triggerValue - currentPrice) / currentPrice) * 100;
     const absPercent = Math.abs(percentOfLTP);
     const sign = percentOfLTP > 0 ? '+' : '-';
-    return `${sign}${absPercent.toFixed(1)}% of LTP`;
+    return `${sign}${absPercent.toFixed(2)}% of LTP`;
   };
 
   const calculatePnL = () => {

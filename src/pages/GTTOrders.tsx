@@ -607,7 +607,7 @@ export function GTTOrders() {
     const percentOfLTP = ((triggerValue - currentPrice) / currentPrice) * 100;
     const absPercent = Math.abs(percentOfLTP);
     const sign = percentOfLTP > 0 ? '+' : '-';
-    return `${sign}${absPercent.toFixed(1)}%`;
+    return `${sign}${absPercent.toFixed(2)}%`;
   };
 
   return (
