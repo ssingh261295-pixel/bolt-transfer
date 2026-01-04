@@ -110,17 +110,20 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
   useEffect(() => {
     const setupGTT = async () => {
       if (editingGTT) {
+        // Handle bulk edit - use first order as template
+        const firstOrder = editingGTT.bulkEdit ? editingGTT.orders[0] : editingGTT;
+
         // Handle both regular GTT (from Zerodha API) and HMT GTT (from database)
         const tradingsymbol = isHMTMode
-          ? editingGTT.trading_symbol
-          : (editingGTT.condition?.tradingsymbol || '');
+          ? firstOrder.trading_symbol
+          : (firstOrder.condition?.tradingsymbol || '');
         const exchangeValue = isHMTMode
-          ? editingGTT.exchange
-          : (editingGTT.condition?.exchange || 'NFO');
+          ? firstOrder.exchange
+          : (firstOrder.condition?.exchange || 'NFO');
         const transType = isHMTMode
-          ? editingGTT.transaction_type
-          : (editingGTT.orders?.[0]?.transaction_type || 'BUY');
-        const gttTypeValue = isHMTMode ? editingGTT.condition_type : (editingGTT.type || 'single');
+          ? firstOrder.transaction_type
+          : (firstOrder.orders?.[0]?.transaction_type || 'BUY');
+        const gttTypeValue = isHMTMode ? firstOrder.condition_type : (firstOrder.type || 'single');
 
         setSymbol(tradingsymbol);
         setExchange(exchangeValue);
@@ -128,8 +131,8 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         setGttType(gttTypeValue);
 
         const instrumentToken = isHMTMode
-          ? editingGTT.instrument_token
-          : editingGTT.condition?.instrument_token;
+          ? firstOrder.instrument_token
+          : firstOrder.condition?.instrument_token;
 
         if (instrumentToken) {
           const instrument = {
@@ -146,61 +149,61 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         if (isHMTMode) {
           // Handle HMT GTT editing
           if (gttTypeValue === 'two-leg') {
-            setTriggerPrice1(editingGTT.trigger_price_1 ? roundToTickSize(editingGTT.trigger_price_1) : '');
-            setPrice1(editingGTT.order_price_1 ? roundToTickSize(editingGTT.order_price_1) : '');
-            setQuantity1(editingGTT.quantity_1 || 200);
+            setTriggerPrice1(firstOrder.trigger_price_1 ? roundToTickSize(firstOrder.trigger_price_1) : '');
+            setPrice1(firstOrder.order_price_1 ? roundToTickSize(firstOrder.order_price_1) : '');
+            setQuantity1(firstOrder.quantity_1 || 200);
             setOrderType1('LIMIT');
-            setProduct1(editingGTT.product_type_1 || 'NRML');
+            setProduct1(firstOrder.product_type_1 || 'NRML');
 
-            setTriggerPrice2(editingGTT.trigger_price_2 ? roundToTickSize(editingGTT.trigger_price_2) : '');
-            setPrice2(editingGTT.order_price_2 ? roundToTickSize(editingGTT.order_price_2) : '');
-            setQuantity2(editingGTT.quantity_2 || 200);
+            setTriggerPrice2(firstOrder.trigger_price_2 ? roundToTickSize(firstOrder.trigger_price_2) : '');
+            setPrice2(firstOrder.order_price_2 ? roundToTickSize(firstOrder.order_price_2) : '');
+            setQuantity2(firstOrder.quantity_2 || 200);
             setOrderType2('LIMIT');
-            setProduct2(editingGTT.product_type_2 || 'NRML');
+            setProduct2(firstOrder.product_type_2 || 'NRML');
           } else {
-            setTriggerPrice1(editingGTT.trigger_price_1 ? roundToTickSize(editingGTT.trigger_price_1) : '');
-            setQuantity1(editingGTT.quantity_1 || 200);
+            setTriggerPrice1(firstOrder.trigger_price_1 ? roundToTickSize(firstOrder.trigger_price_1) : '');
+            setQuantity1(firstOrder.quantity_1 || 200);
             setOrderType1('LIMIT');
-            setPrice1(editingGTT.order_price_1 ? roundToTickSize(editingGTT.order_price_1) : '');
-            setProduct1(editingGTT.product_type_1 || 'NRML');
+            setPrice1(firstOrder.order_price_1 ? roundToTickSize(firstOrder.order_price_1) : '');
+            setProduct1(firstOrder.product_type_1 || 'NRML');
           }
         } else {
           // Handle regular GTT editing
-          if (editingGTT.type === 'two-leg') {
-            const trigger0 = editingGTT.condition?.trigger_values?.[0];
-            const trigger1 = editingGTT.condition?.trigger_values?.[1];
+          if (firstOrder.type === 'two-leg') {
+            const trigger0 = firstOrder.condition?.trigger_values?.[0];
+            const trigger1 = firstOrder.condition?.trigger_values?.[1];
 
             if (transType === 'BUY') {
               setTriggerPrice1(trigger1 ? roundToTickSize(trigger1) : '');
-              setPrice1(editingGTT.orders?.[1]?.price ? roundToTickSize(editingGTT.orders[1].price) : '');
-              setQuantity1(editingGTT.orders?.[1]?.quantity || 200);
-              setOrderType1(editingGTT.orders?.[1]?.order_type || 'LIMIT');
-              setProduct1(editingGTT.orders?.[1]?.product || 'NRML');
+              setPrice1(firstOrder.orders?.[1]?.price ? roundToTickSize(firstOrder.orders[1].price) : '');
+              setQuantity1(firstOrder.orders?.[1]?.quantity || 200);
+              setOrderType1(firstOrder.orders?.[1]?.order_type || 'LIMIT');
+              setProduct1(firstOrder.orders?.[1]?.product || 'NRML');
 
               setTriggerPrice2(trigger0 ? roundToTickSize(trigger0) : '');
-              setPrice2(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
-              setQuantity2(editingGTT.orders?.[0]?.quantity || 200);
-              setOrderType2(editingGTT.orders?.[0]?.order_type || 'LIMIT');
-              setProduct2(editingGTT.orders?.[0]?.product || 'NRML');
+              setPrice2(firstOrder.orders?.[0]?.price ? roundToTickSize(firstOrder.orders[0].price) : '');
+              setQuantity2(firstOrder.orders?.[0]?.quantity || 200);
+              setOrderType2(firstOrder.orders?.[0]?.order_type || 'LIMIT');
+              setProduct2(firstOrder.orders?.[0]?.product || 'NRML');
             } else {
               setTriggerPrice1(trigger0 ? roundToTickSize(trigger0) : '');
-              setPrice1(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
-              setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
-              setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
-              setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
+              setPrice1(firstOrder.orders?.[0]?.price ? roundToTickSize(firstOrder.orders[0].price) : '');
+              setQuantity1(firstOrder.orders?.[0]?.quantity || 200);
+              setOrderType1(firstOrder.orders?.[0]?.order_type || 'LIMIT');
+              setProduct1(firstOrder.orders?.[0]?.product || 'NRML');
 
               setTriggerPrice2(trigger1 ? roundToTickSize(trigger1) : '');
-              setPrice2(editingGTT.orders?.[1]?.price ? roundToTickSize(editingGTT.orders[1].price) : '');
-              setQuantity2(editingGTT.orders?.[1]?.quantity || 200);
-              setOrderType2(editingGTT.orders?.[1]?.order_type || 'LIMIT');
-              setProduct2(editingGTT.orders?.[1]?.product || 'NRML');
+              setPrice2(firstOrder.orders?.[1]?.price ? roundToTickSize(firstOrder.orders[1].price) : '');
+              setQuantity2(firstOrder.orders?.[1]?.quantity || 200);
+              setOrderType2(firstOrder.orders?.[1]?.order_type || 'LIMIT');
+              setProduct2(firstOrder.orders?.[1]?.product || 'NRML');
             }
           } else {
-            setTriggerPrice1(editingGTT.condition?.trigger_values?.[0] ? roundToTickSize(editingGTT.condition.trigger_values[0]) : '');
-            setQuantity1(editingGTT.orders?.[0]?.quantity || 200);
-            setOrderType1(editingGTT.orders?.[0]?.order_type || 'LIMIT');
-            setPrice1(editingGTT.orders?.[0]?.price ? roundToTickSize(editingGTT.orders[0].price) : '');
-            setProduct1(editingGTT.orders?.[0]?.product || 'NRML');
+            setTriggerPrice1(firstOrder.condition?.trigger_values?.[0] ? roundToTickSize(firstOrder.condition.trigger_values[0]) : '');
+            setQuantity1(firstOrder.orders?.[0]?.quantity || 200);
+            setOrderType1(firstOrder.orders?.[0]?.order_type || 'LIMIT');
+            setPrice1(firstOrder.orders?.[0]?.price ? roundToTickSize(firstOrder.orders[0].price) : '');
+            setProduct1(firstOrder.orders?.[0]?.product || 'NRML');
           }
         }
       } else if (isOpen) {

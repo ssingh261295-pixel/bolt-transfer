@@ -47,11 +47,14 @@ const HMTGTTRowComponent = ({
 
     const trigger1 = parseFloat(gtt.trigger_price_1) || 0;
     const trigger2 = parseFloat(gtt.trigger_price_2) || 0;
-    const stopLoss = Math.min(trigger1, trigger2);
 
     if (gtt.transaction_type === 'SELL' && position.quantity > 0) {
+      // For SELL orders (exiting long), stop loss is the lower trigger
+      const stopLoss = Math.min(trigger1, trigger2);
       return stopLoss > position.average_price;
     } else if (gtt.transaction_type === 'BUY' && position.quantity < 0) {
+      // For BUY orders (exiting short), stop loss is the higher trigger
+      const stopLoss = Math.max(trigger1, trigger2);
       return stopLoss < position.average_price;
     }
 

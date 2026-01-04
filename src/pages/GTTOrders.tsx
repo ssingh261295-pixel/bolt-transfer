@@ -461,12 +461,15 @@ export function GTTOrders() {
 
     const trigger1 = gtt.condition?.trigger_values?.[0] || 0;
     const trigger2 = gtt.condition?.trigger_values?.[1] || 0;
-    const stopLoss = Math.min(trigger1, trigger2);
 
     const transactionType = gtt.orders?.[0]?.transaction_type;
     if (transactionType === 'SELL' && position.quantity > 0) {
+      // For SELL orders (exiting long), stop loss is the lower trigger
+      const stopLoss = Math.min(trigger1, trigger2);
       return stopLoss > position.average_price;
     } else if (transactionType === 'BUY' && position.quantity < 0) {
+      // For BUY orders (exiting short), stop loss is the higher trigger
+      const stopLoss = Math.max(trigger1, trigger2);
       return stopLoss < position.average_price;
     }
 
