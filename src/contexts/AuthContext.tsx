@@ -78,6 +78,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (session?.user) {
             const profileData = await fetchProfile(session.user.id);
+
+            // Check account status and sign out if pending or disabled
+            if (profileData && (profileData.account_status === 'pending' || profileData.account_status === 'disabled')) {
+              await supabase.auth.signOut();
+              setSession(null);
+              setUser(null);
+              setProfile(null);
+              setLoading(false);
+              return;
+            }
+
             if (mounted) {
               setProfile(profileData);
             }
@@ -113,6 +124,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!profileData && _event === 'SIGNED_IN') {
               await new Promise(resolve => setTimeout(resolve, 1500));
               profileData = await fetchProfile(session.user.id);
+            }
+
+            // Check account status and sign out if pending or disabled
+            if (profileData && (profileData.account_status === 'pending' || profileData.account_status === 'disabled')) {
+              await supabase.auth.signOut();
+              if (mounted) {
+                setSession(null);
+                setUser(null);
+                setProfile(null);
+              }
+              return;
             }
 
             if (mounted) {
