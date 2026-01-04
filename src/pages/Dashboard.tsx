@@ -205,7 +205,8 @@ export function Dashboard() {
             const positions = result.positions || [];
 
             const todayPnl = positions.reduce((sum: number, pos: any) => {
-              return sum + (pos.pnl || 0);
+              const pnl = pos.pnl || ((pos.last_price - pos.average_price) * pos.quantity);
+              return sum + pnl;
             }, 0);
 
             const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;

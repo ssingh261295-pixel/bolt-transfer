@@ -185,8 +185,9 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
             {watchlistItems.map((item) => {
               const tick = getTick(item.instrument_token);
               const lastPrice = tick?.last_price || 0;
-              const change = tick?.change || 0;
-              const changePercent = tick ? ((change / (lastPrice - change)) * 100) : 0;
+              const previousClose = tick?.close || 0;
+              const change = previousClose > 0 ? (lastPrice - previousClose) : 0;
+              const changePercent = previousClose > 0 ? ((change / previousClose) * 100) : 0;
 
               return (
                 <div
