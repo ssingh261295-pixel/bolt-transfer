@@ -1,38 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { TrendingUp, User, ShoppingCart, LogOut, Settings as SettingsIcon, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../lib/supabase';
 import { NotificationBell } from './NotificationBell';
 
 export default function TopNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      checkAdminStatus();
-    }
-  }, [user]);
-
-  const checkAdminStatus = async () => {
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', user?.id)
-        .maybeSingle();
-
-      if (data) {
-        setIsAdmin(data.is_admin || false);
-      }
-    } catch (error) {
-      console.error('Error checking admin status:', error);
-    }
-  };
+  const isAdmin = Boolean(profile?.is_admin);
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard' },
