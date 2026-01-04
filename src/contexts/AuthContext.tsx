@@ -201,7 +201,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Profile is automatically created by database trigger (handle_new_user)
-      // Trigger reads full_name from raw_user_meta_data
+      // Trigger reads full_name from raw_user_meta_data and sets account_status to 'pending'
+      // Admins are notified via the notification system
+
+      // Sign out the user immediately after signup since they need admin approval
+      await supabase.auth.signOut();
 
       return { error: null };
     } catch (error) {
