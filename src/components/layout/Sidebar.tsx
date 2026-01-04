@@ -20,15 +20,6 @@ interface SidebarProps {
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { signOut, profile } = useAuth();
 
-  console.log('=== SIDEBAR DEBUG ===');
-  console.log('Profile:', profile);
-  console.log('Profile keys:', profile ? Object.keys(profile) : 'null');
-  console.log('Is Admin value:', profile?.is_admin);
-  console.log('Is Admin Type:', typeof profile?.is_admin);
-  console.log('Is Admin Strict Check:', profile?.is_admin === true);
-  console.log('Full profile JSON:', JSON.stringify(profile, null, 2));
-  console.log('====================');
-
   const baseMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'strategies', label: 'Strategies', icon: TrendingUp },
@@ -43,8 +34,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const settingsMenuItem = { id: 'settings', label: 'Settings', icon: Settings };
 
   const isAdmin = Boolean(profile?.is_admin);
-  console.log('Sidebar - Computed isAdmin:', isAdmin);
-  console.log('Sidebar - Boolean conversion:', profile?.is_admin, '->', isAdmin);
 
   const menuItems = isAdmin
     ? [...baseMenuItems, adminMenuItem, settingsMenuItem]

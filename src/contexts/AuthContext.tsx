@@ -23,8 +23,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      console.log('=== FETCHING PROFILE FOR USER ===', userId);
-
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -32,25 +30,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (error) {
-        console.error('!!! Error fetching profile:', error);
+        console.error('Error fetching profile:', error);
         return null;
       }
 
       if (!data) {
-        console.warn('!!! No profile data returned for user:', userId);
+        console.warn('No profile data returned for user:', userId);
         return null;
       }
 
-      console.log('=== PROFILE FETCH DEBUG ===');
-      console.log('Fetched profile data:', data);
-      console.log('Is Admin:', data?.is_admin);
-      console.log('Is Admin Type:', typeof data?.is_admin);
-      console.log('Is Admin Strict:', data?.is_admin === true);
-      console.log('==========================');
-
       return data;
     } catch (err) {
-      console.error('!!! Exception fetching profile:', err);
+      console.error('Exception fetching profile:', err);
       return null;
     }
   };
@@ -81,17 +72,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        console.log('=== INITIAL SESSION CHECK ===', session ? 'Has session' : 'No session');
-        console.log('User ID:', session?.user?.id);
-        console.log('User Email:', session?.user?.email);
-
         if (mounted) {
           setSession(session);
           setUser(session?.user ?? null);
 
           if (session?.user) {
             const profileData = await fetchProfile(session.user.id);
-            console.log('Profile set to:', profileData);
             if (mounted) {
               setProfile(profileData);
             }
@@ -114,8 +100,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
         try {
-          console.log('=== AUTH STATE CHANGE ===', _event, session?.user?.id);
-
           if (!mounted) return;
 
           setSession(session);
