@@ -15,6 +15,7 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
   const [filteredInstruments, setFilteredInstruments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
+  const [exchange, setExchange] = useState<'NSE' | 'NFO'>('NSE');
 
   useEffect(() => {
     const delaySearch = setTimeout(() => {
@@ -26,14 +27,14 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
     }, 300);
 
     return () => clearTimeout(delaySearch);
-  }, [search]);
+  }, [search, exchange]);
 
   const loadInstruments = async (searchTerm: string) => {
     setLoading(true);
     try {
       const session = await supabase.auth.getSession();
 
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NSE&search=${encodeURIComponent(searchTerm)}`;
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=${exchange}&search=${encodeURIComponent(searchTerm)}`;
 
       const response = await fetch(apiUrl, {
         headers: {
@@ -44,14 +45,24 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.instruments) {
-          // Filter only EQ (equity/cash) instruments
-          const equityOnly = data.instruments.filter((inst: any) =>
-            inst.instrument_type === 'EQ' ||
-            inst.segment === 'NSE' ||
-            (!inst.instrument_type || inst.instrument_type === '')
-          );
+          let filteredResults;
 
-          const sortedInstruments = equityOnly.sort((a: any, b: any) => {
+          if (exchange === 'NSE') {
+            // Filter only EQ (equity/cash) instruments
+            filteredResults = data.instruments.filter((inst: any) =>
+              inst.instrument_type === 'EQ' ||
+              inst.segment === 'NSE' ||
+              (!inst.instrument_type || inst.instrument_type === '')
+            );
+          } else {
+            // Filter only FUT (futures) instruments, exclude CE/PE options
+            filteredResults = data.instruments.filter((inst: any) =>
+              inst.instrument_type === 'FUT' ||
+              (inst.tradingsymbol && inst.tradingsymbol.toUpperCase().includes('FUT'))
+            );
+          }
+
+          const sortedInstruments = filteredResults.sort((a: any, b: any) => {
             return a.tradingsymbol.localeCompare(b.tradingsymbol);
           });
           setFilteredInstruments(sortedInstruments.slice(0, 50));
@@ -93,7 +104,7 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
           watchlist_id: watchlistId,
           instrument_token: instrument.instrument_token,
           tradingsymbol: instrument.tradingsymbol,
-          exchange: instrument.exchange || 'NSE',
+          exchange: instrument.exchange || exchange,
           sort_order: 0,
         });
 
@@ -128,14 +139,40 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
           </button>
         </div>
 
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4 border-b border-gray-200 space-y-3">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setExchange('NSE')}
+              className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                exchange === 'NSE'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              NSE Cash
+            </button>
+            <button
+              onClick={() => setExchange('NFO')}
+              className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                exchange === 'NFO'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              NFO Futures
+            </button>
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search NSE stocks (min 2 chars, e.g., RELIANCE, TCS, INFY)"
+              placeholder={
+                exchange === 'NSE'
+                  ? 'Search NSE stocks (e.g., RELIANCE, TCS, INFY)'
+                  : 'Search NFO futures (e.g., NIFTY, BANKNIFTY, FEDERALBNK)'
+              }
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               autoFocus
             />
@@ -151,7 +188,7 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
             </div>
           ) : filteredInstruments.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              Start typing to search NSE cash stocks (minimum 2 characters)
+              Start typing to search {exchange === 'NSE' ? 'NSE cash stocks' : 'NFO futures'} (minimum 2 characters)
             </div>
           ) : (
             <div className="space-y-2">
@@ -165,8 +202,12 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
                       <div className="font-medium text-gray-900">
                         {instrument.tradingsymbol}
                       </div>
-                      <span className="px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700 rounded">
-                        EQ
+                      <span className={`px-2 py-0.5 text-xs font-semibold rounded ${
+                        exchange === 'NSE'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {exchange === 'NSE' ? 'EQ' : 'FUT'}
                       </span>
                     </div>
                     {instrument.name && (
@@ -174,6 +215,7 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
                     )}
                     <div className="text-xs text-gray-400">
                       {instrument.exchange}
+                      {instrument.expiry && ` • Expiry: ${new Date(instrument.expiry).toLocaleDateString()}`}
                     </div>
                   </div>
                   <button

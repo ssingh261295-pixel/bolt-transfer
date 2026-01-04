@@ -33,9 +33,18 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
 
   const { isConnected, connect, subscribe, unsubscribe, getTick } = useZerodhaWebSocket(brokerId || undefined);
 
-  // NIFTY 50: 256265, SENSEX: 265
+  // Index instrument tokens - NIFTY 50: 256265, SENSEX: 265
   const niftyToken = 256265;
   const sensexToken = 265;
+
+  // Debug: Log when ticks are received
+  useEffect(() => {
+    const niftyTick = getTick(niftyToken);
+    const sensexTick = getTick(sensexToken);
+    if (niftyTick || sensexTick) {
+      console.log('Index ticks:', { nifty: niftyTick, sensex: sensexTick });
+    }
+  }, [getTick(niftyToken), getTick(sensexToken)]);
 
   useEffect(() => {
     if (user) {
@@ -204,10 +213,10 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm text-gray-900">NIFTY 50</span>
                       <span className="font-bold text-sm text-gray-900">
-                        ₹{lastPrice > 0 ? lastPrice.toFixed(2) : '--'}
+                        {!isConnected ? 'Connecting...' : tick ? lastPrice.toFixed(2) : 'Loading...'}
                       </span>
                     </div>
-                    {change !== 0 && (
+                    {tick && change !== 0 && (
                       <div className={`flex items-center gap-1 text-xs font-semibold ${getPriceColor(change)}`}>
                         {change > 0 ? '+' : ''}{change.toFixed(2)}
                         <span className="text-[10px]">({changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
@@ -230,10 +239,10 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm text-gray-900">SENSEX</span>
                       <span className="font-bold text-sm text-gray-900">
-                        ₹{lastPrice > 0 ? lastPrice.toFixed(2) : '--'}
+                        {!isConnected ? 'Connecting...' : tick ? lastPrice.toFixed(2) : 'Loading...'}
                       </span>
                     </div>
-                    {change !== 0 && (
+                    {tick && change !== 0 && (
                       <div className={`flex items-center gap-1 text-xs font-semibold ${getPriceColor(change)}`}>
                         {change > 0 ? '+' : ''}{change.toFixed(2)}
                         <span className="text-[10px]">({changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
