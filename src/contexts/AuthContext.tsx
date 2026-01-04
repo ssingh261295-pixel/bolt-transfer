@@ -124,19 +124,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (session?.user) {
             let profileData = await fetchProfile(session.user.id);
 
+            // Profile should be automatically created by database trigger
+            // If not found after a short delay, try fetching again
             if (!profileData && _event === 'SIGNED_IN') {
-              const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || null;
-              const { error: insertError } = await supabase
-                .from('profiles')
-                .insert({
-                  id: session.user.id,
-                  full_name: userName,
-                  plan_type: 'pro',
-                });
-
-              if (!insertError) {
-                profileData = await fetchProfile(session.user.id);
-              }
+              await new Promise(resolve => setTimeout(resolve, 1500));
+              profileData = await fetchProfile(session.user.id);
             }
 
             if (mounted) {
@@ -197,24 +189,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: fullName || null,
+          }
+        }
       });
 
       if (error) {
         return { error: error as Error };
       }
 
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            full_name: fullName || null,
-            plan_type: 'pro',
-          });
-
-        if (profileError) {
-          console.error('Error creating profile:', profileError);
-        }
+      // Profile is automatically created by database trigger (handle_new_user)
+      // If we need to update the full name, do it after a brief delay
+      if (data.user && fullName) {
+        setTimeout(async () => {
+          await supabase
+            .from('profiles')
+            .update({ full_name: fullName })
+            .eq('id', data.user!.id);
+        }, 1000);
       }
 
       return { error: null };
