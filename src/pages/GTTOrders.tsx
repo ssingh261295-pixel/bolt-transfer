@@ -810,6 +810,9 @@ export function GTTOrders() {
                   Qty.
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                  Avg. Price
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   P&L
                 </th>
                 <th
@@ -918,6 +921,20 @@ export function GTTOrders() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {quantity}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const position = getPositionForGTT(gtt);
+                        const pnl = calculatePnL(gtt, currentPrice);
+                        if (!position) {
+                          return <span className="text-sm text-gray-400">-</span>;
+                        }
+                        return (
+                          <span className={`text-sm font-medium px-2 py-1 rounded ${pnl !== null && pnl >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            ₹{position.average_price?.toFixed(2)}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       {(() => {

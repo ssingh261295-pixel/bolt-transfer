@@ -709,6 +709,9 @@ export function HMTGTTOrders() {
                   Qty.
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                  Avg. Price
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   P&L
                 </th>
                 <th

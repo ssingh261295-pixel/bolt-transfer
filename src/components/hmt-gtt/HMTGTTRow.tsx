@@ -154,6 +154,15 @@ const HMTGTTRowComponent = ({
       <td className="px-4 py-3 text-sm text-gray-900">
         {gtt.quantity_1}
       </td>
+      <td className="px-4 py-3">
+        {position ? (
+          <span className={`text-sm font-medium px-2 py-1 rounded ${pnl !== null && pnl >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            ₹{position.average_price?.toFixed(2)}
+          </span>
+        ) : (
+          <span className="text-sm text-gray-400">-</span>
+        )}
+      </td>
       <td className="px-4 py-3 transition-all duration-150">
         {pnl === null ? (
           <span className="text-sm text-gray-400">-</span>
