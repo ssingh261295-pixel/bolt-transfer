@@ -554,6 +554,7 @@ export function GTTOrders() {
       setDeleteMessage(`Successfully deleted ${successCount} GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
       setDeleteError('');
       setTimeout(() => setDeleteMessage(''), 5000);
+      syncWithZerodha();
     } else {
       const firstError = results.find(r => !r.success)?.error || 'Unknown error';
       setDeleteError(`Failed to delete GTT orders: ${firstError}`);
@@ -593,6 +594,7 @@ export function GTTOrders() {
       if (result.success) {
         setDeleteMessage('Successfully deleted GTT order');
         setTimeout(() => setDeleteMessage(''), 5000);
+        syncWithZerodha();
       } else {
         setDeleteError('Failed to delete GTT order: ' + result.error);
         setTimeout(() => setDeleteError(''), 5000);

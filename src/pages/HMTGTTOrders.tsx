@@ -340,6 +340,7 @@ export function HMTGTTOrders() {
       setDeleteMessage(`Successfully deleted ${successCount} HMT GTT order(s).${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
       setDeleteError('');
       setTimeout(() => setDeleteMessage(''), 5000);
+      loadHMTGTTOrders(true);
     } else {
       const firstError = results.find(r => !r.success)?.error || 'Unknown error';
       setDeleteError(`Failed to delete HMT GTT orders: ${firstError}`);
@@ -379,6 +380,7 @@ export function HMTGTTOrders() {
 
       setDeleteMessage('Successfully deleted HMT GTT order');
       setTimeout(() => setDeleteMessage(''), 5000);
+      loadHMTGTTOrders(true);
     } catch (err: any) {
       setDeleteError('Failed to delete HMT GTT order: ' + err.message);
       setTimeout(() => setDeleteError(''), 5000);
