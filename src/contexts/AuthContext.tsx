@@ -201,15 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Profile is automatically created by database trigger (handle_new_user)
-      // If we need to update the full name, do it after a brief delay
-      if (data.user && fullName) {
-        setTimeout(async () => {
-          await supabase
-            .from('profiles')
-            .update({ full_name: fullName })
-            .eq('id', data.user!.id);
-        }, 1000);
-      }
+      // Trigger reads full_name from raw_user_meta_data
 
       return { error: null };
     } catch (error) {
