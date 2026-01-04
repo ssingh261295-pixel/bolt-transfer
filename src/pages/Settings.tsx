@@ -28,12 +28,8 @@ export function Settings() {
   }, [activeTab, profile?.id]);
 
   const loadRiskLimits = async () => {
-    if (!profile?.id) {
-      console.log('No profile ID available');
-      return;
-    }
+    if (!profile?.id) return;
 
-    console.log('Loading risk limits for user:', profile.id);
     setLoadingRiskLimits(true);
     try {
       const { data, error } = await supabase
@@ -42,21 +38,12 @@ export function Settings() {
         .eq('user_id', profile.id)
         .maybeSingle();
 
-      console.log('Risk limits query result:', { data, error });
-
-      if (error) {
-        console.error('Risk limits error:', error);
-        throw error;
-      }
-
+      if (error) throw error;
       if (data) {
-        console.log('Setting risk limits:', data);
         setRiskLimits(data);
-      } else {
-        console.log('No risk limits found for user');
       }
     } catch (error) {
-      console.error('Exception loading risk limits:', error);
+      console.error('Error loading risk limits:', error);
     } finally {
       setLoadingRiskLimits(false);
     }

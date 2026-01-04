@@ -12,15 +12,6 @@ export default function TopNavigation() {
 
   const isAdmin = Boolean(profile?.is_admin);
 
-  // Debug logging
-  if (showProfileMenu) {
-    console.log('=== PROFILE MENU DEBUG ===');
-    console.log('Profile:', profile);
-    console.log('is_admin:', profile?.is_admin);
-    console.log('isAdmin:', isAdmin);
-    console.log('========================');
-  }
-
   const navItems = [
     { label: 'Dashboard', path: '/dashboard' },
     { label: 'Brokers', path: '/brokers' },
