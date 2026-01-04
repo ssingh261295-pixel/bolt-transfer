@@ -544,7 +544,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         throw new Error('Please select at least one account');
       }
 
-      if (editingGTT && !brokerConnectionId) {
+      if (editingGTT && !editingGTT.bulkEdit && !brokerConnectionId) {
         throw new Error('No broker account found for this GTT order');
       }
 
@@ -583,13 +583,32 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         const trigger1 = parseFloat(roundToTickSize(parseFloat(triggerPrice1)));
         const limitPrice1 = parseFloat(roundToTickSize(parseFloat(price1)));
 
-        const brokersToProcess = editingGTT ? [brokerConnectionId] : selectedBrokerIds;
+        // Handle bulk edit vs single edit vs new order
+        let ordersToProcess: Array<{ id?: string; brokerId: string }> = [];
+
+        if (editingGTT?.bulkEdit) {
+          // Bulk edit: update multiple orders
+          ordersToProcess = editingGTT.orders.map((order: any) => ({
+            id: order.id,
+            brokerId: order.broker_connection_id || order.broker_connections?.id
+          }));
+        } else if (editingGTT) {
+          // Single edit: update one order
+          ordersToProcess = [{
+            id: editingGTT.id,
+            brokerId: brokerConnectionId
+          }];
+        } else {
+          // New orders: create for selected brokers
+          ordersToProcess = selectedBrokerIds.map(brokerId => ({ brokerId }));
+        }
+
         const results = await Promise.all(
-          brokersToProcess.map(async (brokerId) => {
+          ordersToProcess.map(async (orderInfo) => {
             try {
               const hmtGttData: any = {
                 user_id: user.id,
-                broker_connection_id: brokerId,
+                broker_connection_id: orderInfo.brokerId,
                 trading_symbol: symbol,
                 exchange: exchange,
                 instrument_token: selectedInstrument.instrument_token,
@@ -611,15 +630,17 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                 hmtGttData.quantity_2 = quantity2;
               }
 
-              if (editingGTT) {
+              if (orderInfo.id) {
+                // Update existing order
                 const { error } = await supabase
                   .from('hmt_gtt_orders')
                   .update(hmtGttData)
-                  .eq('id', editingGTT.id)
+                  .eq('id', orderInfo.id)
                   .eq('user_id', user.id);
 
                 if (error) throw error;
               } else {
+                // Insert new order
                 const { error } = await supabase
                   .from('hmt_gtt_orders')
                   .insert([hmtGttData]);
@@ -627,10 +648,10 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                 if (error) throw error;
               }
 
-              return { brokerId, success: true };
+              return { brokerId: orderInfo.brokerId, success: true };
             } catch (err: any) {
-              console.error(`Exception for broker ${brokerId}:`, err);
-              return { brokerId, success: false, error: err.message };
+              console.error(`Exception for broker ${orderInfo.brokerId}:`, err);
+              return { brokerId: orderInfo.brokerId, success: false, error: err.message };
             }
           })
         );
@@ -740,15 +761,33 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
       }
       gttData['condition[last_price]'] = lastPrice;
 
-      const brokersToProcess = editingGTT ? [brokerConnectionId] : selectedBrokerIds;
+      // Handle bulk edit vs single edit vs new order for regular GTT
+      let gttOrdersToProcess: Array<{ id?: number; brokerId: string }> = [];
+
+      if (editingGTT?.bulkEdit) {
+        // Bulk edit: update multiple orders
+        gttOrdersToProcess = editingGTT.orders.map((order: any) => ({
+          id: order.id,
+          brokerId: order.broker_info?.id
+        }));
+      } else if (editingGTT) {
+        // Single edit: update one order
+        gttOrdersToProcess = [{
+          id: editingGTT.id,
+          brokerId: brokerConnectionId
+        }];
+      } else {
+        // New orders: create for selected brokers
+        gttOrdersToProcess = selectedBrokerIds.map(brokerId => ({ brokerId }));
+      }
 
       // Process all brokers in parallel for better performance
       const results = await Promise.all(
-        brokersToProcess.map(async (brokerId) => {
+        gttOrdersToProcess.map(async (orderInfo) => {
           try {
-            const method = editingGTT ? 'PUT' : 'POST';
-            const gttIdParam = editingGTT ? `&gtt_id=${editingGTT.id}` : '';
-            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerId}${gttIdParam}`;
+            const method = orderInfo.id ? 'PUT' : 'POST';
+            const gttIdParam = orderInfo.id ? `&gtt_id=${orderInfo.id}` : '';
+            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${orderInfo.brokerId}${gttIdParam}`;
 
             const response = await fetch(apiUrl, {
               method: method,
@@ -760,17 +799,17 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
             });
 
             const result = await response.json();
-            console.log(`GTT creation result for broker ${brokerId}:`, result);
+            console.log(`GTT creation result for broker ${orderInfo.brokerId}:`, result);
 
             if (result.success) {
-              return { brokerId, success: true };
+              return { brokerId: orderInfo.brokerId, success: true };
             } else {
-              console.error(`Failed for broker ${brokerId}:`, result.error);
-              return { brokerId, success: false, error: result.error || 'Unknown error' };
+              console.error(`Failed for broker ${orderInfo.brokerId}:`, result.error);
+              return { brokerId: orderInfo.brokerId, success: false, error: result.error || 'Unknown error' };
             }
           } catch (err: any) {
-            console.error(`Exception for broker ${brokerId}:`, err);
-            return { brokerId, success: false, error: err.message };
+            console.error(`Exception for broker ${orderInfo.brokerId}:`, err);
+            return { brokerId: orderInfo.brokerId, success: false, error: err.message };
           }
         })
       );
@@ -837,6 +876,29 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                     <span className="text-xs font-medium text-orange-700 bg-orange-100 px-2 py-0.5 rounded">
                       Bulk Edit ({editingGTT.orders.length} orders)
                     </span>
+                    {allBrokers && (
+                      <>
+                        <span className="text-gray-300">•</span>
+                        <span className="text-xs text-gray-600">
+                          {(() => {
+                            // Get unique account names from the orders
+                            const accountNames = new Set(
+                              editingGTT.orders.map((order: any) => {
+                                const brokerId = isHMTMode
+                                  ? (order.broker_connection_id || order.broker_connections?.id)
+                                  : order.broker_info?.id;
+                                const broker = allBrokers.find(b => b.id === brokerId);
+                                if (broker) {
+                                  return `${broker.account_holder_name || broker.account_name || 'Account'} (${broker.client_id || 'No ID'})`;
+                                }
+                                return null;
+                              }).filter(Boolean)
+                            );
+                            return Array.from(accountNames).join(', ');
+                          })()}
+                        </span>
+                      </>
+                    )}
                   </>
                 )}
                 {currentLTP && (
