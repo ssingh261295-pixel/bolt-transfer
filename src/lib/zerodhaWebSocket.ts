@@ -134,10 +134,13 @@ export class ZerodhaWebSocket {
     tokens.forEach(token => this.subscribedTokens.add(token));
 
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      console.log('[Zerodha WS] Subscribing to tokens:', tokens);
       this.sendMessage({
         a: 'subscribe',
         v: tokens,
       });
+    } else {
+      console.warn('[Zerodha WS] Cannot subscribe, WebSocket not open. State:', this.ws?.readyState);
     }
   }
 
@@ -154,10 +157,13 @@ export class ZerodhaWebSocket {
 
   setMode(mode: 'ltp' | 'quote' | 'full', tokens: number[]): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      console.log('[Zerodha WS] Setting mode:', { mode, tokens });
       this.sendMessage({
         a: 'mode',
         v: [mode, tokens],
       });
+    } else {
+      console.warn('[Zerodha WS] Cannot set mode, WebSocket not open');
     }
   }
 
@@ -288,6 +294,9 @@ export class ZerodhaWebSocket {
     if (packetLength === 8) {
       tick.mode = 'ltp';
       tick.last_price = view.getUint32(offset, false) / 100;
+      if (instrumentToken === 256265 || instrumentToken === 265) {
+        console.log('[Zerodha WS] Index LTP packet:', { token: instrumentToken, lp: tick.last_price, mode: 'ltp' });
+      }
       return tick;
     }
 
@@ -330,6 +339,10 @@ export class ZerodhaWebSocket {
 
         tick.oi = view.getUint32(offset, false);
         offset += 4;
+      }
+
+      if (instrumentToken === 256265 || instrumentToken === 265) {
+        console.log('[Zerodha WS] Index QUOTE packet:', { token: instrumentToken, lp: tick.last_price, close: tick.close, mode: 'quote' });
       }
 
       return tick;
@@ -408,9 +421,14 @@ export class ZerodhaWebSocket {
         }
       }
 
+      if (instrumentToken === 256265 || instrumentToken === 265) {
+        console.log('[Zerodha WS] Index FULL packet:', { token: instrumentToken, lp: tick.last_price, close: tick.close, mode: 'full' });
+      }
+
       return tick;
     }
 
+    console.warn('[Zerodha WS] Unknown packet length:', { token: instrumentToken, length: packetLength });
     return null;
     } catch (error) {
       console.error('[Zerodha WS] Error parsing packet:', error);

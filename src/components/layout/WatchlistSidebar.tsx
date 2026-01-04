@@ -33,18 +33,24 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
 
   const { isConnected, connect, subscribe, unsubscribe, getTick } = useZerodhaWebSocket(brokerId || undefined);
 
-  // Index instrument tokens - NIFTY 50: 256265, SENSEX: 265
+  // Index instrument tokens
+  // NIFTY 50 Index: 256265 (NSE-INDICES)
+  // SENSEX Index: 265 (BSE)
   const niftyToken = 256265;
   const sensexToken = 265;
 
-  // Debug: Log when ticks are received
+  // Debug: Log connection status and subscriptions
   useEffect(() => {
-    const niftyTick = getTick(niftyToken);
-    const sensexTick = getTick(sensexToken);
-    if (niftyTick || sensexTick) {
-      console.log('Index ticks:', { nifty: niftyTick, sensex: sensexTick });
+    if (isConnected) {
+      console.log('WebSocket connected, subscribing to indices:', { niftyToken, sensexToken });
+      const niftyTick = getTick(niftyToken);
+      const sensexTick = getTick(sensexToken);
+      console.log('Index ticks received:', {
+        nifty: niftyTick ? { lp: niftyTick.last_price, close: niftyTick.close } : 'none',
+        sensex: sensexTick ? { lp: sensexTick.last_price, close: sensexTick.close } : 'none'
+      });
     }
-  }, [getTick(niftyToken), getTick(sensexToken)]);
+  }, [isConnected, getTick(niftyToken), getTick(sensexToken)]);
 
   useEffect(() => {
     if (user) {
@@ -204,19 +210,19 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
               {(() => {
                 const tick = getTick(niftyToken);
                 const lastPrice = tick?.last_price || 0;
-                const previousClose = tick?.close || 0;
-                const change = previousClose > 0 ? (lastPrice - previousClose) : 0;
-                const changePercent = previousClose > 0 ? ((change / previousClose) * 100) : 0;
+                const previousClose = tick?.ohlc?.close || tick?.close || 0;
+                const change = previousClose > 0 && lastPrice > 0 ? (lastPrice - previousClose) : 0;
+                const changePercent = previousClose > 0 && lastPrice > 0 ? ((change / previousClose) * 100) : 0;
 
                 return (
                   <div className="flex items-center justify-between py-1.5">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm text-gray-900">NIFTY 50</span>
                       <span className="font-bold text-sm text-gray-900">
-                        {!isConnected ? 'Connecting...' : tick ? lastPrice.toFixed(2) : 'Loading...'}
+                        {!isConnected ? 'Connecting...' : tick && lastPrice > 0 ? lastPrice.toFixed(2) : 'Loading...'}
                       </span>
                     </div>
-                    {tick && change !== 0 && (
+                    {tick && lastPrice > 0 && previousClose > 0 && change !== 0 && (
                       <div className={`flex items-center gap-1 text-xs font-semibold ${getPriceColor(change)}`}>
                         {change > 0 ? '+' : ''}{change.toFixed(2)}
                         <span className="text-[10px]">({changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
@@ -230,19 +236,19 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
               {(() => {
                 const tick = getTick(sensexToken);
                 const lastPrice = tick?.last_price || 0;
-                const previousClose = tick?.close || 0;
-                const change = previousClose > 0 ? (lastPrice - previousClose) : 0;
-                const changePercent = previousClose > 0 ? ((change / previousClose) * 100) : 0;
+                const previousClose = tick?.ohlc?.close || tick?.close || 0;
+                const change = previousClose > 0 && lastPrice > 0 ? (lastPrice - previousClose) : 0;
+                const changePercent = previousClose > 0 && lastPrice > 0 ? ((change / previousClose) * 100) : 0;
 
                 return (
                   <div className="flex items-center justify-between py-1.5">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm text-gray-900">SENSEX</span>
                       <span className="font-bold text-sm text-gray-900">
-                        {!isConnected ? 'Connecting...' : tick ? lastPrice.toFixed(2) : 'Loading...'}
+                        {!isConnected ? 'Connecting...' : tick && lastPrice > 0 ? lastPrice.toFixed(2) : 'Loading...'}
                       </span>
                     </div>
-                    {tick && change !== 0 && (
+                    {tick && lastPrice > 0 && previousClose > 0 && change !== 0 && (
                       <div className={`flex items-center gap-1 text-xs font-semibold ${getPriceColor(change)}`}>
                         {change > 0 ? '+' : ''}{change.toFixed(2)}
                         <span className="text-[10px]">({changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
