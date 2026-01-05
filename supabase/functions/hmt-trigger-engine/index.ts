@@ -213,12 +213,16 @@ async function getActiveBroker(): Promise<BrokerConnection | null> {
       .select('*')
       .eq('broker_name', 'zerodha')
       .eq('is_active', true)
+      .gt('token_expires_at', new Date().toISOString())
+      .order('token_expires_at', { ascending: false })
       .limit(1);
 
     if (error || !brokers || brokers.length === 0) {
+      console.error('[Engine] No active broker with valid token found');
       return null;
     }
 
+    console.log(`[Engine] Using broker: ${brokers[0].account_name || brokers[0].id}, token expires: ${brokers[0].token_expires_at}`);
     return brokers[0];
   } catch (error) {
     console.error('[Engine] Error fetching broker:', error);

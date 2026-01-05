@@ -36,6 +36,8 @@ export interface BrokerConnection {
   access_token: string;
   api_key: string;
   is_active: boolean;
+  account_name?: string;
+  token_expires_at?: string;
 }
 
 export interface WebSocketTick {
