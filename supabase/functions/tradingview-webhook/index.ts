@@ -333,7 +333,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const todayDate = new Date().toISOString().split('T')[0];
     const day = new Date().getDate();
 
     const { data: futInstruments, error: instrumentError } = await supabase
@@ -341,7 +341,7 @@ Deno.serve(async (req: Request) => {
       .select('instrument_token, tradingsymbol, exchange, lot_size, expiry')
       .eq('name', normalized.symbol)
       .eq('instrument_type', 'FUT')
-      .gte('expiry', today)
+      .gte('expiry', todayDate)
       .order('expiry', { ascending: true })
       .limit(2);
 
@@ -389,9 +389,9 @@ Deno.serve(async (req: Request) => {
       day_of_month: day
     });
 
-    const today = new Date();
+    const now = new Date();
     const istOffset = 5.5 * 60 * 60 * 1000;
-    const istTime = new Date(today.getTime() + istOffset);
+    const istTime = new Date(now.getTime() + istOffset);
     const executionDate = istTime.toISOString().split('T')[0];
 
     const payloadHash = `${normalized.symbol}_${normalized.trade_type}_${Math.floor(normalized.price)}`;

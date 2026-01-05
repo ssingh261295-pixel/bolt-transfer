@@ -64,6 +64,14 @@ export class TriggerEvaluator {
   /**
    * Evaluate OCO (One-Cancels-Other) trigger condition
    * Two legs: typically stop-loss and target
+   *
+   * IMPORTANT: transaction_type represents the EXIT order, not the entry!
+   * - SELL = Exiting a long position (entry was BUY)
+   *   - Leg 1 (stop-loss): trigger when price goes DOWN (ltp <= trigger_price_1)
+   *   - Leg 2 (target): trigger when price goes UP (ltp >= trigger_price_2)
+   * - BUY = Exiting a short position (entry was SELL)
+   *   - Leg 1 (stop-loss): trigger when price goes UP (ltp >= trigger_price_1)
+   *   - Leg 2 (target): trigger when price goes DOWN (ltp <= trigger_price_2)
    */
   private static evaluateOCOTrigger(
     trigger: HMTTrigger,
@@ -71,26 +79,29 @@ export class TriggerEvaluator {
   ): TriggerExecution | null {
     // Check Leg 1 (typically stop-loss)
     let leg1Triggered = false;
-    if (trigger.transaction_type === 'BUY') {
-      leg1Triggered = ltp >= trigger.trigger_price_1;
-    } else {
+    if (trigger.transaction_type === 'SELL') {
+      // Exiting long position: stop-loss triggers when price goes DOWN
       leg1Triggered = ltp <= trigger.trigger_price_1;
+    } else {
+      // Exiting short position: stop-loss triggers when price goes UP
+      leg1Triggered = ltp >= trigger.trigger_price_1;
     }
 
     // Check Leg 2 (typically target)
     let leg2Triggered = false;
     if (trigger.trigger_price_2 !== null) {
-      if (trigger.transaction_type === 'BUY') {
-        // For BUY position, target is below (take profit on the way down)
-        leg2Triggered = ltp <= trigger.trigger_price_2;
-      } else {
-        // For SELL position, target is above (take profit on the way up)
+      if (trigger.transaction_type === 'SELL') {
+        // Exiting long position: target triggers when price goes UP
         leg2Triggered = ltp >= trigger.trigger_price_2;
+      } else {
+        // Exiting short position: target triggers when price goes DOWN
+        leg2Triggered = ltp <= trigger.trigger_price_2;
       }
     }
 
     // Prioritize leg 1 (stop-loss) over leg 2 (target) if both trigger simultaneously
     if (leg1Triggered) {
+      console.log(`[Trigger Evaluator] Leg 1 (SL) triggered for ${trigger.id}: LTP=${ltp}, Trigger=${trigger.trigger_price_1}, Type=${trigger.transaction_type}`);
       return {
         trigger_id: trigger.id,
         trigger: trigger,
@@ -109,6 +120,7 @@ export class TriggerEvaluator {
     }
 
     if (leg2Triggered && trigger.quantity_2 && trigger.product_type_2) {
+      console.log(`[Trigger Evaluator] Leg 2 (Target) triggered for ${trigger.id}: LTP=${ltp}, Trigger=${trigger.trigger_price_2}, Type=${trigger.transaction_type}`);
       return {
         trigger_id: trigger.id,
         trigger: trigger,
