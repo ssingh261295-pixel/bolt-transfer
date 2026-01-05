@@ -72,7 +72,6 @@ Deno.serve(async (req: Request) => {
 
         const positions = result.data.net || [];
 
-        // Bulk insert all positions at once
         const positionRecords = positions
           .filter((position: any) => position.quantity !== 0)
           .map((position: any) => {
@@ -244,26 +243,13 @@ Deno.serve(async (req: Request) => {
     const marginsResult = await marginsResponse.json();
 
     const positions = positionsResult.status === 'success' ? positionsResult.data?.net || [] : [];
-    const dayPositions = positionsResult.status === 'success' ? positionsResult.data?.day || [] : [];
     const margins = marginsResult.status === 'success' ? marginsResult.data || {} : {};
-
-    // Calculate totals for debugging
-    const netPnlTotal = positions.reduce((sum: number, p: any) => sum + (parseFloat(p.pnl) || 0), 0);
-    const dayPnlTotal = dayPositions.reduce((sum: number, p: any) => sum + (parseFloat(p.pnl) || 0), 0);
 
     return new Response(
       JSON.stringify({
         success: true,
         positions,
-        dayPositions,
         margins,
-        debug: {
-          netCount: positions.length,
-          dayCount: dayPositions.length,
-          netPnlTotal,
-          dayPnlTotal,
-          rawPositionsStatus: positionsResult.status,
-        }
       }),
       {
         headers: {
