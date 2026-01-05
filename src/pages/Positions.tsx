@@ -178,8 +178,10 @@ export function Positions() {
     const totalPnL = positionsToSum.reduce((sum, pos) => {
       const ltp = pos.instrument_token ? getLTP(pos.instrument_token) : null;
       const currentPrice = ltp ?? pos.current_price ?? pos.average_price;
-      const pnl = (currentPrice - pos.average_price) * pos.quantity;
-      return sum + pnl;
+      const dayPnl = pos.close_price
+        ? (currentPrice - pos.close_price) * pos.quantity
+        : (currentPrice - pos.average_price) * pos.quantity;
+      return sum + dayPnl;
     }, 0);
 
     const totalInvested = positionsToSum.reduce((sum, pos) => {
@@ -470,7 +472,7 @@ export function Positions() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-sm text-gray-600 mb-1">Total P&L</h3>
+          <h3 className="text-sm text-gray-600 mb-1">Today's P&L</h3>
           <p className={`text-3xl font-bold ${summary.totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {summary.totalPnL >= 0 ? '+' : ''}{formatIndianCurrency(summary.totalPnL)}
           </p>
@@ -571,8 +573,12 @@ export function Positions() {
                 {positions.map((position) => {
                   const ltp = position.instrument_token ? getLTP(position.instrument_token) : null;
                   const currentPrice = ltp ?? position.current_price ?? position.average_price;
-                  const pnl = (currentPrice - position.average_price) * position.quantity;
-                  const pnlPercentage = ((currentPrice - position.average_price) / position.average_price) * 100;
+                  const pnl = position.close_price
+                    ? (currentPrice - position.close_price) * position.quantity
+                    : (currentPrice - position.average_price) * position.quantity;
+                  const pnlPercentage = position.close_price
+                    ? ((currentPrice - position.close_price) / position.close_price) * 100
+                    : ((currentPrice - position.average_price) / position.average_price) * 100;
 
                   return (
                     <tr key={position.id} className="hover:bg-gray-50">
