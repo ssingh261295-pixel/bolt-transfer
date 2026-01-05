@@ -254,11 +254,14 @@ export function Dashboard() {
               let dayPnl = 0;
               if (pos.m2m !== undefined && pos.m2m !== null) {
                 dayPnl = pos.m2m;
-              } else if (pos.close_price && pos.last_price) {
+              } else if (pos.close_price && pos.last_price && pos.quantity !== 0) {
                 dayPnl = (pos.last_price - pos.close_price) * pos.quantity;
               }
+              console.log(`Position ${pos.tradingsymbol}: m2m=${pos.m2m}, close=${pos.close_price}, last=${pos.last_price}, qty=${pos.quantity}, dayPnl=${dayPnl}`);
               return sum + dayPnl;
             }, 0);
+
+            console.log(`Total Today's P&L for broker ${broker.account_holder_name}: ${todayPnl}`);
 
             const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;
             const gttOrders = gttResult.success ? (gttResult.data || []) : [];
