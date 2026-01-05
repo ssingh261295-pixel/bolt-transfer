@@ -229,8 +229,12 @@ export function Dashboard() {
             const positions = result.positions || [];
 
             const todayPnl = positions.reduce((sum: number, pos: any) => {
-              const pnl = pos.pnl || ((pos.last_price - pos.average_price) * pos.quantity);
-              return sum + pnl;
+              // Today's P&L = (current_price - yesterday's close) * quantity
+              // Use close_price if available, otherwise fall back to pnl
+              const dayPnl = pos.close_price
+                ? (pos.last_price - pos.close_price) * pos.quantity
+                : (pos.pnl || 0);
+              return sum + dayPnl;
             }, 0);
 
             const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;
