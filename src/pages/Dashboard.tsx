@@ -246,9 +246,10 @@ export function Dashboard() {
           if (result.success) {
             const equity = result.margins?.equity || {};
             const netPositions = result.positions || [];
+            const dayPositions = result.dayPositions || [];
 
-            // Calculate Today's P&L from net positions
-            const todayPnl = netPositions.reduce((sum: number, pos: any) => {
+            // Calculate Today's P&L from day positions (intraday trades only)
+            const todayPnl = dayPositions.reduce((sum: number, pos: any) => {
               const pnl = parseFloat(pos.pnl || 0);
               return sum + pnl;
             }, 0);
@@ -260,7 +261,7 @@ export function Dashboard() {
             const metrics = {
               available_margin: parseFloat(equity.available?.live_balance || equity.available?.adhoc_margin || 0),
               used_margin: parseFloat(equity.utilised?.debits || 0),
-              available_cash: parseFloat(equity.available?.cash || 0),
+              available_cash: parseFloat(equity.net || 0),
               today_pnl: todayPnl,
               active_trades: activeTrades,
               active_gtt: activeGtt,
