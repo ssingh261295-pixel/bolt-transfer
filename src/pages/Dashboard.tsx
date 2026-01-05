@@ -252,16 +252,13 @@ export function Dashboard() {
             console.log(`[${broker.account_holder_name || broker.client_id}] Day positions:`, JSON.stringify(dayPositions, null, 2));
             console.log(`[${broker.account_holder_name || broker.client_id}] Net positions:`, JSON.stringify(netPositions, null, 2));
 
-            // Calculate Today's P&L from day positions using m2m (mark-to-market)
-            // m2m represents the actual intraday P&L for today's trades
-            const todayPnl = dayPositions.reduce((sum: number, pos: any) => {
-              // Use m2m if available, otherwise fall back to pnl
-              const pnl = parseFloat(pos.m2m !== undefined ? pos.m2m : pos.pnl || 0);
-              return sum + pnl;
-            }, 0);
+            const openingBalance = parseFloat(equity.available?.opening_balance || equity.net || 0);
+            const currentBalance = parseFloat(equity.net || 0);
+            const todayPnl = currentBalance - openingBalance;
 
+            console.log(`[${broker.account_holder_name || broker.client_id}] Opening balance:`, openingBalance);
+            console.log(`[${broker.account_holder_name || broker.client_id}] Current balance:`, currentBalance);
             console.log(`[${broker.account_holder_name || broker.client_id}] Calculated today_pnl:`, todayPnl);
-            console.log(`[${broker.account_holder_name || broker.client_id}] Opening balance (equity.net):`, equity.net);
 
             const activeTrades = netPositions.filter((pos: any) => pos.quantity !== 0).length;
             const gttOrders = gttResult.success ? (gttResult.data || []) : [];
@@ -270,7 +267,7 @@ export function Dashboard() {
             const metrics = {
               available_margin: parseFloat(equity.available?.live_balance || equity.available?.adhoc_margin || 0),
               used_margin: parseFloat(equity.utilised?.debits || 0),
-              available_cash: parseFloat(equity.net || 0),
+              available_cash: openingBalance,
               today_pnl: todayPnl,
               active_trades: activeTrades,
               active_gtt: activeGtt,
