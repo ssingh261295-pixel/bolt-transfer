@@ -248,21 +248,22 @@ export function Dashboard() {
             const netPositions = result.positions || [];
             const dayPositions = result.dayPositions || [];
 
-            console.log('=== Dashboard Debug ===');
-            console.log('Net Positions Count:', netPositions.length);
-            console.log('Day Positions Count:', dayPositions.length);
-            console.log('Day Positions Data:', dayPositions);
+            // Show debug info as alert
+            if (result.debug) {
+              alert(`DEBUG INFO:\n` +
+                `Net Positions: ${result.debug.netCount}\n` +
+                `Day Positions: ${result.debug.dayCount}\n` +
+                `Net PnL Total: ${result.debug.netPnlTotal}\n` +
+                `Day PnL Total: ${result.debug.dayPnlTotal}\n` +
+                `Status: ${result.debug.rawPositionsStatus}`);
+            }
 
             // Calculate Today's P&L from day positions
             // Day positions include all trades from today, including closed positions
             const todayPnl = dayPositions.reduce((sum: number, pos: any) => {
               const pnl = parseFloat(pos.pnl || 0);
-              console.log(`${pos.tradingsymbol}: pnl=${pnl}, qty=${pos.quantity}`);
               return sum + pnl;
             }, 0);
-
-            console.log('Total Today PnL:', todayPnl);
-            console.log('======================');
 
             const activeTrades = netPositions.filter((pos: any) => pos.quantity !== 0).length;
             const gttOrders = gttResult.success ? (gttResult.data || []) : [];
