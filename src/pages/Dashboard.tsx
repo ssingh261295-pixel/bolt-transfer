@@ -245,18 +245,17 @@ export function Dashboard() {
 
           if (result.success) {
             const equity = result.margins?.equity || {};
-            const positions = result.positions || [];
+            const netPositions = result.positions || [];
+            const dayPositions = result.dayPositions || [];
 
-            const todayPnl = positions.reduce((sum: number, pos: any) => {
-              // Zerodha's pnl field includes:
-              // - For open positions: unrealized P&L
-              // - For closed positions: realized P&L from today's trades
-              // Simply sum all pnl values
+            // Calculate Today's P&L from day positions
+            // Day positions include all trades from today, including closed positions
+            const todayPnl = dayPositions.reduce((sum: number, pos: any) => {
               const pnl = parseFloat(pos.pnl || 0);
               return sum + pnl;
             }, 0);
 
-            const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;
+            const activeTrades = netPositions.filter((pos: any) => pos.quantity !== 0).length;
             const gttOrders = gttResult.success ? (gttResult.data || []) : [];
             const activeGtt = gttOrders.filter((gtt: any) => gtt.status === 'active').length;
 

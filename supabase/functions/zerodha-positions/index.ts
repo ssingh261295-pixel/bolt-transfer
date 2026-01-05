@@ -244,12 +244,14 @@ Deno.serve(async (req: Request) => {
     const marginsResult = await marginsResponse.json();
 
     const positions = positionsResult.status === 'success' ? positionsResult.data?.net || [] : [];
+    const dayPositions = positionsResult.status === 'success' ? positionsResult.data?.day || [] : [];
     const margins = marginsResult.status === 'success' ? marginsResult.data || {} : {};
 
     return new Response(
       JSON.stringify({
         success: true,
         positions,
+        dayPositions,
         margins,
       }),
       {
