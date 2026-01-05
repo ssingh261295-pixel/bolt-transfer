@@ -46,50 +46,36 @@ export function Dashboard() {
     const channel = supabase
       .channel('dashboard_metrics_changes')
       .on('postgres_changes', {
-        event: '*',
+        event: 'INSERT',
         schema: 'public',
         table: 'dashboard_metrics_cache',
         filter: `user_id=eq.${user.id}`
       }, (payload) => {
-        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          const newMetric = payload.new as any;
-          const broker = brokers.find(b => b.id === newMetric.broker_connection_id);
-          if (!broker) {
-            console.warn('Broker not found for metric:', newMetric.broker_connection_id);
-            return;
-          }
+        const newMetric = payload.new as any;
+        const broker = brokers.find(b => b.id === newMetric.broker_connection_id);
+        if (!broker) return;
 
-          const newAccount: AccountData = {
-            id: newMetric.id,
-            broker_id: newMetric.broker_connection_id,
-            broker_name: broker.broker_name || 'zerodha',
-            account_name: broker.account_name || '',
-            account_holder_name: broker.account_holder_name || '',
-            client_id: broker.client_id || '',
-            available_margin: parseFloat(newMetric.available_margin || 0),
-            used_margin: parseFloat(newMetric.used_margin || 0),
-            available_cash: parseFloat(newMetric.available_cash || 0),
-            today_pnl: parseFloat(newMetric.today_pnl || 0),
-            active_trades: newMetric.active_trades || 0,
-            active_gtt: newMetric.active_gtt || 0,
-            last_updated: new Date(newMetric.last_updated),
-          };
+        const newAccount: AccountData = {
+          id: newMetric.id,
+          broker_id: newMetric.broker_connection_id,
+          broker_name: broker.broker_name || 'zerodha',
+          account_name: broker.account_name || '',
+          account_holder_name: broker.account_holder_name || '',
+          client_id: broker.client_id || '',
+          available_margin: parseFloat(newMetric.available_margin || 0),
+          used_margin: parseFloat(newMetric.used_margin || 0),
+          available_cash: parseFloat(newMetric.available_cash || 0),
+          today_pnl: parseFloat(newMetric.today_pnl || 0),
+          active_trades: newMetric.active_trades || 0,
+          active_gtt: newMetric.active_gtt || 0,
+          last_updated: new Date(newMetric.last_updated),
+        };
 
-          setAccountsData(prev => {
-            const existingIndex = prev.findIndex(acc => acc.broker_id === newMetric.broker_connection_id);
-            if (existingIndex >= 0) {
-              const updated = [...prev];
-              updated[existingIndex] = newAccount;
-              return updated;
-            } else {
-              return [...prev, newAccount];
-            }
-          });
-          setLastFetch(new Date());
-        } else if (payload.eventType === 'DELETE') {
-          const oldMetric = payload.old as any;
-          setAccountsData(prev => prev.filter(acc => acc.broker_id !== oldMetric.broker_connection_id));
-        }
+        setAccountsData(prev => {
+          const filtered = prev.filter(acc => acc.broker_id !== newMetric.broker_connection_id);
+          return [...filtered, newAccount];
+        });
+        setLastFetch(new Date());
       })
       .subscribe();
 
@@ -100,55 +86,53 @@ export function Dashboard() {
 
   const loadCachedMetrics = async () => {
     try {
+      if (!user?.id || brokers.length === 0) return;
+
       const { data, error } = await supabase
         .from('dashboard_metrics_cache')
         .select('*')
-        .eq('user_id', user?.id);
+        .eq('user_id', user?.id)
+        .order('last_updated', { ascending: false });
 
       if (error) throw error;
 
       if (data && data.length > 0) {
-        // Deduplicate by broker_connection_id - keep only the latest entry for each broker
-        const uniqueMetrics = data.reduce((acc, metric) => {
-          const existing = acc.find(m => m.broker_connection_id === metric.broker_connection_id);
-          if (!existing || new Date(metric.last_updated) > new Date(existing.last_updated)) {
-            return [...acc.filter(m => m.broker_connection_id !== metric.broker_connection_id), metric];
+        const brokerMap = new Map(brokers.map(b => [b.id, b]));
+        const metricsMap = new Map();
+
+        for (const metric of data) {
+          if (!metricsMap.has(metric.broker_connection_id)) {
+            metricsMap.set(metric.broker_connection_id, metric);
           }
-          return acc;
-        }, [] as any[]);
+        }
 
-        const accountResults: AccountData[] = await Promise.all(
-          uniqueMetrics.map(async (metric) => {
-            const { data: broker } = await supabase
-              .from('broker_connections')
-              .select('*')
-              .eq('id', metric.broker_connection_id)
-              .maybeSingle();
+        const accountResults: AccountData[] = [];
 
-            if (!broker) {
-              return null;
-            }
+        for (const [brokerId, metric] of metricsMap.entries()) {
+          const broker = brokerMap.get(brokerId);
+          if (!broker) continue;
 
-            return {
-              id: metric.id,
-              broker_id: metric.broker_connection_id,
-              broker_name: broker.broker_name || 'zerodha',
-              account_name: broker.account_name || '',
-              account_holder_name: broker.account_holder_name || '',
-              client_id: broker.client_id || '',
-              available_margin: parseFloat(metric.available_margin || 0),
-              used_margin: parseFloat(metric.used_margin || 0),
-              available_cash: parseFloat(metric.available_cash || 0),
-              today_pnl: parseFloat(metric.today_pnl || 0),
-              active_trades: metric.active_trades || 0,
-              active_gtt: metric.active_gtt || 0,
-              last_updated: new Date(metric.last_updated),
-            };
-          })
-        );
+          accountResults.push({
+            id: metric.id,
+            broker_id: brokerId,
+            broker_name: broker.broker_name || 'zerodha',
+            account_name: broker.account_name || '',
+            account_holder_name: broker.account_holder_name || '',
+            client_id: broker.client_id || '',
+            available_margin: parseFloat(metric.available_margin || 0),
+            used_margin: parseFloat(metric.used_margin || 0),
+            available_cash: parseFloat(metric.available_cash || 0),
+            today_pnl: parseFloat(metric.today_pnl || 0),
+            active_trades: metric.active_trades || 0,
+            active_gtt: metric.active_gtt || 0,
+            last_updated: new Date(metric.last_updated),
+          });
+        }
 
-        setAccountsData(accountResults.filter(a => a !== null) as AccountData[]);
-        setLastFetch(new Date(uniqueMetrics[0].last_updated));
+        setAccountsData(accountResults);
+        if (accountResults.length > 0) {
+          setLastFetch(accountResults[0].last_updated);
+        }
       }
     } catch (err) {
       console.error('Error loading cached metrics:', err);
@@ -214,10 +198,11 @@ export function Dashboard() {
     setError('');
 
     const failedAccounts: string[] = [];
+    const newAccountsData: AccountData[] = [];
 
     try {
-      const accountPromises = brokersToFetch.map(async (broker) => {
-        if (broker.broker_name !== 'zerodha') return null;
+      for (const broker of brokersToFetch) {
+        if (broker.broker_name !== 'zerodha') continue;
 
         try {
           const headers = {
@@ -246,11 +231,9 @@ export function Dashboard() {
           if (result.success) {
             const equity = result.margins?.equity || {};
             const netPositions = result.positions || [];
-            const dayPositions = result.dayPositions || [];
 
-            console.log(`[${broker.account_holder_name || broker.client_id}] Equity data:`, JSON.stringify(equity, null, 2));
-            console.log(`[${broker.account_holder_name || broker.client_id}] Day positions:`, JSON.stringify(dayPositions, null, 2));
-            console.log(`[${broker.account_holder_name || broker.client_id}] Net positions:`, JSON.stringify(netPositions, null, 2));
+            console.log(`[${broker.account_holder_name || broker.client_id}] Raw equity data:`, equity);
+            console.log(`[${broker.account_holder_name || broker.client_id}] Raw positions (${netPositions.length}):`, netPositions);
 
             const openingBalance = parseFloat(equity.available?.opening_balance || equity.net || 0);
 
@@ -258,13 +241,12 @@ export function Dashboard() {
             if (netPositions && netPositions.length > 0) {
               todayPnl = netPositions.reduce((sum: number, pos: any) => {
                 const pnl = parseFloat(pos.pnl || 0);
-                console.log(`Position ${pos.tradingsymbol}: pnl=${pnl}, m2m=${pos.m2m}, day_buy_value=${pos.day_buy_value}, day_sell_value=${pos.day_sell_value}`);
+                console.log(`  - ${pos.tradingsymbol}: qty=${pos.quantity}, pnl=${pnl}`);
                 return sum + pnl;
               }, 0);
             }
 
-            console.log(`[${broker.account_holder_name || broker.client_id}] Opening balance:`, openingBalance);
-            console.log(`[${broker.account_holder_name || broker.client_id}] Calculated today_pnl from positions:`, todayPnl);
+            console.log(`[${broker.account_holder_name || broker.client_id}] Calculated: opening=${openingBalance}, today_pnl=${todayPnl}`);
 
             const activeTrades = netPositions.filter((pos: any) => pos.quantity !== 0).length;
             const gttOrders = gttResult.success ? (gttResult.data || []) : [];
@@ -280,24 +262,43 @@ export function Dashboard() {
               last_updated: new Date().toISOString(),
             };
 
-            console.log(`[${broker.account_holder_name || broker.client_id}] Final metrics:`, metrics);
-
             await supabase
               .from('dashboard_metrics_cache')
-              .upsert({
+              .delete()
+              .eq('user_id', user?.id)
+              .eq('broker_connection_id', broker.id);
+
+            const { data: insertedMetric } = await supabase
+              .from('dashboard_metrics_cache')
+              .insert({
                 user_id: user?.id,
                 broker_connection_id: broker.id,
                 ...metrics
-              }, {
-                onConflict: 'user_id,broker_connection_id'
-              });
+              })
+              .select()
+              .single();
 
-            return null;
+            if (insertedMetric) {
+              newAccountsData.push({
+                id: insertedMetric.id,
+                broker_id: broker.id,
+                broker_name: broker.broker_name || 'zerodha',
+                account_name: broker.account_name || '',
+                account_holder_name: broker.account_holder_name || '',
+                client_id: broker.client_id || '',
+                available_margin: metrics.available_margin,
+                used_margin: metrics.used_margin,
+                available_cash: metrics.available_cash,
+                today_pnl: metrics.today_pnl,
+                active_trades: metrics.active_trades,
+                active_gtt: metrics.active_gtt,
+                last_updated: new Date(metrics.last_updated),
+              });
+            }
           } else {
             const accountName = broker.account_holder_name || broker.client_id || broker.id;
             console.error(`API error for ${accountName}:`, result.error || result.message);
             failedAccounts.push(accountName);
-            return null;
           }
         } catch (err: any) {
           const accountName = broker.account_holder_name || broker.client_id || broker.id;
@@ -308,11 +309,10 @@ export function Dashboard() {
           } else {
             console.error(`Error fetching data for ${accountName}:`, err);
           }
-          return null;
         }
-      });
+      }
 
-      await Promise.all(accountPromises);
+      setAccountsData(newAccountsData);
       setLastFetch(new Date());
 
       if (failedAccounts.length > 0) {
