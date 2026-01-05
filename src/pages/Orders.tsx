@@ -311,9 +311,12 @@ export function Orders() {
               .from('broker_connections')
               .update({ is_active: false })
               .eq('id', broker.id);
+          } else if (result.error) {
+            throw new Error(result.error);
           }
         } catch (err) {
           console.error(`Error syncing orders for broker ${broker.id}:`, err);
+          throw err;
         }
       });
 

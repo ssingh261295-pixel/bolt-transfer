@@ -191,6 +191,15 @@ Deno.serve(async (req: Request) => {
         if (orders.length > 0) {
           const userId = isServiceRole ? brokerConnection.user_id : user.id;
 
+          const mapZerodhaStatus = (status: string): string => {
+            const statusMap: Record<string, string> = {
+              'COMPLETE': 'COMPLETED',
+              'TRIGGER PENDING': 'PENDING',
+              'VALIDATION PENDING': 'PENDING',
+            };
+            return statusMap[status] || status;
+          };
+
           const orderRecords = orders.map((order: any) => ({
             user_id: userId,
             broker_connection_id: brokerId,
@@ -201,7 +210,7 @@ Deno.serve(async (req: Request) => {
             quantity: order.quantity,
             price: order.price || null,
             trigger_price: order.trigger_price || null,
-            status: order.status,
+            status: mapZerodhaStatus(order.status),
             order_id: order.order_id,
             executed_quantity: order.filled_quantity || 0,
             executed_price: order.average_price || null,
@@ -285,7 +294,7 @@ Deno.serve(async (req: Request) => {
           quantity: exitQuantity,
           price: null,
           trigger_price: null,
-          status: 'COMPLETE',
+          status: 'COMPLETED',
           order_id: result.data.order_id,
         });
 
@@ -373,7 +382,7 @@ Deno.serve(async (req: Request) => {
               quantity: exitQuantity,
               price: null,
               trigger_price: null,
-              status: 'COMPLETE',
+              status: 'COMPLETED',
               order_id: result.data.order_id,
             });
 
