@@ -248,6 +248,10 @@ export function Dashboard() {
             const netPositions = result.positions || [];
             const dayPositions = result.dayPositions || [];
 
+            console.log(`[${broker.account_holder_name || broker.client_id}] Equity data:`, JSON.stringify(equity, null, 2));
+            console.log(`[${broker.account_holder_name || broker.client_id}] Day positions:`, JSON.stringify(dayPositions, null, 2));
+            console.log(`[${broker.account_holder_name || broker.client_id}] Net positions:`, JSON.stringify(netPositions, null, 2));
+
             // Calculate Today's P&L from day positions using m2m (mark-to-market)
             // m2m represents the actual intraday P&L for today's trades
             const todayPnl = dayPositions.reduce((sum: number, pos: any) => {
@@ -255,6 +259,9 @@ export function Dashboard() {
               const pnl = parseFloat(pos.m2m !== undefined ? pos.m2m : pos.pnl || 0);
               return sum + pnl;
             }, 0);
+
+            console.log(`[${broker.account_holder_name || broker.client_id}] Calculated today_pnl:`, todayPnl);
+            console.log(`[${broker.account_holder_name || broker.client_id}] Opening balance (equity.net):`, equity.net);
 
             const activeTrades = netPositions.filter((pos: any) => pos.quantity !== 0).length;
             const gttOrders = gttResult.success ? (gttResult.data || []) : [];
@@ -269,6 +276,8 @@ export function Dashboard() {
               active_gtt: activeGtt,
               last_updated: new Date().toISOString(),
             };
+
+            console.log(`[${broker.account_holder_name || broker.client_id}] Final metrics:`, metrics);
 
             await supabase
               .from('dashboard_metrics_cache')
