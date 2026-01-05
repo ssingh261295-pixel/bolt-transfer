@@ -26,6 +26,9 @@ export function Orders() {
   const [syncMessage, setSyncMessage] = useState('');
   const [showEditOrder, setShowEditOrder] = useState(false);
   const [editingOrder, setEditingOrder] = useState<any>(null);
+  const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   useEffect(() => {
     if (user) {
@@ -36,6 +39,8 @@ export function Orders() {
   useEffect(() => {
     if (user) {
       loadOrders();
+      setCurrentPage(1);
+      setSelectedOrders(new Set());
     }
   }, [user, filter, selectedBrokerId]);
 
@@ -461,6 +466,100 @@ export function Orders() {
     }
   };
 
+  const handleSelectAll = () => {
+    const currentPageOrders = paginatedOrders.map(o => o.id);
+    if (currentPageOrders.every(id => selectedOrders.has(id))) {
+      setSelectedOrders(new Set([...selectedOrders].filter(id => !currentPageOrders.includes(id))));
+    } else {
+      setSelectedOrders(new Set([...selectedOrders, ...currentPageOrders]));
+    }
+  };
+
+  const handleSelectOrder = (orderId: string) => {
+    const newSelected = new Set(selectedOrders);
+    if (newSelected.has(orderId)) {
+      newSelected.delete(orderId);
+    } else {
+      newSelected.add(orderId);
+    }
+    setSelectedOrders(newSelected);
+  };
+
+  const handleBulkCancel = async () => {
+    const ordersToCancel = orders.filter(o =>
+      selectedOrders.has(o.id) && canCancelOrder(o.status)
+    );
+
+    if (ordersToCancel.length === 0) {
+      setCancelError('No cancellable orders selected');
+      setTimeout(() => setCancelError(''), 3000);
+      return;
+    }
+
+    const confirmCancel = window.confirm(
+      `Are you sure you want to cancel ${ordersToCancel.length} order(s)?`
+    );
+    if (!confirmCancel) return;
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const order of ordersToCancel) {
+      try {
+        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders?broker_id=${order.broker_connection_id}&order_id=${order.order_id}&variety=${order.variety || 'regular'}`;
+
+        const response = await fetch(apiUrl, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (error) {
+        failCount++;
+      }
+    }
+
+    setSelectedOrders(new Set());
+
+    if (successCount > 0) {
+      setCancelMessage(`Successfully cancelled ${successCount} order(s)`);
+      if (failCount > 0) {
+        setCancelMessage(prev => `${prev}. Failed to cancel ${failCount} order(s)`);
+      }
+      setTimeout(() => setCancelMessage(''), 5000);
+    } else {
+      setCancelError(`Failed to cancel all ${failCount} order(s)`);
+      setTimeout(() => setCancelError(''), 5000);
+    }
+
+    await loadOrders();
+  };
+
+  const totalPages = Math.ceil(orders.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedOrders = orders.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    setSelectedOrders(new Set());
+  };
+
+  const handleItemsPerPageChange = (value: number) => {
+    setItemsPerPage(value);
+    setCurrentPage(1);
+    setSelectedOrders(new Set());
+  };
+
   if (loading && orders.length === 0 && brokers.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -576,19 +675,28 @@ export function Orders() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th
-                    onClick={() => handleSort('symbol')}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
-                  >
-                    <div className="flex items-center gap-1">
-                      Symbol
-                      <ArrowUpDown className={`w-3 h-3 ${sortField === 'symbol' ? 'text-blue-600' : 'text-gray-400'}`} />
-                    </div>
-                  </th>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={paginatedOrders.length > 0 && paginatedOrders.every(o => selectedOrders.has(o.id))}
+                        onChange={handleSelectAll}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                      />
+                    </th>
+                    <th
+                      onClick={() => handleSort('symbol')}
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                    >
+                      <div className="flex items-center gap-1">
+                        Symbol
+                        <ArrowUpDown className={`w-3 h-3 ${sortField === 'symbol' ? 'text-blue-600' : 'text-gray-400'}`} />
+                      </div>
+                    </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                     Account
                   </th>
@@ -640,8 +748,16 @@ export function Orders() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {orders.map((order) => (
+                {paginatedOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedOrders.has(order.id)}
+                        onChange={() => handleSelectOrder(order.id)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="font-medium text-gray-900">{order.symbol}</div>
@@ -713,7 +829,87 @@ export function Orders() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+
+            {selectedOrders.size > 0 && (
+              <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 bg-gray-50">
+                <div className="text-sm text-gray-700">
+                  {selectedOrders.size} order(s) selected
+                </div>
+                <button
+                  onClick={handleBulkCancel}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+                >
+                  Cancel Selected Orders
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
+              <div className="flex items-center gap-4">
+                <div className="text-sm text-gray-700">
+                  Showing {orders.length === 0 ? 0 : startIndex + 1} to {Math.min(endIndex, orders.length)} of {orders.length} orders
+                </div>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                >
+                  <option value={10}>10 per page</option>
+                  <option value={25}>25 per page</option>
+                  <option value={50}>50 per page</option>
+                  <option value={100}>100 per page</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 7) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 4) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 3) {
+                      pageNum = totalPages - 6 + i;
+                    } else {
+                      pageNum = currentPage - 3 + i;
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => handlePageChange(pageNum)}
+                        className={`px-3 py-1.5 rounded-lg text-sm transition ${
+                          currentPage === pageNum
+                            ? 'bg-blue-600 text-white'
+                            : 'border border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>
