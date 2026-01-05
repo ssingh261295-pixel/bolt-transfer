@@ -207,7 +207,12 @@ Deno.serve(async (req: Request) => {
             executed_price: order.average_price || null,
           }));
 
-          await supabase.from('orders').insert(orderRecords);
+          const { error: insertError } = await supabase.from('orders').insert(orderRecords);
+          
+          if (insertError) {
+            console.error('Error inserting orders:', insertError);
+            throw new Error(`Failed to save orders to database: ${insertError.message}`);
+          }
         }
 
         return new Response(
