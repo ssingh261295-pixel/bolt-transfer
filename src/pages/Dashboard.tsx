@@ -162,7 +162,31 @@ export function Dashboard() {
       .order('created_at', { ascending: false });
 
     if (data) {
-      setBrokers(data);
+      // Filter out expired tokens
+      const now = new Date();
+      const activeBrokers = data.filter(broker => {
+        if (!broker.token_expires_at) return true;
+        const expiryDate = new Date(broker.token_expires_at);
+        return expiryDate > now;
+      });
+
+      // Mark expired brokers as inactive
+      const expiredBrokers = data.filter(broker => {
+        if (!broker.token_expires_at) return false;
+        const expiryDate = new Date(broker.token_expires_at);
+        return expiryDate <= now;
+      });
+
+      if (expiredBrokers.length > 0) {
+        expiredBrokers.forEach(async (broker) => {
+          await supabase
+            .from('broker_connections')
+            .update({ is_active: false })
+            .eq('id', broker.id);
+        });
+      }
+
+      setBrokers(activeBrokers);
     }
   };
 

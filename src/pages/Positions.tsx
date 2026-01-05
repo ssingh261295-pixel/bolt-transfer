@@ -212,7 +212,38 @@ export function Positions() {
       .eq('broker_name', 'zerodha');
 
     if (data) {
-      setBrokers(data);
+      // Filter out expired tokens
+      const now = new Date();
+      const activeBrokers = data.filter(broker => {
+        if (!broker.token_expires_at) return true;
+        const expiryDate = new Date(broker.token_expires_at);
+        return expiryDate > now;
+      });
+
+      // Mark expired brokers as inactive
+      const expiredBrokers = data.filter(broker => {
+        if (!broker.token_expires_at) return false;
+        const expiryDate = new Date(broker.token_expires_at);
+        return expiryDate <= now;
+      });
+
+      if (expiredBrokers.length > 0) {
+        // Update expired brokers to inactive in background
+        expiredBrokers.forEach(async (broker) => {
+          await supabase
+            .from('broker_connections')
+            .update({ is_active: false })
+            .eq('id', broker.id);
+        });
+
+        // Show message to user
+        if (activeBrokers.length > 0) {
+          setSyncMessage(`${expiredBrokers.length} account(s) expired. Showing data from ${activeBrokers.length} active account(s).`);
+          setTimeout(() => setSyncMessage(''), 5000);
+        }
+      }
+
+      setBrokers(activeBrokers);
     }
   };
 
@@ -225,6 +256,15 @@ export function Positions() {
     try {
       const fetchPromises = brokers.map(async (broker) => {
         try {
+          // Check if token is expired before attempting sync
+          if (broker.token_expires_at) {
+            const expiryDate = new Date(broker.token_expires_at);
+            if (expiryDate <= new Date()) {
+              console.log(`Skipping expired broker ${broker.id}`);
+              return;
+            }
+          }
+
           const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions/sync?broker_id=${broker.id}`;
           const response = await fetch(apiUrl, {
             headers: {
@@ -236,6 +276,12 @@ export function Positions() {
 
           if (result.success) {
             console.log(`Synced ${result.synced || 0} positions from broker ${broker.id}`);
+          } else if (result.error?.includes('Token expired') || result.error?.includes('403')) {
+            // Mark broker as inactive
+            await supabase
+              .from('broker_connections')
+              .update({ is_active: false })
+              .eq('id', broker.id);
           }
         } catch (err) {
           console.error(`Error syncing positions for broker ${broker.id}:`, err);
