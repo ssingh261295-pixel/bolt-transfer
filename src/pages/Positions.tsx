@@ -66,7 +66,7 @@ export function Positions() {
 
   useEffect(() => {
     filterPositions();
-  }, [selectedBroker, selectedSymbol, allPositions]);
+  }, [selectedBroker, selectedSymbol, allPositions, sortField, sortDirection]);
 
   useEffect(() => {
     const brokerId = selectedBroker !== 'all' ? selectedBroker : brokers[0]?.id;
@@ -192,18 +192,10 @@ export function Positions() {
   };
 
   useEffect(() => {
-    if (positions.length > 0) {
-      const filtered = selectedBroker === 'all' ? allPositions : allPositions.filter(pos => pos.broker_connection_id === selectedBroker);
-      setPositions(sortPositions(filtered));
-    }
-  }, [sortField, sortDirection]);
-
-  useEffect(() => {
     if (ticks.size > 0 && positions.length > 0) {
-      const filtered = selectedBroker === 'all' ? positions : positions.filter(pos => pos.broker_connection_id === selectedBroker);
-      updateSummary(filtered);
+      updateSummary(positions);
     }
-  }, [ticks, positions, selectedBroker]);
+  }, [ticks, positions]);
 
   const loadBrokers = async () => {
     const { data } = await supabase
