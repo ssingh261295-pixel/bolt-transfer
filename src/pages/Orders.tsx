@@ -798,7 +798,7 @@ export function Orders() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {new Date(order.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                      {new Date(order.order_timestamp || order.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">

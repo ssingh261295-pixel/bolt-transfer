@@ -119,6 +119,7 @@ Deno.serve(async (req: Request) => {
           trigger_price: orderData.trigger_price || null,
           status: 'OPEN',
           order_id: result.data.order_id,
+          order_timestamp: new Date().toISOString(),
         });
 
         return new Response(
@@ -214,6 +215,7 @@ Deno.serve(async (req: Request) => {
             order_id: order.order_id,
             executed_quantity: order.filled_quantity || 0,
             executed_price: order.average_price || null,
+            order_timestamp: order.order_timestamp || order.exchange_timestamp || null,
           }));
 
           const { error: insertError } = await supabase.from('orders').insert(orderRecords);
@@ -296,6 +298,7 @@ Deno.serve(async (req: Request) => {
           trigger_price: null,
           status: 'COMPLETED',
           order_id: result.data.order_id,
+          order_timestamp: new Date().toISOString(),
         });
 
         await supabase
@@ -384,6 +387,7 @@ Deno.serve(async (req: Request) => {
               trigger_price: null,
               status: 'COMPLETED',
               order_id: result.data.order_id,
+              order_timestamp: new Date().toISOString(),
             });
 
             await supabase
