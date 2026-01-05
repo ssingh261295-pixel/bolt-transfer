@@ -248,11 +248,15 @@ export function Dashboard() {
             const positions = result.positions || [];
 
             const todayPnl = positions.reduce((sum: number, pos: any) => {
-              // Today's P&L = (current_price - yesterday's close) * quantity
-              // Use close_price if available, otherwise fall back to pnl
-              const dayPnl = pos.close_price
-                ? (pos.last_price - pos.close_price) * pos.quantity
-                : (pos.pnl || 0);
+              // Today's P&L should use Zerodha's m2m (mark to market) field
+              // which is calculated from yesterday's close price
+              // If m2m not available, calculate manually from close_price
+              let dayPnl = 0;
+              if (pos.m2m !== undefined && pos.m2m !== null) {
+                dayPnl = pos.m2m;
+              } else if (pos.close_price && pos.last_price) {
+                dayPnl = (pos.last_price - pos.close_price) * pos.quantity;
+              }
               return sum + dayPnl;
             }, 0);
 
