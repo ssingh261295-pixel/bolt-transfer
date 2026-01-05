@@ -248,22 +248,12 @@ export function Dashboard() {
             const positions = result.positions || [];
 
             const todayPnl = positions.reduce((sum: number, pos: any) => {
-              // Today's P&L should only include open positions
-              // Calculate day change: (current_price - previous_close_price) × quantity
-
-              // Skip closed positions (quantity = 0)
-              if (pos.quantity === 0) {
-                return sum;
-              }
-
-              // Calculate today's P&L using close_price (previous day's close)
-              if (pos.close_price && pos.last_price) {
-                const dayChange = (pos.last_price - pos.close_price) * pos.quantity;
-                return sum + dayChange;
-              }
-
-              // If no close_price, can't calculate today's change, skip it
-              return sum;
+              // Zerodha's pnl field includes:
+              // - For open positions: unrealized P&L
+              // - For closed positions: realized P&L from today's trades
+              // Simply sum all pnl values
+              const pnl = parseFloat(pos.pnl || 0);
+              return sum + pnl;
             }, 0);
 
             const activeTrades = positions.filter((pos: any) => pos.quantity !== 0).length;
