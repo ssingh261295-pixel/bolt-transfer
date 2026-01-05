@@ -217,7 +217,7 @@ export function Strategies() {
                     {key.last_used_at && (
                       <span className="flex items-center gap-1">
                         <Activity className="w-3 h-3" />
-                        Last used {new Date(key.last_used_at).toLocaleString()}
+                        Last used {new Date(key.last_used_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                       </span>
                     )}
                     <span className="text-blue-600">

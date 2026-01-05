@@ -215,7 +215,7 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
                     )}
                     <div className="text-xs text-gray-400">
                       {instrument.exchange}
-                      {instrument.expiry && ` • Expiry: ${new Date(instrument.expiry).toLocaleDateString()}`}
+                      {instrument.expiry && ` • Expiry: ${new Date(instrument.expiry).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}`}
                     </div>
                   </div>
                   <button

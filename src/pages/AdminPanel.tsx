@@ -385,7 +385,8 @@ export function AdminPanel() {
                       {new Date(userProfile.created_at).toLocaleDateString('en-IN', {
                         year: 'numeric',
                         month: 'short',
-                        day: 'numeric'
+                        day: 'numeric',
+                        timeZone: 'Asia/Kolkata'
                       })}
                     </td>
                     <td className="px-6 py-4">

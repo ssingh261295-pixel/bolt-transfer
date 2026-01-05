@@ -612,7 +612,7 @@ export function Brokers() {
                   <span className="text-gray-600">Last Connected</span>
                   <span className="text-gray-900">
                     {broker.last_connected_at
-                      ? new Date(broker.last_connected_at).toLocaleDateString()
+                      ? new Date(broker.last_connected_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })
                       : 'Never'}
                   </span>
                 </div>

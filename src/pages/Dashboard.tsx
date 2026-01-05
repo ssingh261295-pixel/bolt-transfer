@@ -363,7 +363,7 @@ export function Dashboard() {
           <p className="text-sm text-gray-600 mt-1">View margin, P&L, and trading activity by account</p>
           {lastFetch && (
             <p className="text-xs text-gray-500 mt-1">
-              Last updated: {lastFetch.toLocaleTimeString()}
+              Last updated: {lastFetch.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })}
             </p>
           )}
         </div>
@@ -551,7 +551,7 @@ export function Dashboard() {
                     </div>
                     <div className="text-right text-xs text-gray-500">
                       <p>Last updated</p>
-                      <p>{account.last_updated.toLocaleTimeString()}</p>
+                      <p>{account.last_updated.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
                     </div>
                   </div>
 

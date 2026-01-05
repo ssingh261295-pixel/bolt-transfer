@@ -78,7 +78,8 @@ const HMTGTTRowComponent = ({
         {new Date(gtt.created_at).toLocaleDateString('en-IN', {
           year: 'numeric',
           month: '2-digit',
-          day: '2-digit'
+          day: '2-digit',
+          timeZone: 'Asia/Kolkata'
         })}
       </td>
       <td className="px-4 py-3">

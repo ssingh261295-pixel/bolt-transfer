@@ -24,7 +24,8 @@ const formatTimestamp = (date: Date): string => {
   return date.toLocaleTimeString('en-IN', {
     hour: '2-digit',
     minute: '2-digit',
-    hour12: true
+    hour12: true,
+    timeZone: 'Asia/Kolkata'
   });
 };
 
@@ -876,7 +877,8 @@ export function GTTOrders() {
                       {new Date(gtt.created_at).toLocaleDateString('en-IN', {
                         year: 'numeric',
                         month: '2-digit',
-                        day: '2-digit'
+                        day: '2-digit',
+                        timeZone: 'Asia/Kolkata'
                       })}
                     </td>
                     <td className="px-4 py-3">
