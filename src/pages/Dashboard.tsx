@@ -248,9 +248,11 @@ export function Dashboard() {
             const netPositions = result.positions || [];
             const dayPositions = result.dayPositions || [];
 
-            // Calculate Today's P&L from day positions (intraday trades only)
+            // Calculate Today's P&L from day positions using m2m (mark-to-market)
+            // m2m represents the actual intraday P&L for today's trades
             const todayPnl = dayPositions.reduce((sum: number, pos: any) => {
-              const pnl = parseFloat(pos.pnl || 0);
+              // Use m2m if available, otherwise fall back to pnl
+              const pnl = parseFloat(pos.m2m !== undefined ? pos.m2m : pos.pnl || 0);
               return sum + pnl;
             }, 0);
 
