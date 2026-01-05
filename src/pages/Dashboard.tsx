@@ -253,12 +253,18 @@ export function Dashboard() {
             console.log(`[${broker.account_holder_name || broker.client_id}] Net positions:`, JSON.stringify(netPositions, null, 2));
 
             const openingBalance = parseFloat(equity.available?.opening_balance || equity.net || 0);
-            const currentBalance = parseFloat(equity.net || 0);
-            const todayPnl = currentBalance - openingBalance;
+
+            let todayPnl = 0;
+            if (netPositions && netPositions.length > 0) {
+              todayPnl = netPositions.reduce((sum: number, pos: any) => {
+                const pnl = parseFloat(pos.pnl || 0);
+                console.log(`Position ${pos.tradingsymbol}: pnl=${pnl}, m2m=${pos.m2m}, day_buy_value=${pos.day_buy_value}, day_sell_value=${pos.day_sell_value}`);
+                return sum + pnl;
+              }, 0);
+            }
 
             console.log(`[${broker.account_holder_name || broker.client_id}] Opening balance:`, openingBalance);
-            console.log(`[${broker.account_holder_name || broker.client_id}] Current balance:`, currentBalance);
-            console.log(`[${broker.account_holder_name || broker.client_id}] Calculated today_pnl:`, todayPnl);
+            console.log(`[${broker.account_holder_name || broker.client_id}] Calculated today_pnl from positions:`, todayPnl);
 
             const activeTrades = netPositions.filter((pos: any) => pos.quantity !== 0).length;
             const gttOrders = gttResult.success ? (gttResult.data || []) : [];
