@@ -214,6 +214,7 @@ export function Dashboard() {
     setError('');
 
     const failedAccounts: string[] = [];
+    const debugInfo: any[] = [];
 
     try {
       const accountPromises = brokersToFetch.map(async (broker) => {
@@ -248,14 +249,12 @@ export function Dashboard() {
             const netPositions = result.positions || [];
             const dayPositions = result.dayPositions || [];
 
-            // Show debug info as alert
+            // Collect debug info
             if (result.debug) {
-              alert(`DEBUG INFO:\n` +
-                `Net Positions: ${result.debug.netCount}\n` +
-                `Day Positions: ${result.debug.dayCount}\n` +
-                `Net PnL Total: ${result.debug.netPnlTotal}\n` +
-                `Day PnL Total: ${result.debug.dayPnlTotal}\n` +
-                `Status: ${result.debug.rawPositionsStatus}`);
+              debugInfo.push({
+                accountName: broker.account_holder_name || broker.account_name || broker.client_id,
+                ...result.debug
+              });
             }
 
             // Calculate Today's P&L from day positions
@@ -311,6 +310,34 @@ export function Dashboard() {
 
       await Promise.all(accountPromises);
       setLastFetch(new Date());
+
+      // Show aggregated debug info
+      if (debugInfo.length > 0) {
+        const totalNetPnl = debugInfo.reduce((sum, info) => sum + info.netPnlTotal, 0);
+        const totalDayPnl = debugInfo.reduce((sum, info) => sum + info.dayPnlTotal, 0);
+        const totalNetPositions = debugInfo.reduce((sum, info) => sum + info.netCount, 0);
+        const totalDayPositions = debugInfo.reduce((sum, info) => sum + info.dayCount, 0);
+
+        let debugMessage = `DEBUG INFO (${debugInfo.length} account${debugInfo.length > 1 ? 's' : ''}):\n\n`;
+
+        debugInfo.forEach(info => {
+          debugMessage += `${info.accountName}:\n`;
+          debugMessage += `  Net Positions: ${info.netCount}\n`;
+          debugMessage += `  Day Positions: ${info.dayCount}\n`;
+          debugMessage += `  Net PnL: ${info.netPnlTotal}\n`;
+          debugMessage += `  Day PnL: ${info.dayPnlTotal}\n\n`;
+        });
+
+        if (debugInfo.length > 1) {
+          debugMessage += `TOTAL:\n`;
+          debugMessage += `  Net Positions: ${totalNetPositions}\n`;
+          debugMessage += `  Day Positions: ${totalDayPositions}\n`;
+          debugMessage += `  Net PnL: ${totalNetPnl}\n`;
+          debugMessage += `  Day PnL: ${totalDayPnl}`;
+        }
+
+        alert(debugMessage);
+      }
 
       if (failedAccounts.length > 0) {
         const accountList = failedAccounts.join(', ');
