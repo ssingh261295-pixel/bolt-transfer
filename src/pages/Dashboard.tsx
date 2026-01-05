@@ -31,12 +31,17 @@ export function Dashboard() {
   useEffect(() => {
     if (user) {
       loadBrokers();
-      loadCachedMetrics();
     }
   }, [user]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (user && brokers.length > 0) {
+      loadCachedMetrics();
+    }
+  }, [user, brokers.length]);
+
+  useEffect(() => {
+    if (!user?.id || brokers.length === 0) return;
 
     const channel = supabase
       .channel('dashboard_metrics_changes')
@@ -48,10 +53,42 @@ export function Dashboard() {
       }, (payload) => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
           const newMetric = payload.new as any;
-          patchAccountData(newMetric);
+          const broker = brokers.find(b => b.id === newMetric.broker_connection_id);
+          if (!broker) {
+            console.warn('Broker not found for metric:', newMetric.broker_connection_id);
+            return;
+          }
+
+          const newAccount: AccountData = {
+            id: newMetric.id,
+            broker_id: newMetric.broker_connection_id,
+            broker_name: broker.broker_name || 'zerodha',
+            account_name: broker.account_name || '',
+            account_holder_name: broker.account_holder_name || '',
+            client_id: broker.client_id || '',
+            available_margin: parseFloat(newMetric.available_margin || 0),
+            used_margin: parseFloat(newMetric.used_margin || 0),
+            available_cash: parseFloat(newMetric.available_cash || 0),
+            today_pnl: parseFloat(newMetric.today_pnl || 0),
+            active_trades: newMetric.active_trades || 0,
+            active_gtt: newMetric.active_gtt || 0,
+            last_updated: new Date(newMetric.last_updated),
+          };
+
+          setAccountsData(prev => {
+            const existingIndex = prev.findIndex(acc => acc.broker_id === newMetric.broker_connection_id);
+            if (existingIndex >= 0) {
+              const updated = [...prev];
+              updated[existingIndex] = newAccount;
+              return updated;
+            } else {
+              return [...prev, newAccount];
+            }
+          });
+          setLastFetch(new Date());
         } else if (payload.eventType === 'DELETE') {
           const oldMetric = payload.old as any;
-          setAccountsData(prev => prev.filter(acc => acc.id !== oldMetric.id));
+          setAccountsData(prev => prev.filter(acc => acc.broker_id !== oldMetric.broker_connection_id));
         }
       })
       .subscribe();
@@ -59,38 +96,7 @@ export function Dashboard() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
-
-  const patchAccountData = (metric: any) => {
-    setAccountsData(prev => {
-      const broker = brokers.find(b => b.id === metric.broker_connection_id);
-      const newAccount: AccountData = {
-        id: metric.id,
-        broker_id: metric.broker_connection_id,
-        broker_name: broker?.broker_name || 'zerodha',
-        account_name: broker?.account_name || '',
-        account_holder_name: broker?.account_holder_name || '',
-        client_id: broker?.client_id || '',
-        available_margin: parseFloat(metric.available_margin || 0),
-        used_margin: parseFloat(metric.used_margin || 0),
-        available_cash: parseFloat(metric.available_cash || 0),
-        today_pnl: parseFloat(metric.today_pnl || 0),
-        active_trades: metric.active_trades || 0,
-        active_gtt: metric.active_gtt || 0,
-        last_updated: new Date(metric.last_updated),
-      };
-
-      const existingIndex = prev.findIndex(acc => acc.id === metric.id);
-      if (existingIndex >= 0) {
-        const updated = [...prev];
-        updated[existingIndex] = newAccount;
-        return updated;
-      } else {
-        return [...prev, newAccount];
-      }
-    });
-    setLastFetch(new Date());
-  };
+  }, [user?.id, brokers]);
 
   const loadCachedMetrics = async () => {
     try {
@@ -102,21 +108,34 @@ export function Dashboard() {
       if (error) throw error;
 
       if (data && data.length > 0) {
+        // Deduplicate by broker_connection_id - keep only the latest entry for each broker
+        const uniqueMetrics = data.reduce((acc, metric) => {
+          const existing = acc.find(m => m.broker_connection_id === metric.broker_connection_id);
+          if (!existing || new Date(metric.last_updated) > new Date(existing.last_updated)) {
+            return [...acc.filter(m => m.broker_connection_id !== metric.broker_connection_id), metric];
+          }
+          return acc;
+        }, [] as any[]);
+
         const accountResults: AccountData[] = await Promise.all(
-          data.map(async (metric) => {
+          uniqueMetrics.map(async (metric) => {
             const { data: broker } = await supabase
               .from('broker_connections')
               .select('*')
               .eq('id', metric.broker_connection_id)
               .maybeSingle();
 
+            if (!broker) {
+              return null;
+            }
+
             return {
               id: metric.id,
               broker_id: metric.broker_connection_id,
-              broker_name: broker?.broker_name || 'zerodha',
-              account_name: broker?.account_name || '',
-              account_holder_name: broker?.account_holder_name || '',
-              client_id: broker?.client_id || '',
+              broker_name: broker.broker_name || 'zerodha',
+              account_name: broker.account_name || '',
+              account_holder_name: broker.account_holder_name || '',
+              client_id: broker.client_id || '',
               available_margin: parseFloat(metric.available_margin || 0),
               used_margin: parseFloat(metric.used_margin || 0),
               available_cash: parseFloat(metric.available_cash || 0),
@@ -128,8 +147,8 @@ export function Dashboard() {
           })
         );
 
-        setAccountsData(accountResults);
-        setLastFetch(new Date(data[0].last_updated));
+        setAccountsData(accountResults.filter(a => a !== null) as AccountData[]);
+        setLastFetch(new Date(uniqueMetrics[0].last_updated));
       }
     } catch (err) {
       console.error('Error loading cached metrics:', err);
