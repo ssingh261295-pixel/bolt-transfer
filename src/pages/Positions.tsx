@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { LineChart, ArrowUpDown, Activity, MoreVertical, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,6 +33,7 @@ export function Positions() {
   const [selectedPositions, setSelectedPositions] = useState<Set<string>>(new Set());
   const [isExiting, setIsExiting] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [frozenPositionsForExit, setFrozenPositionsForExit] = useState<any[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [menuOpenUpward, setMenuOpenUpward] = useState(false);
@@ -192,10 +193,10 @@ export function Positions() {
   };
 
   useEffect(() => {
-    if (ticks.size > 0 && positions.length > 0) {
+    if (ticks.size > 0 && positions.length > 0 && !exitModalOpen) {
       updateSummary(positions);
     }
-  }, [ticks, positions]);
+  }, [ticks, positions, exitModalOpen]);
 
   const loadBrokers = async () => {
     const { data } = await supabase
@@ -306,9 +307,12 @@ export function Positions() {
 
   const handleOpenExitModal = (position?: any) => {
     if (position) {
-      setExitModalOpen(true);
+      setFrozenPositionsForExit([position]);
       setSelectedPosition(position);
+      setExitModalOpen(true);
     } else if (selectedPositions.size > 0) {
+      const positionsToFreeze = positions.filter(p => selectedPositions.has(p.id));
+      setFrozenPositionsForExit(positionsToFreeze);
       setExitModalOpen(true);
     }
     setOpenMenuId(null);
@@ -317,18 +321,13 @@ export function Positions() {
   const handleExitSuccess = () => {
     setSyncMessage('✓ Position(s) exited successfully');
     setSelectedPositions(new Set());
+    setFrozenPositionsForExit([]);
     loadPositions();
     setTimeout(() => setSyncMessage(''), 5000);
   };
 
   const getPositionsToExit = () => {
-    if (selectedPositions.size > 0) {
-      return positions.filter(p => selectedPositions.has(p.id));
-    }
-    if (selectedPosition) {
-      return [selectedPosition];
-    }
-    return [];
+    return frozenPositionsForExit;
   };
 
   const handleOpenGTT = (position: any) => {
@@ -722,8 +721,9 @@ export function Positions() {
         onClose={() => {
           setExitModalOpen(false);
           setSelectedPosition(null);
+          setFrozenPositionsForExit([]);
         }}
-        positions={getPositionsToExit()}
+        positions={frozenPositionsForExit}
         onSuccess={handleExitSuccess}
       />
 
