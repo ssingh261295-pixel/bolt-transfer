@@ -6,6 +6,25 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
+// Helper function to convert Zerodha timestamp to ISO format with IST timezone
+function convertZerodhaTimestamp(timestamp: string | null): string | null {
+  if (!timestamp) return null;
+
+  // Zerodha returns timestamps in format "YYYY-MM-DD HH:MM:SS" in IST
+  // We need to parse this and add IST timezone offset
+  try {
+    // Parse the timestamp and assume it's in IST (UTC+5:30)
+    const [datePart, timePart] = timestamp.split(' ');
+    if (!datePart || !timePart) return null;
+
+    // Create ISO string with IST offset
+    return `${datePart}T${timePart}+05:30`;
+  } catch (e) {
+    console.error('Error converting timestamp:', e);
+    return null;
+  }
+}
+
 interface OrderRequest {
   broker_connection_id: string;
   symbol: string;
@@ -215,7 +234,7 @@ Deno.serve(async (req: Request) => {
             order_id: order.order_id,
             executed_quantity: order.filled_quantity || 0,
             executed_price: order.average_price || null,
-            order_timestamp: order.order_timestamp || order.exchange_timestamp || null,
+            order_timestamp: convertZerodhaTimestamp(order.order_timestamp || order.exchange_timestamp),
           }));
 
           const { error: insertError } = await supabase.from('orders').insert(orderRecords);
