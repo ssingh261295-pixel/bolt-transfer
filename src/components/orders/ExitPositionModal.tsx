@@ -220,7 +220,7 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-6 overscroll-contain">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4">
                 {error}
@@ -316,7 +316,7 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
             </div>
           </div>
 
-          <div className="p-6 border-t bg-white">
+          <div className="p-6 border-t bg-white flex-shrink-0">
             <div className="flex gap-3 justify-end">
               <button
                 type="button"
