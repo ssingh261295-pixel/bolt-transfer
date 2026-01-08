@@ -357,10 +357,10 @@ export function Dashboard() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 max-w-full overflow-x-hidden">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Account Overview</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900">Account Overview</h2>
           <p className="text-sm text-gray-600 mt-1">View margin, P&L, and trading activity by account</p>
           {lastFetch && (
             <p className="text-xs text-gray-500 mt-1">
@@ -371,7 +371,7 @@ export function Dashboard() {
         <button
           onClick={handleRefresh}
           disabled={loading || brokers.length === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
         >
           <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           Refresh
@@ -422,13 +422,15 @@ export function Dashboard() {
         <>
           {brokers.length > 1 && (
             <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center gap-3">
-                <Filter className="w-5 h-5 text-gray-600" />
-                <label className="text-sm font-medium text-gray-700">Filter by Account:</label>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-5 h-5 text-gray-600" />
+                  <label className="text-sm font-medium text-gray-700">Filter by Account:</label>
+                </div>
                 <select
                   value={selectedBroker}
                   onChange={(e) => setSelectedBroker(e.target.value)}
-                  className="flex-1 max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 sm:max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="all">All Accounts</option>
                   {brokers.map((broker) => (
@@ -442,58 +444,58 @@ export function Dashboard() {
           )}
 
           {selectedBroker === 'all' && accountsData.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 md:p-6 text-white">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-blue-100">Total Available Margin</h3>
+                  <h3 className="text-xs md:text-sm font-medium text-blue-100">Total Available Margin</h3>
                   <Wallet className="w-5 h-5 text-blue-200" />
                 </div>
-                <p className="text-3xl font-bold">{formatCurrency(aggregatedMetrics.totalAvailableMargin)}</p>
+                <p className="text-2xl md:text-3xl font-bold break-words">{formatCurrency(aggregatedMetrics.totalAvailableMargin)}</p>
                 <p className="text-xs text-blue-100 mt-1">Across all accounts</p>
               </div>
 
-              <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-white">
+              <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-5 md:p-6 text-white">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-orange-100">Total Used Margin</h3>
+                  <h3 className="text-xs md:text-sm font-medium text-orange-100">Total Used Margin</h3>
                   <Wallet className="w-5 h-5 text-orange-200" />
                 </div>
-                <p className="text-3xl font-bold">{formatCurrency(aggregatedMetrics.totalUsedMargin)}</p>
+                <p className="text-2xl md:text-3xl font-bold break-words">{formatCurrency(aggregatedMetrics.totalUsedMargin)}</p>
                 <p className="text-xs text-orange-100 mt-1">Across all accounts</p>
               </div>
 
-              <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white">
+              <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-5 md:p-6 text-white">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-green-100">Total Opening Balance</h3>
+                  <h3 className="text-xs md:text-sm font-medium text-green-100">Total Opening Balance</h3>
                   <Wallet className="w-5 h-5 text-green-200" />
                 </div>
-                <p className="text-3xl font-bold">{formatCurrency(aggregatedMetrics.totalAvailableCash)}</p>
+                <p className="text-2xl md:text-3xl font-bold break-words">{formatCurrency(aggregatedMetrics.totalAvailableCash)}</p>
                 <p className="text-xs text-green-100 mt-1">Across all accounts</p>
               </div>
 
-              <div className={`bg-gradient-to-br ${aggregatedMetrics.totalTodayPnl >= 0 ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600'} rounded-xl p-6 text-white`}>
+              <div className={`bg-gradient-to-br ${aggregatedMetrics.totalTodayPnl >= 0 ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600'} rounded-xl p-5 md:p-6 text-white`}>
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-white/80">Today's P&L</h3>
+                  <h3 className="text-xs md:text-sm font-medium text-white/80">Today's P&L</h3>
                   <TrendingUp className="w-5 h-5 text-white/70" />
                 </div>
-                <p className="text-3xl font-bold">{aggregatedMetrics.totalTodayPnl >= 0 ? '+' : ''}{formatCurrency(aggregatedMetrics.totalTodayPnl)}</p>
+                <p className="text-2xl md:text-3xl font-bold break-words">{aggregatedMetrics.totalTodayPnl >= 0 ? '+' : ''}{formatCurrency(aggregatedMetrics.totalTodayPnl)}</p>
                 <p className="text-xs text-white/80 mt-1">Across all accounts</p>
               </div>
 
-              <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-xl p-6 text-white">
+              <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-xl p-5 md:p-6 text-white">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-cyan-100">Active Trades</h3>
+                  <h3 className="text-xs md:text-sm font-medium text-cyan-100">Active Trades</h3>
                   <Activity className="w-5 h-5 text-cyan-200" />
                 </div>
-                <p className="text-3xl font-bold">{aggregatedMetrics.totalActiveTrades}</p>
+                <p className="text-2xl md:text-3xl font-bold">{aggregatedMetrics.totalActiveTrades}</p>
                 <p className="text-xs text-cyan-100 mt-1">Open positions</p>
               </div>
 
-              <div className="bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl p-6 text-white">
+              <div className="bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl p-5 md:p-6 text-white">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-teal-100">Active GTT</h3>
+                  <h3 className="text-xs md:text-sm font-medium text-teal-100">Active GTT</h3>
                   <ListChecks className="w-5 h-5 text-teal-200" />
                 </div>
-                <p className="text-3xl font-bold">{aggregatedMetrics.totalActiveGtt}</p>
+                <p className="text-2xl md:text-3xl font-bold">{aggregatedMetrics.totalActiveGtt}</p>
                 <p className="text-xs text-teal-100 mt-1">Pending orders</p>
               </div>
             </div>
@@ -556,47 +558,47 @@ export function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                     <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
-                      <p className="text-sm font-medium text-blue-900 mb-1">Available Margin</p>
-                      <p className="text-2xl font-bold text-blue-600">
+                      <p className="text-xs md:text-sm font-medium text-blue-900 mb-1">Available Margin</p>
+                      <p className="text-xl md:text-2xl font-bold text-blue-600 break-words">
                         {formatCurrency(account.available_margin)}
                       </p>
                     </div>
 
                     <div className="bg-orange-50 rounded-lg p-4 border border-orange-100">
-                      <p className="text-sm font-medium text-orange-900 mb-1">Used Margin</p>
-                      <p className="text-2xl font-bold text-orange-600">
+                      <p className="text-xs md:text-sm font-medium text-orange-900 mb-1">Used Margin</p>
+                      <p className="text-xl md:text-2xl font-bold text-orange-600 break-words">
                         {formatCurrency(account.used_margin)}
                       </p>
                     </div>
 
                     <div className="bg-green-50 rounded-lg p-4 border border-green-100">
-                      <p className="text-sm font-medium text-green-900 mb-1">Opening Balance</p>
-                      <p className="text-2xl font-bold text-green-600">
+                      <p className="text-xs md:text-sm font-medium text-green-900 mb-1">Opening Balance</p>
+                      <p className="text-xl md:text-2xl font-bold text-green-600 break-words">
                         {formatCurrency(account.available_cash)}
                       </p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className={`${account.today_pnl >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'} rounded-lg p-4 border`}>
-                      <p className={`text-sm font-medium ${account.today_pnl >= 0 ? 'text-emerald-900' : 'text-red-900'} mb-1`}>Today's P&L</p>
-                      <p className={`text-2xl font-bold ${account.today_pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      <p className={`text-xs md:text-sm font-medium ${account.today_pnl >= 0 ? 'text-emerald-900' : 'text-red-900'} mb-1`}>Today's P&L</p>
+                      <p className={`text-xl md:text-2xl font-bold ${account.today_pnl >= 0 ? 'text-emerald-600' : 'text-red-600'} break-words`}>
                         {account.today_pnl >= 0 ? '+' : ''}{formatCurrency(account.today_pnl)}
                       </p>
                     </div>
 
                     <div className="bg-cyan-50 rounded-lg p-4 border border-cyan-100">
-                      <p className="text-sm font-medium text-cyan-900 mb-1">Active Trades</p>
-                      <p className="text-2xl font-bold text-cyan-600">
+                      <p className="text-xs md:text-sm font-medium text-cyan-900 mb-1">Active Trades</p>
+                      <p className="text-xl md:text-2xl font-bold text-cyan-600">
                         {account.active_trades}
                       </p>
                     </div>
 
                     <div className="bg-teal-50 rounded-lg p-4 border border-teal-100">
-                      <p className="text-sm font-medium text-teal-900 mb-1">Active GTT</p>
-                      <p className="text-2xl font-bold text-teal-600">
+                      <p className="text-xs md:text-sm font-medium text-teal-900 mb-1">Active GTT</p>
+                      <p className="text-xl md:text-2xl font-bold text-teal-600">
                         {account.active_gtt}
                       </p>
                     </div>

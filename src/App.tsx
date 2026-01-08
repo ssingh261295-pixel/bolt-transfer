@@ -19,6 +19,7 @@ import { TradingViewLogs } from './pages/TradingViewLogs';
 import { NFOSymbolSettings } from './pages/NFOSymbolSettings';
 import TopNavigation from './components/layout/TopNavigation';
 import WatchlistSidebar from './components/layout/WatchlistSidebar';
+import { MobileNavDrawer } from './components/layout/MobileNavDrawer';
 import { PlaceOrderModal } from './components/orders/PlaceOrderModal';
 import { GTTModal } from './components/orders/GTTModal';
 
@@ -31,12 +32,17 @@ function ProtectedLayout() {
   const [gttDefaults, setGttDefaults] = useState<any>({});
   const [brokers, setBrokers] = useState<any[]>([]);
   const [brokerId, setBrokerId] = useState<string>('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadBrokers();
     }
   }, [user]);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   const loadBrokers = async () => {
     const { data } = await supabase
@@ -94,15 +100,16 @@ function ProtectedLayout() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      <TopNavigation />
+    <div className="flex flex-col h-screen bg-gray-50 max-w-full overflow-x-hidden">
+      <TopNavigation onMobileMenuToggle={() => setMobileMenuOpen(true)} />
+      <MobileNavDrawer isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
       <div className="flex flex-1 overflow-hidden">
         <WatchlistSidebar
           onBuyClick={handleBuyClick}
           onSellClick={handleSellClick}
           onGTTClick={handleGTTClick}
         />
-        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 max-w-full">
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/brokers" element={<Brokers />} />

@@ -172,11 +172,11 @@ export function TradingViewLogs() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 max-w-full overflow-x-hidden">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">TradingView Webhook Logs</h1>
-          <p className="text-gray-600 mt-1">Monitor all incoming webhook signals and execution status</p>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">TradingView Webhook Logs</h1>
+          <p className="text-sm md:text-base text-gray-600 mt-1">Monitor all incoming webhook signals and execution status</p>
           {user && (
             <p className="text-xs text-gray-500 mt-1">User ID: {user.id}</p>
           )}
@@ -184,14 +184,14 @@ export function TradingViewLogs() {
         <button
           onClick={loadLogs}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 w-full md:w-auto"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
@@ -235,7 +235,7 @@ export function TradingViewLogs() {
 
       <div className="bg-white rounded-lg border border-gray-200">
         <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
@@ -247,45 +247,98 @@ export function TradingViewLogs() {
               />
             </div>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Status</option>
-              <option value="success">Success</option>
-              <option value="failed">Failed</option>
-              <option value="rejected">Rejected</option>
-              <option value="rejected_time_window">Outside Trading Hours</option>
-            </select>
+            <div className="flex gap-3">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="flex-1 md:flex-none px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="all">All Status</option>
+                <option value="success">Success</option>
+                <option value="failed">Failed</option>
+                <option value="rejected">Rejected</option>
+                <option value="rejected_time_window">Outside Trading Hours</option>
+              </select>
 
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Time</option>
-              <option value="today">Today</option>
-              <option value="week">Last 7 Days</option>
-              <option value="month">Last 30 Days</option>
-            </select>
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="flex-1 md:flex-none px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="week">Last 7 Days</option>
+                <option value="month">Last 30 Days</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          {loading ? (
-            <div className="p-12 text-center text-gray-500">
-              <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
-              Loading webhook logs...
+        {loading ? (
+          <div className="p-12 text-center text-gray-500">
+            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
+            Loading webhook logs...
+          </div>
+        ) : filteredLogs.length === 0 ? (
+          <div className="p-12 text-center text-gray-500">
+            <Filter className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <p className="text-lg font-medium">No logs found</p>
+            <p className="text-sm mt-1">Try adjusting your filters or search criteria</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-gray-200">
+              {filteredLogs.map((log) => (
+                <div key={log.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900 text-sm">{log.payload?.symbol || '-'}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{formatDate(log.received_at)}</div>
+                    </div>
+                    {getStatusBadge(log.status)}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {log.payload?.trade_type && (
+                      <span className={`px-2 py-1 text-xs font-medium rounded ${
+                        log.payload.trade_type === 'BUY' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {log.payload.trade_type}
+                      </span>
+                    )}
+                    {log.payload?.price && (
+                      <span className="text-sm text-gray-600">₹{log.payload.price.toFixed(2)}</span>
+                    )}
+                  </div>
+
+                  <div className="text-xs text-gray-600">
+                    <div className="font-medium text-gray-700">{log.webhook_key_name}</div>
+                    <div className="text-gray-500">{log.source_ip}</div>
+                  </div>
+
+                  {log.accounts_executed && (
+                    <div className="text-xs text-gray-600">
+                      <span className="font-medium">
+                        {log.accounts_executed.filter((a: any) => a.order_placed).length}/{log.accounts_executed.length}
+                      </span>
+                      <span className="ml-1">accounts executed</span>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setSelectedLog(log)}
+                    className="w-full py-2 px-4 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-sm font-medium transition"
+                  >
+                    View Details
+                  </button>
+                </div>
+              ))}
             </div>
-          ) : filteredLogs.length === 0 ? (
-            <div className="p-12 text-center text-gray-500">
-              <Filter className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p className="text-lg font-medium">No logs found</p>
-              <p className="text-sm mt-1">Try adjusting your filters or search criteria</p>
-            </div>
-          ) : (
-            <table className="w-full">
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
@@ -347,33 +400,34 @@ export function TradingViewLogs() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          )}
-        </div>
+              </table>
+            </div>
+          </>
+        )}
 
         {!loading && totalCount > pageSize && (
-          <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
+          <div className="px-4 py-3 border-t border-gray-200 flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="text-xs md:text-sm text-gray-600 text-center md:text-left">
               Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount} results
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
-                className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
                 <ChevronLeft className="w-4 h-4" />
-                Previous
+                <span className="hidden sm:inline">Previous</span>
               </button>
-              <span className="px-3 py-1.5 text-sm text-gray-700">
+              <span className="px-3 py-1.5 text-xs md:text-sm text-gray-700 whitespace-nowrap">
                 Page {currentPage} of {Math.ceil(totalCount / pageSize)}
               </span>
               <button
                 onClick={() => setCurrentPage(Math.min(Math.ceil(totalCount / pageSize), currentPage + 1))}
                 disabled={currentPage >= Math.ceil(totalCount / pageSize)}
-                className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
-                Next
+                <span className="hidden sm:inline">Next</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
