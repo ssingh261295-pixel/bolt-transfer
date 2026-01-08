@@ -457,13 +457,13 @@ export function HMTGTTOrders() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div className="flex-1 min-w-0">
           <h2 className="text-xl lg:text-2xl font-bold text-gray-900 truncate">HMT GTT ({filteredHmtGttOrders.length})</h2>
-          <div className="flex flex-wrap items-center gap-2 lg:gap-3 mt-2">
+          <div className="min-h-[40px] flex flex-wrap items-center gap-2 lg:gap-3 mt-2">
             {engineStatus ? (
               <>
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 ${
                   engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected'
                     ? 'bg-green-100 text-green-800 border border-green-300'
                     : engineStatus.status === 'stale'
@@ -476,38 +476,38 @@ export function HMTGTTOrders() {
                 }`}>
                   {engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected' ? (
                     <>
-                      <Activity className="w-4 h-4 animate-pulse" />
-                      <span>Engine Running</span>
+                      <Activity className="w-4 h-4 animate-pulse flex-shrink-0" />
+                      <span className="whitespace-nowrap">Engine Running</span>
                     </>
                   ) : engineStatus.status === 'stale' ? (
                     <>
-                      <AlertCircle className="w-4 h-4" />
-                      <span>Engine Stale - Auto-Reconnecting</span>
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      <span className="whitespace-nowrap">Auto-Reconnecting</span>
                     </>
                   ) : engineStatus.status === 'running' && engineStatus.error ? (
                     <>
-                      <AlertCircle className="w-4 h-4" />
-                      <span>Engine Error</span>
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      <span className="whitespace-nowrap">Engine Error</span>
                     </>
                   ) : engineStatus.status === 'running' ? (
                     <>
-                      <AlertCircle className="w-4 h-4" />
-                      <span>Connecting...</span>
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      <span className="whitespace-nowrap">Connecting...</span>
                     </>
                   ) : (
                     <>
-                      <Power className="w-4 h-4" />
-                      <span>Engine Stopped</span>
+                      <Power className="w-4 h-4 flex-shrink-0" />
+                      <span className="whitespace-nowrap">Engine Stopped</span>
                     </>
                   )}
                 </div>
                 {engineStatus.heartbeat && engineStatus.heartbeat.seconds_since_update !== null && (
-                  <div className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
+                  <div className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded whitespace-nowrap">
                     Heartbeat: {engineStatus.heartbeat.seconds_since_update}s ago
                   </div>
                 )}
                 {engineStatus.error && engineStatus.status !== 'stale' && (
-                  <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200">
+                  <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200 max-w-xs truncate">
                     {engineStatus.error}
                   </div>
                 )}
@@ -515,7 +515,7 @@ export function HMTGTTOrders() {
                   <button
                     onClick={handleRestartEngine}
                     disabled={loadingEngine}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
+                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50 whitespace-nowrap"
                   >
                     <Power className="w-4 h-4" />
                     {loadingEngine ? 'Restarting...' : 'Restart Engine'}
@@ -526,7 +526,7 @@ export function HMTGTTOrders() {
               <div className="text-sm text-gray-500">Loading engine status...</div>
             )}
             {isConnected && (
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium whitespace-nowrap">
                 <CheckCircle className="w-3 h-3" />
                 UI Live Prices
               </div>
@@ -679,17 +679,17 @@ export function HMTGTTOrders() {
               const position = getPositionForGTT(gtt);
 
               return (
-                <div key={gtt.id} className="p-4 space-y-3">
+                <div key={gtt.id} className="p-4 space-y-3 transition-colors">
                   <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3 flex-1">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
                       <input
                         type="checkbox"
                         checked={selectedOrders.has(gtt.id)}
                         onChange={() => toggleOrderSelection(gtt.id)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer mt-1"
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer mt-1 flex-shrink-0"
                       />
-                      <div className="flex-1">
-                        <div className="font-semibold text-gray-900">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-gray-900 truncate">
                           {isConnected && ltp && (
                             <span className="text-xs text-green-600 mr-1">●</span>
                           )}
@@ -697,27 +697,27 @@ export function HMTGTTOrders() {
                         </div>
                         <div className="text-xs text-gray-600">{gtt.exchange}</div>
                         {selectedBrokerId === 'all' && (
-                          <div className="text-xs text-gray-600 mt-1">
+                          <div className="text-xs text-gray-600 mt-1 truncate">
                             {gtt.broker_connections?.account_holder_name || gtt.broker_connections?.account_name || 'Account'}
                           </div>
                         )}
                       </div>
                     </div>
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap flex-shrink-0 ml-2 ${
                       gtt.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                     }`}>
                       {gtt.status}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
+                  <div className="grid grid-cols-2 gap-3 text-sm min-h-[120px]">
+                    <div className="min-w-0">
                       <div className="text-xs text-gray-500">Type</div>
-                      <div className="font-medium text-gray-900">
+                      <div className="font-medium text-gray-900 truncate">
                         {gtt.condition_type === 'two-leg' ? 'OCO' : 'Single'} / {gtt.transaction_type}
                       </div>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-xs text-gray-500">Created</div>
                       <div className="text-xs text-gray-900">
                         {new Date(gtt.created_at).toLocaleString('en-IN', {
@@ -729,12 +729,12 @@ export function HMTGTTOrders() {
                         })}
                       </div>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-xs text-gray-500">Trigger SL</div>
                       <div className="font-medium text-gray-900">
-                        ₹{gtt.trigger_price_1?.toFixed(2)}
+                        <div className="truncate">₹{gtt.trigger_price_1?.toFixed(2)}</div>
                         {ltp && (
-                          <div className="text-xs text-gray-500 font-normal mt-0.5">
+                          <div className="text-xs text-gray-500 font-normal mt-0.5 truncate">
                             {(() => {
                               const percentOfLTP = ((gtt.trigger_price_1 - ltp) / ltp) * 100;
                               const absPercent = Math.abs(percentOfLTP);
@@ -746,12 +746,12 @@ export function HMTGTTOrders() {
                       </div>
                     </div>
                     {gtt.condition_type === 'two-leg' && (
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-xs text-gray-500">Trigger TG</div>
                         <div className="font-medium text-gray-900">
-                          ₹{gtt.trigger_price_2?.toFixed(2)}
+                          <div className="truncate">₹{gtt.trigger_price_2?.toFixed(2)}</div>
                           {ltp && (
-                            <div className="text-xs text-gray-500 font-normal mt-0.5">
+                            <div className="text-xs text-gray-500 font-normal mt-0.5 truncate">
                               {(() => {
                                 const percentOfLTP = ((gtt.trigger_price_2 - ltp) / ltp) * 100;
                                 const absPercent = Math.abs(percentOfLTP);
@@ -763,25 +763,25 @@ export function HMTGTTOrders() {
                         </div>
                       </div>
                     )}
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-xs text-gray-500">LTP</div>
-                      <div className="font-medium text-gray-900">
+                      <div className="font-medium text-gray-900 tabular-nums">
                         {ltp ? `₹${ltp.toFixed(2)}` : '-'}
                       </div>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-xs text-gray-500">Qty.</div>
                       <div className="font-medium text-gray-900">{gtt.quantity_1}</div>
                     </div>
                     {position && (
                       <>
-                        <div>
+                        <div className="min-w-0">
                           <div className="text-xs text-gray-500">Avg. Price</div>
-                          <div className="font-medium text-gray-900">₹{position.average_price?.toFixed(2)}</div>
+                          <div className="font-medium text-gray-900 tabular-nums">₹{position.average_price?.toFixed(2)}</div>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <div className="text-xs text-gray-500">P&L</div>
-                          <div className={`font-semibold ${position.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          <div className={`font-semibold tabular-nums ${position.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {position.pnl >= 0 ? '+' : ''}₹{position.pnl?.toFixed(2)}
                           </div>
                         </div>
@@ -813,10 +813,10 @@ export function HMTGTTOrders() {
 
           {/* Desktop Table View */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full min-w-[1000px]">
+            <table className="w-full min-w-[1000px] table-fixed">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3 text-center w-12">
+                <th className="px-4 py-3 text-center" style={{ width: '48px' }}>
                   <input
                     type="checkbox"
                     checked={selectedOrders.size === filteredHmtGttOrders.length && filteredHmtGttOrders.length > 0}
@@ -827,6 +827,7 @@ export function HMTGTTOrders() {
                 <th
                   onClick={() => handleSort('created_at')}
                   className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  style={{ width: '110px' }}
                 >
                   <div className="flex items-center gap-1">
                     Created on
@@ -836,6 +837,7 @@ export function HMTGTTOrders() {
                 <th
                   onClick={() => handleSort('symbol')}
                   className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  style={{ width: '180px' }}
                 >
                   <div className="flex items-center gap-1">
                     Instrument
@@ -843,49 +845,51 @@ export function HMTGTTOrders() {
                   </div>
                 </th>
                 {selectedBrokerId === 'all' && (
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '160px' }}>
                     Account
                   </th>
                 )}
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '100px' }}>
                   Type
                 </th>
                 <th
                   onClick={() => handleSort('trigger_price')}
                   className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  style={{ width: '140px' }}
                 >
                   <div className="flex items-center gap-1">
                     Trigger
                     <ArrowUpDown className={`w-3 h-3 ${sortField === 'trigger_price' ? 'text-blue-600' : 'text-gray-400'}`} />
                   </div>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '100px' }}>
                   LTP
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '70px' }}>
                   Qty.
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '100px' }}>
                   Avg. Price
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '100px' }}>
                   P&L
                 </th>
                 <th
                   onClick={() => handleSort('status')}
                   className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
+                  style={{ width: '100px' }}
                 >
                   <div className="flex items-center gap-1">
                     Status
                     <ArrowUpDown className={`w-3 h-3 ${sortField === 'status' ? 'text-blue-600' : 'text-gray-400'}`} />
                   </div>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '100px' }}>
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-200 bg-white">
               {filteredHmtGttOrders.map((gtt) => (
                 <HMTGTTRow
                   key={gtt.id}

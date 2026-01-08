@@ -66,7 +66,7 @@ const HMTGTTRowComponent = ({
 
   return (
     <tr className="hover:bg-gray-50 transition-colors">
-      <td className="px-4 py-3 text-center">
+      <td className="px-4 py-3 text-center align-middle">
         <input
           type="checkbox"
           checked={isSelected}
@@ -74,7 +74,7 @@ const HMTGTTRowComponent = ({
           className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
         />
       </td>
-      <td className="px-4 py-3 text-sm text-gray-900">
+      <td className="px-4 py-3 text-sm text-gray-900 align-middle">
         {new Date(gtt.created_at).toLocaleDateString('en-IN', {
           year: 'numeric',
           month: '2-digit',
@@ -82,7 +82,7 @@ const HMTGTTRowComponent = ({
           timeZone: 'Asia/Kolkata'
         })}
       </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-3 align-middle">
         <div className="flex items-center gap-2">
           <div className="text-sm font-medium text-gray-900">
             {gtt.trading_symbol || 'N/A'}
@@ -104,13 +104,13 @@ const HMTGTTRowComponent = ({
         </div>
       </td>
       {showAccount && (
-        <td className="px-4 py-3">
-          <div className="text-sm text-gray-900">
+        <td className="px-4 py-3 align-middle">
+          <div className="text-sm text-gray-900 truncate">
             {(gtt.broker_connections?.account_holder_name || gtt.broker_connections?.account_name || 'Account')} ({gtt.broker_connections?.client_id || 'No ID'})
           </div>
         </td>
       )}
-      <td className="px-4 py-3">
+      <td className="px-4 py-3 align-middle">
         <div className="flex flex-col gap-1">
           <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium w-fit ${
             isOCO ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'
@@ -124,57 +124,57 @@ const HMTGTTRowComponent = ({
           </span>
         </div>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-3 align-middle">
         {isOCO ? (
           <div className="text-sm space-y-1">
-            <div className="text-gray-900">
+            <div className="text-gray-900 tabular-nums">
               ₹{gtt.trigger_price_1?.toFixed(2)}
-              <span className="text-xs text-gray-500 ml-1">
+              <span className="text-xs text-gray-500 ml-1 whitespace-nowrap">
                 {calculatePercentage(gtt.trigger_price_1, currentPrice)}
               </span>
             </div>
-            <div className="text-gray-900">
+            <div className="text-gray-900 tabular-nums">
               ₹{gtt.trigger_price_2?.toFixed(2)}
-              <span className="text-xs text-gray-500 ml-1">
+              <span className="text-xs text-gray-500 ml-1 whitespace-nowrap">
                 {calculatePercentage(gtt.trigger_price_2, currentPrice)}
               </span>
             </div>
           </div>
         ) : (
-          <div className="text-sm text-gray-900">
+          <div className="text-sm text-gray-900 tabular-nums">
             ₹{gtt.trigger_price_1?.toFixed(2)}
-            <span className="text-xs text-gray-500 ml-1">
+            <span className="text-xs text-gray-500 ml-1 whitespace-nowrap">
               {calculatePercentage(gtt.trigger_price_1, currentPrice)}
             </span>
           </div>
         )}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-900 transition-all duration-150">
+      <td className="px-4 py-3 text-sm text-gray-900 tabular-nums align-middle">
         ₹{currentPrice?.toFixed(2) || 'N/A'}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-900">
+      <td className="px-4 py-3 text-sm text-gray-900 align-middle">
         {gtt.quantity_1}
       </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-3 align-middle">
         {position ? (
-          <span className={`text-sm font-medium px-2 py-1 rounded ${pnl !== null && pnl >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          <span className={`text-sm font-medium px-2 py-1 rounded tabular-nums ${pnl !== null && pnl >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
             ₹{position.average_price?.toFixed(2)}
           </span>
         ) : (
           <span className="text-sm text-gray-400">-</span>
         )}
       </td>
-      <td className="px-4 py-3 transition-all duration-150">
+      <td className="px-4 py-3 align-middle">
         {pnl === null ? (
           <span className="text-sm text-gray-400">-</span>
         ) : (
-          <span className={`text-sm font-medium ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <span className={`text-sm font-medium tabular-nums ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {pnl >= 0 ? '+' : ''}{formatIndianCurrency(pnl)}
           </span>
         )}
       </td>
-      <td className="px-4 py-3">
-        <span className={`inline-flex px-2 py-1 rounded text-xs font-medium uppercase ${
+      <td className="px-4 py-3 align-middle">
+        <span className={`inline-flex px-2 py-1 rounded text-xs font-medium uppercase whitespace-nowrap ${
           gtt.status === 'active' ? 'bg-green-100 text-green-700' :
           gtt.status === 'triggered' ? 'bg-blue-100 text-blue-700' :
           gtt.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
@@ -184,7 +184,7 @@ const HMTGTTRowComponent = ({
           {gtt.status}
         </span>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-3 align-middle">
         <div className="flex gap-2">
           <button
             onClick={() => onEdit(gtt)}
