@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Plus, X, ChevronUp } from 'lucide-react';
+import { TrendingUp, TrendingDown, Plus, X, ChevronUp, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useZerodhaWebSocket } from '../../hooks/useZerodhaWebSocket';
@@ -137,20 +137,20 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
 
   if (isCollapsed) {
     return (
-      <div className="hidden lg:flex w-12 bg-white border-r border-gray-200 flex-col items-center py-4">
+      <div className="w-12 bg-white border-r border-gray-200 flex flex-col items-center py-4">
         <button
           onClick={() => setIsCollapsed(false)}
           className="p-2 hover:bg-gray-100 rounded"
           aria-label="Expand watchlist"
         >
-          <ChevronDown className="w-5 h-5 rotate-90" />
+          <ChevronUp className="w-5 h-5 rotate-90" />
         </button>
       </div>
     );
   }
 
   return (
-    <div className="hidden lg:flex w-72 bg-white border-r border-gray-200 flex-col h-full">
+    <div className="w-full sm:w-80 lg:w-72 bg-white border-r border-gray-200 flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-2">
@@ -158,8 +158,9 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
           <button
             onClick={() => setIsCollapsed(true)}
             className="p-1 hover:bg-gray-100 rounded"
+            aria-label="Collapse watchlist"
           >
-            <ChevronUp className="w-4 h-4 rotate-90" />
+            <ChevronDown className="w-4 h-4 rotate-90" />
           </button>
         </div>
         {brokerId && (
