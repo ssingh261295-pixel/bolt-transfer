@@ -457,10 +457,10 @@ export function HMTGTTOrders() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">HMT GTT ({filteredHmtGttOrders.length})</h2>
-          <div className="flex items-center gap-3 mt-2">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl lg:text-2xl font-bold text-gray-900 truncate">HMT GTT ({filteredHmtGttOrders.length})</h2>
+          <div className="flex flex-wrap items-center gap-2 lg:gap-3 mt-2">
             {engineStatus ? (
               <>
                 <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
@@ -533,12 +533,12 @@ export function HMTGTTOrders() {
             )}
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 lg:gap-3 items-center">
           {brokers.length > 0 && (
             <select
               value={selectedBrokerId}
               onChange={(e) => setSelectedBrokerId(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+              className="flex-1 min-w-[200px] lg:flex-none px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
             >
               <option value="all">All Accounts</option>
               {brokers.map((broker) => (
@@ -549,23 +549,26 @@ export function HMTGTTOrders() {
             </select>
           )}
           {uniqueInstruments.length > 0 && (
-            <MultiSelectFilter
-              label="Instruments"
-              options={uniqueInstruments}
-              selectedValues={selectedInstruments}
-              onChange={setSelectedInstruments}
-              placeholder="All Instruments"
-            />
+            <div className="flex-1 min-w-[200px] lg:flex-none">
+              <MultiSelectFilter
+                label="Instruments"
+                options={uniqueInstruments}
+                selectedValues={selectedInstruments}
+                onChange={setSelectedInstruments}
+                placeholder="All Instruments"
+              />
+            </div>
           )}
           <button
             onClick={() => {
               setEditingGTT(null);
               setShowCreateModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+            className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm whitespace-nowrap"
           >
             <Plus className="w-4 h-4" />
-            New HMT GTT
+            <span className="hidden sm:inline">New HMT GTT</span>
+            <span className="sm:hidden">New</span>
           </button>
         </div>
       </div>
@@ -590,11 +593,11 @@ export function HMTGTTOrders() {
       )}
 
       {selectedOrders.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 lg:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <span className="text-sm text-blue-800 font-medium">
             {selectedOrders.size} order(s) selected
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => {
                 const selectedGTTs = filteredHmtGttOrders.filter(gtt => selectedOrders.has(gtt.id));
@@ -613,17 +616,19 @@ export function HMTGTTOrders() {
                 }
               }}
               disabled={selectedOrders.size === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Edit2 className="w-4 h-4" />
-              Edit Selected
+              <span className="hidden sm:inline">Edit Selected</span>
+              <span className="sm:hidden">Edit</span>
             </button>
             <button
               onClick={handleBulkDelete}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
             >
               <Trash2 className="w-4 h-4" />
-              Delete Selected
+              <span className="hidden sm:inline">Delete Selected</span>
+              <span className="sm:hidden">Delete</span>
             </button>
           </div>
         </div>
@@ -648,7 +653,8 @@ export function HMTGTTOrders() {
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1000px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-4 py-3 text-center w-12">
@@ -737,6 +743,7 @@ export function HMTGTTOrders() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

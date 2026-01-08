@@ -137,10 +137,11 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
 
   if (isCollapsed) {
     return (
-      <div className="w-12 bg-white border-r border-gray-200 flex flex-col items-center py-4">
+      <div className="hidden lg:flex w-12 bg-white border-r border-gray-200 flex-col items-center py-4">
         <button
           onClick={() => setIsCollapsed(false)}
           className="p-2 hover:bg-gray-100 rounded"
+          aria-label="Expand watchlist"
         >
           <ChevronDown className="w-5 h-5 rotate-90" />
         </button>
@@ -149,7 +150,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
   }
 
   return (
-    <div className="w-72 bg-white border-r border-gray-200 flex flex-col h-full">
+    <div className="hidden lg:flex w-72 bg-white border-r border-gray-200 flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-2">
