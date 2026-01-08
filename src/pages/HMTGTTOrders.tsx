@@ -731,12 +731,36 @@ export function HMTGTTOrders() {
                     </div>
                     <div>
                       <div className="text-xs text-gray-500">Trigger SL</div>
-                      <div className="font-medium text-gray-900">₹{gtt.trigger_price_1?.toFixed(2)}</div>
+                      <div className="font-medium text-gray-900">
+                        ₹{gtt.trigger_price_1?.toFixed(2)}
+                        {ltp && (
+                          <div className="text-xs text-gray-500 font-normal mt-0.5">
+                            {(() => {
+                              const percentOfLTP = ((gtt.trigger_price_1 - ltp) / ltp) * 100;
+                              const absPercent = Math.abs(percentOfLTP);
+                              const sign = percentOfLTP > 0 ? '+' : '-';
+                              return `${sign}${absPercent.toFixed(2)}% of LTP`;
+                            })()}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     {gtt.condition_type === 'two-leg' && (
                       <div>
                         <div className="text-xs text-gray-500">Trigger TG</div>
-                        <div className="font-medium text-gray-900">₹{gtt.trigger_price_2?.toFixed(2)}</div>
+                        <div className="font-medium text-gray-900">
+                          ₹{gtt.trigger_price_2?.toFixed(2)}
+                          {ltp && (
+                            <div className="text-xs text-gray-500 font-normal mt-0.5">
+                              {(() => {
+                                const percentOfLTP = ((gtt.trigger_price_2 - ltp) / ltp) * 100;
+                                const absPercent = Math.abs(percentOfLTP);
+                                const sign = percentOfLTP > 0 ? '+' : '-';
+                                return `${sign}${absPercent.toFixed(2)}% of LTP`;
+                              })()}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                     <div>
