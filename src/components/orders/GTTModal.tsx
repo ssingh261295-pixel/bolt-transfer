@@ -845,16 +845,16 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl h-[95vh] flex flex-col">
-        <div className="bg-white border-b border-gray-200 px-3 py-2.5 flex items-center justify-between flex-shrink-0">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl h-[98vh] md:h-[95vh] flex flex-col">
+        <div className="bg-white border-b border-gray-200 px-2 md:px-3 py-2 md:py-2.5 flex items-center justify-between flex-shrink-0">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base md:text-lg font-semibold text-gray-900 truncate">
               {editingGTT ? (isHMTMode ? 'Edit HMT GTT Order' : 'Edit GTT Order') : (isHMTMode ? 'New HMT GTT Order' : 'New GTT Order')}
             </h2>
             {selectedInstrument && (
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-sm font-medium text-gray-900">{symbol}</span>
+              <div className="flex items-center gap-1 md:gap-2 mt-0.5 flex-wrap">
+                <span className="text-xs md:text-sm font-medium text-gray-900">{symbol}</span>
                 <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{exchange}</span>
                 {editingGTT && !editingGTT.bulkEdit && allBrokers && brokerConnectionId && (
                   <>
@@ -961,7 +961,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                   {selectedBrokerIds.length === allBrokers.length ? 'Deselect All' : 'Select All'}
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 {allBrokers.map((broker) => {
                   const isSelected = selectedBrokerIds.includes(broker.id);
                   return (
@@ -1046,10 +1046,10 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
 
 
           {/* Transaction and Trigger Type */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Transaction type</label>
-              <div className="flex gap-3">
+              <div className="flex gap-2 md:gap-3">
                 <label className="flex items-center cursor-pointer">
                   <input
                     type="radio"
@@ -1147,7 +1147,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
               </div>
             </div>
 
-            <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-2 items-start">
+            <div className="flex flex-col md:grid md:grid-cols-[1fr_auto_1fr_auto_1fr] gap-2 md:gap-2 md:items-start">
               {/* Trigger Price */}
               <div>
                 <label className="block text-xs text-gray-700 mb-1">Trigger price</label>
@@ -1204,7 +1204,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
               </div>
 
               {/* Arrow */}
-              <div className="flex items-center pt-6 text-gray-400 text-sm">
+              <div className="hidden md:flex items-center pt-6 text-gray-400 text-sm">
                 →
               </div>
 
@@ -1223,7 +1223,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
               </div>
 
               {/* Arrow */}
-              <div className="flex items-center pt-6 text-gray-400 text-sm">
+              <div className="hidden md:flex items-center pt-6 text-gray-400 text-sm">
                 →
               </div>
 
@@ -1334,7 +1334,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                 </div>
               </div>
 
-              <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-2 items-start">
+              <div className="flex flex-col md:grid md:grid-cols-[1fr_auto_1fr_auto_1fr] gap-2 md:gap-2 md:items-start">
                 {/* Trigger Price */}
                 <div>
                   <label className="block text-xs text-gray-700 mb-1">Trigger price</label>
@@ -1391,7 +1391,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                 </div>
 
                 {/* Arrow */}
-                <div className="flex items-center pt-6 text-gray-400 text-sm">
+                <div className="hidden md:flex items-center pt-6 text-gray-400 text-sm">
                   →
                 </div>
 
@@ -1410,7 +1410,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                 </div>
 
                 {/* Arrow */}
-                <div className="flex items-center pt-6 text-gray-400 text-sm">
+                <div className="hidden md:flex items-center pt-6 text-gray-400 text-sm">
                   →
                 </div>
 
@@ -1474,7 +1474,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between px-3 py-2.5 border-t border-gray-200 flex-shrink-0 bg-white">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-2 md:px-3 py-2.5 border-t border-gray-200 flex-shrink-0 bg-white">
             <div className="text-xs text-gray-600">
               By {editingGTT ? 'modifying' : 'creating'}, I agree that trigger executions are not guaranteed.
             </div>
@@ -1482,14 +1482,14 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-1.5 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50 transition"
+                className="flex-1 sm:flex-none px-4 py-1.5 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50 transition"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading || !selectedInstrument}
-                className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-none px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Processing...' : editingGTT ? 'Modify' : 'Create'}
               </button>

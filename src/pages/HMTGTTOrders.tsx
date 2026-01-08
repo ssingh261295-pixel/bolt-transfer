@@ -653,7 +653,122 @@ export function HMTGTTOrders() {
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-gray-200">
+            {filteredHmtGttOrders.map((gtt) => {
+              const ltp = getLTP(gtt.instrument_token);
+              const position = getPositionForGTT(gtt);
+
+              return (
+                <div key={gtt.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedOrders.has(gtt.id)}
+                        onChange={() => toggleOrderSelection(gtt.id)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-900">
+                          {isConnected && ltp && (
+                            <span className="text-xs text-green-600 mr-1">●</span>
+                          )}
+                          {gtt.trading_symbol}
+                        </div>
+                        <div className="text-xs text-gray-600">{gtt.exchange}</div>
+                        {selectedBrokerId === 'all' && (
+                          <div className="text-xs text-gray-600 mt-1">
+                            {gtt.broker_connections?.account_holder_name || gtt.broker_connections?.account_name || 'Account'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      gtt.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {gtt.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-xs text-gray-500">Type</div>
+                      <div className="font-medium text-gray-900">
+                        {gtt.condition_type === 'two-leg' ? 'OCO' : 'Single'} / {gtt.transaction_type}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Created</div>
+                      <div className="text-xs text-gray-900">
+                        {new Date(gtt.created_at).toLocaleString('en-IN', {
+                          timeZone: 'Asia/Kolkata',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Trigger SL</div>
+                      <div className="font-medium text-gray-900">₹{gtt.trigger_price_1?.toFixed(2)}</div>
+                    </div>
+                    {gtt.condition_type === 'two-leg' && (
+                      <div>
+                        <div className="text-xs text-gray-500">Trigger TG</div>
+                        <div className="font-medium text-gray-900">₹{gtt.trigger_price_2?.toFixed(2)}</div>
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-xs text-gray-500">LTP</div>
+                      <div className="font-medium text-gray-900">
+                        {ltp ? `₹${ltp.toFixed(2)}` : '-'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Qty.</div>
+                      <div className="font-medium text-gray-900">{gtt.quantity_1}</div>
+                    </div>
+                    {position && (
+                      <>
+                        <div>
+                          <div className="text-xs text-gray-500">Avg. Price</div>
+                          <div className="font-medium text-gray-900">₹{position.average_price?.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500">P&L</div>
+                          <div className={`font-semibold ${position.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {position.pnl >= 0 ? '+' : ''}₹{position.pnl?.toFixed(2)}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={() => handleEdit(gtt)}
+                      className="flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-blue-600 border border-blue-300 hover:bg-blue-50 rounded transition flex-1"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(gtt.id)}
+                      className="flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-red-600 border border-red-300 hover:bg-red-50 rounded transition flex-1"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[1000px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
