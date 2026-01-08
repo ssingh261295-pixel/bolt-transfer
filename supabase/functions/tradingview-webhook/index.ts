@@ -396,17 +396,17 @@ Deno.serve(async (req: Request) => {
 
     const payloadHash = `${normalized.symbol}_${normalized.trade_type}_${Math.floor(normalized.price)}`;
 
-    const { data: existingExecution } = await supabase
-      .from('webhook_execution_tracker')
-      .select('id')
-      .eq('webhook_key_id', keyData.id)
-      .eq('symbol', normalized.symbol)
-      .eq('trade_type', normalized.trade_type)
-      .eq('execution_date', executionDate)
-      .maybeSingle();
+    const trackerInsertResult = await supabase.rpc('try_insert_execution_tracker', {
+      p_webhook_key_id: keyData.id,
+      p_symbol: normalized.symbol,
+      p_trade_type: normalized.trade_type,
+      p_price: normalized.price,
+      p_execution_date: executionDate,
+      p_payload_hash: payloadHash
+    });
 
-    if (existingExecution) {
-      console.log('[TradingView Webhook] DUPLICATE SIGNAL BLOCKED:', {
+    if (trackerInsertResult.error || !trackerInsertResult.data) {
+      console.log('[TradingView Webhook] DUPLICATE SIGNAL BLOCKED (race condition prevented):', {
         symbol: normalized.symbol,
         trade_type: normalized.trade_type,
         execution_date: executionDate
@@ -713,17 +713,6 @@ Deno.serve(async (req: Request) => {
     }
 
     const successCount = executionResults.filter(r => r.order_placed).length;
-
-    if (successCount > 0) {
-      await supabase.from('webhook_execution_tracker').insert({
-        webhook_key_id: keyData.id,
-        symbol: normalized.symbol,
-        trade_type: normalized.trade_type,
-        price: normalized.price,
-        execution_date: executionDate,
-        payload_hash: payloadHash
-      });
-    }
 
     await supabase.from('tradingview_webhook_logs').insert({
       webhook_key_id: keyData.id,
