@@ -1199,7 +1199,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                     className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
                     placeholder="0"
                   />
-                  <span className="text-xs text-gray-500">% of LTP</span>
+                  <span className="text-xs text-gray-500 whitespace-nowrap">% of LTP</span>
                 </div>
               </div>
 
@@ -1278,7 +1278,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                     className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
                     placeholder="0"
                   />
-                  <span className="text-xs text-gray-500">% of LTP</span>
+                  <span className="text-xs text-gray-500 whitespace-nowrap">% of LTP</span>
                 </div>
               </div>
             </div>
@@ -1386,7 +1386,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                       className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
                       placeholder="0"
                     />
-                    <span className="text-xs text-gray-500">% of LTP</span>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">% of LTP</span>
                   </div>
                 </div>
 
@@ -1465,7 +1465,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                       className="no-spinner w-16 px-2 py-0.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
                       placeholder="0"
                     />
-                    <span className="text-xs text-gray-500">% of LTP</span>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">% of LTP</span>
                   </div>
                 </div>
               </div>
@@ -1474,22 +1474,22 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
           </div>
 
           {/* Footer */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-2 md:px-3 py-2.5 border-t border-gray-200 flex-shrink-0 bg-white">
-            <div className="text-xs text-gray-600">
+          <div className="px-2 md:px-3 py-2.5 border-t border-gray-200 flex-shrink-0 bg-white space-y-2">
+            <div className="text-xs text-gray-600 hidden sm:block">
               By {editingGTT ? 'modifying' : 'creating'}, I agree that trigger executions are not guaranteed.
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full">
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 sm:flex-none px-4 py-1.5 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50 transition"
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded text-sm font-medium hover:bg-gray-50 transition"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading || !selectedInstrument}
-                className="flex-1 sm:flex-none px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Processing...' : editingGTT ? 'Modify' : 'Create'}
               </button>

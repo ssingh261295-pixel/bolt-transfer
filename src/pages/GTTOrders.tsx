@@ -869,14 +869,14 @@ export function GTTOrders() {
                   <div className="flex gap-2 pt-2">
                     <button
                       onClick={() => handleEditClick(gtt)}
-                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                      className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-blue-600 border border-blue-300 hover:bg-blue-50 rounded transition"
                     >
                       <Edit2 className="w-4 h-4" />
                       Edit
                     </button>
                     <button
                       onClick={() => handleDeleteClick(gtt.id, gtt.broker_info?.id)}
-                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition"
+                      className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-red-600 border border-red-300 hover:bg-red-50 rounded transition"
                     >
                       <Trash2 className="w-4 h-4" />
                       Delete

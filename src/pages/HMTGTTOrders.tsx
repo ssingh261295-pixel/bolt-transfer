@@ -654,7 +654,26 @@ export function HMTGTTOrders() {
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           {/* Mobile Card View */}
-          <div className="md:hidden divide-y divide-gray-200">
+          <div className="md:hidden">
+            {/* Mobile Select All Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectedOrders.size === filteredHmtGttOrders.length && filteredHmtGttOrders.length > 0}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Select All</span>
+              </label>
+              {selectedOrders.size > 0 && (
+                <span className="text-xs text-blue-600 font-medium">
+                  {selectedOrders.size} selected
+                </span>
+              )}
+            </div>
+
+            <div className="divide-y divide-gray-200">
             {filteredHmtGttOrders.map((gtt) => {
               const ltp = getLTP(gtt.instrument_token);
               const position = getPositionForGTT(gtt);
@@ -765,6 +784,7 @@ export function HMTGTTOrders() {
                 </div>
               );
             })}
+            </div>
           </div>
 
           {/* Desktop Table View */}
