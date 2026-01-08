@@ -457,16 +457,16 @@ export function HMTGTTOrders() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">HMT GTT ({filteredHmtGttOrders.length})</h2>
-          <p className="text-sm text-gray-600 mt-1">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="flex-1">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">HMT GTT ({filteredHmtGttOrders.length})</h2>
+          <p className="text-xs sm:text-sm text-gray-600 mt-1">
             Server-Side Trigger Engine - <span className="font-medium">Runs Automatically 24/7</span>
           </p>
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2">
             {engineStatus ? (
               <>
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                <div className={`flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium ${
                   engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected'
                     ? 'bg-green-100 text-green-800 border border-green-300'
                     : engineStatus.status === 'stale'
@@ -479,38 +479,41 @@ export function HMTGTTOrders() {
                 }`}>
                   {engineStatus.status === 'running' && engineStatus.stats?.websocket_status === 'connected' ? (
                     <>
-                      <Activity className="w-4 h-4 animate-pulse" />
-                      <span>Engine Running</span>
+                      <Activity className="w-3 h-3 sm:w-4 sm:h-4 animate-pulse" />
+                      <span className="hidden sm:inline">Engine Running</span>
+                      <span className="sm:hidden">Running</span>
                     </>
                   ) : engineStatus.status === 'stale' ? (
                     <>
-                      <AlertCircle className="w-4 h-4" />
-                      <span>Engine Stale - Auto-Reconnecting</span>
+                      <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4" />
+                      <span className="hidden sm:inline">Engine Stale - Auto-Reconnecting</span>
+                      <span className="sm:hidden">Reconnecting</span>
                     </>
                   ) : engineStatus.status === 'running' && engineStatus.error ? (
                     <>
-                      <AlertCircle className="w-4 h-4" />
+                      <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4" />
                       <span>Engine Error</span>
                     </>
                   ) : engineStatus.status === 'running' ? (
                     <>
-                      <AlertCircle className="w-4 h-4" />
+                      <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4" />
                       <span>Connecting...</span>
                     </>
                   ) : (
                     <>
-                      <Power className="w-4 h-4" />
-                      <span>Engine Stopped</span>
+                      <Power className="w-3 h-3 sm:w-4 sm:h-4" />
+                      <span className="hidden sm:inline">Engine Stopped</span>
+                      <span className="sm:hidden">Stopped</span>
                     </>
                   )}
                 </div>
                 {engineStatus.heartbeat && engineStatus.heartbeat.seconds_since_update !== null && (
                   <div className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
-                    Heartbeat: {engineStatus.heartbeat.seconds_since_update}s ago
+                    HB: {engineStatus.heartbeat.seconds_since_update}s
                   </div>
                 )}
                 {engineStatus.error && engineStatus.status !== 'stale' && (
-                  <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200">
+                  <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200 max-w-xs truncate">
                     {engineStatus.error}
                   </div>
                 )}
@@ -518,30 +521,31 @@ export function HMTGTTOrders() {
                   <button
                     onClick={handleRestartEngine}
                     disabled={loadingEngine}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50"
+                    className="flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-xs sm:text-sm font-medium disabled:opacity-50"
                   >
-                    <Power className="w-4 h-4" />
-                    {loadingEngine ? 'Restarting...' : 'Restart Engine'}
+                    <Power className="w-3 h-3 sm:w-4 sm:h-4" />
+                    {loadingEngine ? 'Restarting...' : 'Restart'}
                   </button>
                 )}
               </>
             ) : (
-              <div className="text-sm text-gray-500">Loading engine status...</div>
+              <div className="text-xs sm:text-sm text-gray-500">Loading engine status...</div>
             )}
             {isConnected && (
               <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
                 <CheckCircle className="w-3 h-3" />
-                UI Live Prices
+                <span className="hidden sm:inline">UI Live Prices</span>
+                <span className="sm:hidden">Live</span>
               </div>
             )}
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           {brokers.length > 0 && (
             <select
               value={selectedBrokerId}
               onChange={(e) => setSelectedBrokerId(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+              className="w-full sm:w-auto px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-xs sm:text-sm"
             >
               <option value="all">All Accounts</option>
               {brokers.map((broker) => (
@@ -565,9 +569,9 @@ export function HMTGTTOrders() {
               setEditingGTT(null);
               setShowCreateModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-xs sm:text-sm font-medium whitespace-nowrap"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
             New HMT GTT
           </button>
         </div>
@@ -593,11 +597,11 @@ export function HMTGTTOrders() {
       )}
 
       {selectedOrders.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
-          <span className="text-sm text-blue-800 font-medium">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <span className="text-xs sm:text-sm text-blue-800 font-medium">
             {selectedOrders.size} order(s) selected
           </span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
             <button
               onClick={() => {
                 const selectedGTTs = filteredHmtGttOrders.filter(gtt => selectedOrders.has(gtt.id));
@@ -616,43 +620,58 @@ export function HMTGTTOrders() {
                 }
               }}
               disabled={selectedOrders.size === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Edit2 className="w-4 h-4" />
-              Edit Selected
+              <Edit2 className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Edit Selected</span>
+              <span className="sm:hidden">Edit</span>
             </button>
             <button
               onClick={handleBulkDelete}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-xs sm:text-sm"
             >
-              <Trash2 className="w-4 h-4" />
-              Delete Selected
+              <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Delete Selected</span>
+              <span className="sm:hidden">Delete</span>
             </button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+        <div className="bg-white rounded-lg border border-gray-200 p-8 sm:p-12 text-center">
           <div className="flex flex-col items-center gap-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <div className="text-gray-600 font-medium">Loading HMT GTT orders...</div>
+            <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-blue-600"></div>
+            <div className="text-sm sm:text-base text-gray-600 font-medium">Loading HMT GTT orders...</div>
           </div>
         </div>
       ) : !selectedBrokerId ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Broker Connected</h3>
-          <p className="text-gray-600">Please connect a broker account first to view HMT GTT orders</p>
+        <div className="bg-white rounded-lg border border-gray-200 p-8 sm:p-12 text-center">
+          <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">No Broker Connected</h3>
+          <p className="text-sm sm:text-base text-gray-600">Please connect a broker account first to view HMT GTT orders</p>
         </div>
       ) : hmtGttOrders.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No HMT GTT orders</h3>
-          <p className="text-gray-600 mb-4">Create your first Host-Monitored GTT order</p>
+        <div className="bg-white rounded-lg border border-gray-200 p-8 sm:p-12 text-center">
+          <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">No HMT GTT orders</h3>
+          <p className="text-sm sm:text-base text-gray-600 mb-4">Create your first Host-Monitored GTT order</p>
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          {/* Mobile Select All Button - Hidden on desktop */}
+          <div className="md:hidden bg-gray-50 border-b border-gray-200 p-3 flex items-center justify-between">
+            <span className="text-xs font-medium text-gray-600 uppercase">
+              {filteredHmtGttOrders.length} Order{filteredHmtGttOrders.length !== 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={toggleSelectAll}
+              className="text-xs font-medium text-blue-600 hover:text-blue-700"
+            >
+              {selectedOrders.size === filteredHmtGttOrders.length ? 'Deselect All' : 'Select All'}
+            </button>
+          </div>
+
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-gray-50 border-b border-gray-200 hidden md:table-header-group">
               <tr>
                 <th className="px-4 py-3 text-center w-12">
                   <input
