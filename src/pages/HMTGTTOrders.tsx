@@ -813,10 +813,10 @@ export function HMTGTTOrders() {
 
           {/* Desktop Table View */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full min-w-[1000px] table-fixed">
+            <table className="w-full min-w-[1400px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3 text-center" style={{ width: '48px' }}>
+                <th className="px-2 py-3 text-center w-12">
                   <input
                     type="checkbox"
                     checked={selectedOrders.size === filteredHmtGttOrders.length && filteredHmtGttOrders.length > 0}
@@ -826,65 +826,61 @@ export function HMTGTTOrders() {
                 </th>
                 <th
                   onClick={() => handleSort('created_at')}
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
-                  style={{ width: '110px' }}
+                  className="px-2 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
                 >
-                  <div className="flex items-center gap-1">
-                    Created on
+                  <div className="flex items-center gap-1 whitespace-nowrap">
+                    Created
                     <ArrowUpDown className={`w-3 h-3 ${sortField === 'created_at' ? 'text-blue-600' : 'text-gray-400'}`} />
                   </div>
                 </th>
                 <th
                   onClick={() => handleSort('symbol')}
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
-                  style={{ width: '180px' }}
+                  className="px-2 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
                 >
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 whitespace-nowrap">
                     Instrument
                     <ArrowUpDown className={`w-3 h-3 ${sortField === 'symbol' ? 'text-blue-600' : 'text-gray-400'}`} />
                   </div>
                 </th>
                 {selectedBrokerId === 'all' && (
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '160px' }}>
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                     Account
                   </th>
                 )}
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '100px' }}>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Type
                 </th>
                 <th
                   onClick={() => handleSort('trigger_price')}
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
-                  style={{ width: '140px' }}
+                  className="px-2 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
                 >
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 whitespace-nowrap">
                     Trigger
                     <ArrowUpDown className={`w-3 h-3 ${sortField === 'trigger_price' ? 'text-blue-600' : 'text-gray-400'}`} />
                   </div>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '100px' }}>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   LTP
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '70px' }}>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Qty.
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '100px' }}>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider whitespace-nowrap">
                   Avg. Price
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '100px' }}>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   P&L
                 </th>
                 <th
                   onClick={() => handleSort('status')}
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
-                  style={{ width: '100px' }}
+                  className="px-2 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition"
                 >
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 whitespace-nowrap">
                     Status
                     <ArrowUpDown className={`w-3 h-3 ${sortField === 'status' ? 'text-blue-600' : 'text-gray-400'}`} />
                   </div>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider" style={{ width: '100px' }}>
+                <th className="px-2 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>

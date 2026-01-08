@@ -66,7 +66,7 @@ const HMTGTTRowComponent = ({
 
   return (
     <tr className="hover:bg-gray-50 transition-colors">
-      <td className="px-4 py-3 text-center align-middle">
+      <td className="px-2 py-3 text-center align-middle">
         <input
           type="checkbox"
           checked={isSelected}
@@ -74,7 +74,7 @@ const HMTGTTRowComponent = ({
           className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
         />
       </td>
-      <td className="px-4 py-3 text-sm text-gray-900 align-middle">
+      <td className="px-2 py-3 text-xs text-gray-900 align-middle whitespace-nowrap">
         {new Date(gtt.created_at).toLocaleDateString('en-IN', {
           year: 'numeric',
           month: '2-digit',
@@ -82,20 +82,24 @@ const HMTGTTRowComponent = ({
           timeZone: 'Asia/Kolkata'
         })}
       </td>
-      <td className="px-4 py-3 align-middle">
-        <div className="flex items-center gap-2">
-          <div className="text-sm font-medium text-gray-900">
-            {gtt.trading_symbol || 'N/A'}
-            {isConnected && ltp && (
-              <span className="ml-1 text-xs text-green-600">●</span>
-            )}
-            <span className="text-xs text-gray-500 ml-1">
+      <td className="px-2 py-2 align-middle">
+        <div className="flex items-center gap-1.5">
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-1">
+              {isConnected && ltp && (
+                <span className="text-[10px] text-green-600 flex-shrink-0">●</span>
+              )}
+              <span className="text-sm font-medium text-gray-900 truncate">
+                {gtt.trading_symbol || 'N/A'}
+              </span>
+            </div>
+            <span className="text-[10px] text-gray-500 uppercase">
               {gtt.exchange}
             </span>
           </div>
           {showBreakeven && (
             <div
-              className="flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium"
+              className="flex items-center px-1 py-0.5 bg-green-100 text-green-700 rounded flex-shrink-0"
               title="Stop Loss above breakeven"
             >
               <TrendingUp className="w-3 h-3" />
@@ -104,77 +108,78 @@ const HMTGTTRowComponent = ({
         </div>
       </td>
       {showAccount && (
-        <td className="px-4 py-3 align-middle">
-          <div className="text-sm text-gray-900 truncate">
-            {(gtt.broker_connections?.account_holder_name || gtt.broker_connections?.account_name || 'Account')} ({gtt.broker_connections?.client_id || 'No ID'})
+        <td className="px-2 py-3 align-middle">
+          <div className="text-xs text-gray-900 truncate max-w-[180px]">
+            {(gtt.broker_connections?.account_holder_name || gtt.broker_connections?.account_name || 'Account')}
+            <span className="text-gray-500 ml-1">({gtt.broker_connections?.client_id || 'No ID'})</span>
           </div>
         </td>
       )}
-      <td className="px-4 py-3 align-middle">
-        <div className="flex flex-col gap-1">
-          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium w-fit ${
+      <td className="px-2 py-3 align-middle">
+        <div className="flex flex-col gap-0.5">
+          <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium w-fit ${
             isOCO ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'
           }`}>
             {isOCO ? 'OCO' : 'SINGLE'}
           </span>
-          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium w-fit ${
+          <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium w-fit ${
             gtt.transaction_type === 'BUY' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
           }`}>
             {gtt.transaction_type}
           </span>
         </div>
       </td>
-      <td className="px-4 py-3 align-middle">
+      <td className="px-2 py-2 align-middle">
         {isOCO ? (
-          <div className="text-sm space-y-1">
-            <div className="text-gray-900 tabular-nums">
-              ₹{gtt.trigger_price_1?.toFixed(2)}
-              <span className="text-xs text-gray-500 ml-1 whitespace-nowrap">
+          <div className="space-y-1.5">
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-900 tabular-nums">₹{gtt.trigger_price_1?.toFixed(2)}</span>
+              <span className="text-[10px] text-gray-500 whitespace-nowrap">
                 {calculatePercentage(gtt.trigger_price_1, currentPrice)}
               </span>
             </div>
-            <div className="text-gray-900 tabular-nums">
-              ₹{gtt.trigger_price_2?.toFixed(2)}
-              <span className="text-xs text-gray-500 ml-1 whitespace-nowrap">
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-900 tabular-nums">₹{gtt.trigger_price_2?.toFixed(2)}</span>
+              <span className="text-[10px] text-gray-500 whitespace-nowrap">
                 {calculatePercentage(gtt.trigger_price_2, currentPrice)}
               </span>
             </div>
           </div>
         ) : (
-          <div className="text-sm text-gray-900 tabular-nums">
-            ₹{gtt.trigger_price_1?.toFixed(2)}
-            <span className="text-xs text-gray-500 ml-1 whitespace-nowrap">
+          <div className="flex flex-col">
+            <span className="text-sm text-gray-900 tabular-nums">₹{gtt.trigger_price_1?.toFixed(2)}</span>
+            <span className="text-[10px] text-gray-500 whitespace-nowrap">
               {calculatePercentage(gtt.trigger_price_1, currentPrice)}
             </span>
           </div>
         )}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-900 tabular-nums align-middle">
+      <td className="px-2 py-3 text-sm text-gray-900 tabular-nums align-middle whitespace-nowrap">
         ₹{currentPrice?.toFixed(2) || 'N/A'}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-900 align-middle">
+      <td className="px-2 py-3 text-sm text-gray-900 align-middle">
         {gtt.quantity_1}
       </td>
-      <td className="px-4 py-3 align-middle">
+      <td className="px-2 py-3 align-middle">
         {position ? (
-          <span className={`text-sm font-medium px-2 py-1 rounded tabular-nums ${pnl !== null && pnl >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          <span className={`text-xs font-medium px-1.5 py-1 rounded tabular-nums whitespace-nowrap ${pnl !== null && pnl >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
             ₹{position.average_price?.toFixed(2)}
           </span>
         ) : (
           <span className="text-sm text-gray-400">-</span>
         )}
       </td>
-      <td className="px-4 py-3 align-middle">
+      <td className="px-2 py-3 align-middle">
         {pnl === null ? (
           <span className="text-sm text-gray-400">-</span>
         ) : (
-          <span className={`text-sm font-medium tabular-nums ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <span className={`text-sm font-medium tabular-nums whitespace-nowrap ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {pnl >= 0 ? '+' : ''}{formatIndianCurrency(pnl)}
           </span>
         )}
       </td>
-      <td className="px-4 py-3 align-middle">
-        <span className={`inline-flex px-2 py-1 rounded text-xs font-medium uppercase whitespace-nowrap ${
+      <td className="px-2 py-3 align-middle">
+        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium uppercase whitespace-nowrap ${
           gtt.status === 'active' ? 'bg-green-100 text-green-700' :
           gtt.status === 'triggered' ? 'bg-blue-100 text-blue-700' :
           gtt.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
@@ -184,22 +189,22 @@ const HMTGTTRowComponent = ({
           {gtt.status}
         </span>
       </td>
-      <td className="px-4 py-3 align-middle">
-        <div className="flex gap-2">
+      <td className="px-2 py-3 align-middle">
+        <div className="flex gap-1">
           <button
             onClick={() => onEdit(gtt)}
             disabled={gtt.status !== 'active'}
-            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-1 text-blue-600 hover:bg-blue-50 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
             title="Edit HMT GTT"
           >
-            <Edit2 className="w-4 h-4" />
+            <Edit2 className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => onDelete(gtt.id)}
-            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition"
+            className="p-1 text-red-600 hover:bg-red-50 rounded transition"
             title="Delete HMT GTT"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </td>
