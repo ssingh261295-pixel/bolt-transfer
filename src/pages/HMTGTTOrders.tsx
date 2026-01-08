@@ -573,35 +573,6 @@ export function HMTGTTOrders() {
         </div>
       </div>
 
-      {engineStatus && engineStatus.status === 'running' && engineStatus.stats && (
-        <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-900">Engine Performance Metrics</h3>
-            <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium">
-              <Activity className="w-3.5 h-3.5 animate-pulse" />
-              Live Monitoring
-            </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <p className="text-gray-600 text-xs uppercase tracking-wide mb-1">Active Triggers</p>
-              <p className="text-2xl font-bold text-gray-900">{engineStatus.stats.active_triggers}</p>
-            </div>
-            <div>
-              <p className="text-gray-600 text-xs uppercase tracking-wide mb-1">Subscribed Instruments</p>
-              <p className="text-2xl font-bold text-gray-900">{engineStatus.stats.subscribed_instruments}</p>
-            </div>
-            <div>
-              <p className="text-gray-600 text-xs uppercase tracking-wide mb-1">Processed Ticks</p>
-              <p className="text-2xl font-bold text-blue-700">{engineStatus.stats.processed_ticks.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-gray-600 text-xs uppercase tracking-wide mb-1">Triggered Orders</p>
-              <p className="text-2xl font-bold text-green-700">{engineStatus.stats.triggered_orders}</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {deleteMessage && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">

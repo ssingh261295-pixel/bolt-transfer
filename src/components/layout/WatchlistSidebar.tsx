@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { TrendingUp, TrendingDown, Plus, X, ChevronUp } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useZerodhaWebSocket } from '../../hooks/useZerodhaWebSocket';
@@ -29,28 +29,8 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [brokerId, setBrokerId] = useState<string | null>(null);
-  const [indicesExpanded, setIndicesExpanded] = useState(true);
 
   const { isConnected, connect, subscribe, unsubscribe, getTick } = useZerodhaWebSocket(brokerId || undefined);
-
-  // Index instrument tokens
-  // NIFTY 50 Index: 256265 (NSE-INDICES)
-  // SENSEX Index: 265 (BSE)
-  const niftyToken = 256265;
-  const sensexToken = 265;
-
-  // Debug: Log connection status and subscriptions
-  useEffect(() => {
-    if (isConnected) {
-      console.log('WebSocket connected, subscribing to indices:', { niftyToken, sensexToken });
-      const niftyTick = getTick(niftyToken);
-      const sensexTick = getTick(sensexToken);
-      console.log('Index ticks received:', {
-        nifty: niftyTick ? { lp: niftyTick.last_price, close: niftyTick.close } : 'none',
-        sensex: sensexTick ? { lp: sensexTick.last_price, close: sensexTick.close } : 'none'
-      });
-    }
-  }, [isConnected, getTick(niftyToken), getTick(sensexToken)]);
 
   useEffect(() => {
     if (user) {
@@ -66,14 +46,12 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
   }, [brokerId, isConnected, connect]);
 
   useEffect(() => {
-    if (isConnected) {
+    if (isConnected && watchlistItems.length > 0) {
       const tokens = watchlistItems.map(item => item.instrument_token);
-      // Always subscribe to indices
-      const allTokens = [niftyToken, sensexToken, ...tokens];
-      subscribe(allTokens, 'full');
+      subscribe(tokens, 'full');
 
       return () => {
-        unsubscribe(allTokens);
+        unsubscribe(tokens);
       };
     }
   }, [isConnected, watchlistItems, subscribe, unsubscribe]);
@@ -192,75 +170,6 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
           </div>
         )}
       </div>
-
-      {/* Indices Section */}
-      {brokerId && (
-        <div className="border-b border-gray-200">
-          <button
-            onClick={() => setIndicesExpanded(!indicesExpanded)}
-            className="w-full flex items-center justify-between px-4 py-2 hover:bg-gray-50 transition-colors"
-          >
-            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Indices</span>
-            {indicesExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-          </button>
-
-          {indicesExpanded && (
-            <div className="px-4 pb-3 space-y-1">
-              {/* NIFTY 50 */}
-              {(() => {
-                const tick = getTick(niftyToken);
-                const lastPrice = tick?.last_price || 0;
-                const previousClose = tick?.ohlc?.close || tick?.close || 0;
-                const change = previousClose > 0 && lastPrice > 0 ? (lastPrice - previousClose) : 0;
-                const changePercent = previousClose > 0 && lastPrice > 0 ? ((change / previousClose) * 100) : 0;
-
-                return (
-                  <div className="flex items-center justify-between py-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm text-gray-900">NIFTY 50</span>
-                      <span className="font-bold text-sm text-gray-900">
-                        {!isConnected ? 'Connecting...' : tick && lastPrice > 0 ? lastPrice.toFixed(2) : 'Loading...'}
-                      </span>
-                    </div>
-                    {tick && lastPrice > 0 && previousClose > 0 && change !== 0 && (
-                      <div className={`flex items-center gap-1 text-xs font-semibold ${getPriceColor(change)}`}>
-                        {change > 0 ? '+' : ''}{change.toFixed(2)}
-                        <span className="text-[10px]">({changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* SENSEX */}
-              {(() => {
-                const tick = getTick(sensexToken);
-                const lastPrice = tick?.last_price || 0;
-                const previousClose = tick?.ohlc?.close || tick?.close || 0;
-                const change = previousClose > 0 && lastPrice > 0 ? (lastPrice - previousClose) : 0;
-                const changePercent = previousClose > 0 && lastPrice > 0 ? ((change / previousClose) * 100) : 0;
-
-                return (
-                  <div className="flex items-center justify-between py-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm text-gray-900">SENSEX</span>
-                      <span className="font-bold text-sm text-gray-900">
-                        {!isConnected ? 'Connecting...' : tick && lastPrice > 0 ? lastPrice.toFixed(2) : 'Loading...'}
-                      </span>
-                    </div>
-                    {tick && lastPrice > 0 && previousClose > 0 && change !== 0 && (
-                      <div className={`flex items-center gap-1 text-xs font-semibold ${getPriceColor(change)}`}>
-                        {change > 0 ? '+' : ''}{change.toFixed(2)}
-                        <span className="text-[10px]">({changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%)</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Items List */}
       <div className="flex-1 overflow-y-auto">
