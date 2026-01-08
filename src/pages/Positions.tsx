@@ -404,10 +404,10 @@ export function Positions() {
 
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 max-w-full overflow-x-hidden">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Open Positions</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900">Open Positions</h2>
           <div className="flex items-center gap-3 mt-1">
             <p className="text-sm text-gray-600">Monitor your active trading positions</p>
             {isConnected && (
@@ -418,7 +418,7 @@ export function Positions() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
           <button
             onClick={handleManualRefresh}
             disabled={isSyncing}
@@ -431,7 +431,7 @@ export function Positions() {
           <select
             value={selectedBroker}
             onChange={(e) => setSelectedBroker(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm w-full md:w-auto"
           >
             <option value="all">All Accounts</option>
             {brokers.map((broker) => (
@@ -443,7 +443,7 @@ export function Positions() {
           <select
             value={selectedSymbol}
             onChange={(e) => setSelectedSymbol(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm w-full md:w-auto"
           >
             <option value="all">All Instruments</option>
             {Array.from(new Set(allPositions.map(p => p.symbol))).sort().map((symbol) => (
@@ -461,20 +461,20 @@ export function Positions() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6">
           <h3 className="text-sm text-gray-600 mb-1">Today's P&L</h3>
-          <p className={`text-3xl font-bold ${summary.totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <p className={`text-2xl md:text-3xl font-bold ${summary.totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {summary.totalPnL >= 0 ? '+' : ''}{formatIndianCurrency(summary.totalPnL)}
           </p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6">
           <h3 className="text-sm text-gray-600 mb-1">Total Invested</h3>
-          <p className="text-3xl font-bold text-gray-900">{formatIndianCurrency(summary.totalInvested)}</p>
+          <p className="text-2xl md:text-3xl font-bold text-gray-900">{formatIndianCurrency(summary.totalInvested)}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 sm:col-span-2 md:col-span-1">
           <h3 className="text-sm text-gray-600 mb-1">Open Positions</h3>
-          <p className="text-3xl font-bold text-gray-900">{positions.length}</p>
+          <p className="text-2xl md:text-3xl font-bold text-gray-900">{positions.length}</p>
         </div>
       </div>
 
@@ -486,8 +486,141 @@ export function Positions() {
             <p className="text-gray-600">Your active positions will appear here</p>
           </div>
         ) : (
-          <div className="overflow-x-auto pb-44">
-            <table className="w-full">
+          <>
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-gray-200">
+              {positions.map((position) => {
+                const ltp = position.instrument_token ? getLTP(position.instrument_token) : null;
+                const currentPrice = ltp ?? position.current_price ?? position.average_price;
+                const pnl = position.close_price
+                  ? (currentPrice - position.close_price) * position.quantity
+                  : (currentPrice - position.average_price) * position.quantity;
+                const pnlPercentage = position.close_price
+                  ? ((currentPrice - position.close_price) / position.close_price) * 100
+                  : ((currentPrice - position.average_price) / position.average_price) * 100;
+
+                return (
+                  <div key={position.id} className="p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={selectedPositions.has(position.id)}
+                          onChange={() => handleSelectPosition(position.id)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer mt-1"
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900">
+                            {isConnected && ltp && (
+                              <span className="text-xs text-green-600 mr-1">●</span>
+                            )}
+                            {position.symbol}
+                          </div>
+                          <div className="text-xs text-gray-600">{position.exchange}</div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            {(position.broker_connections?.account_holder_name || position.broker_connections?.account_name || 'Account')}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="relative" ref={openMenuId === position.id ? menuRef : null}>
+                        <button
+                          onClick={(e) => toggleMenu(position.id, e)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition"
+                        >
+                          <MoreVertical className="w-5 h-5 text-gray-600" />
+                        </button>
+
+                        {openMenuId === position.id && (
+                          <div className={`absolute right-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 ${
+                            menuOpenUpward ? 'bottom-full mb-1' : 'mt-1'
+                          }`}>
+                            <div className="py-1">
+                              <button
+                                onClick={() => handleOpenExitModal(position)}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                              >
+                                Exit position
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedPosition(position);
+                                  setAddOrderModalOpen(true);
+                                  setOpenMenuId(null);
+                                }}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                              >
+                                Add
+                              </button>
+                              <button
+                                onClick={() => handleOpenGTT(position)}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                              >
+                                Create GTT
+                              </button>
+                              <button
+                                onClick={() => handleOpenHMTGTT(position)}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                              >
+                                Create HMT GTT
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <div className="text-xs text-gray-500">Qty.</div>
+                        <div className={`font-semibold ${position.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                          {position.quantity}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500">Avg. Price</div>
+                        <div className="font-medium text-gray-900">
+                          {formatIndianCurrency(position.average_price || 0)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500">LTP</div>
+                        <div className="font-medium text-gray-900">
+                          {formatIndianCurrency(currentPrice)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500">P&L</div>
+                        <div className={`font-semibold ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {pnl >= 0 ? '+' : ''}{formatIndianCurrency(pnl)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                      <span className="text-xs text-gray-500">P&L %</span>
+                      <span className={`text-sm font-semibold ${pnlPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {pnlPercentage >= 0 ? '+' : ''}{pnlPercentage.toFixed(2)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {selectedPositions.size > 0 && (
+                <div className="flex justify-start items-center p-4 border-t">
+                  <button
+                    onClick={() => handleOpenExitModal()}
+                    className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-sm"
+                  >
+                    Exit {selectedPositions.size} position{selectedPositions.size > 1 ? 's' : ''}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto pb-44">
+              <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-3 py-3 text-left">
@@ -678,7 +811,8 @@ export function Positions() {
                 </button>
               </div>
             )}
-          </div>
+            </div>
+          </>
         )}
       </div>
 

@@ -569,13 +569,13 @@ export function Orders() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 max-w-full overflow-x-hidden">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Order History</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900">Order History</h2>
           <p className="text-sm text-gray-600 mt-1">View and track all your orders</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
           {brokers.length === 0 ? (
             <div className="text-sm text-gray-600 bg-yellow-50 px-4 py-2 rounded-lg border border-yellow-200">
               No active broker connections. Please connect a broker first.
@@ -585,7 +585,7 @@ export function Orders() {
               <select
                 value={selectedBrokerId}
                 onChange={(e) => setSelectedBrokerId(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm w-full md:w-auto"
               >
                 <option value="all">All Accounts</option>
                 {brokers.map((broker) => (
@@ -595,28 +595,30 @@ export function Orders() {
                   </option>
                 ))}
               </select>
-              <button
-                onClick={handleSyncOrders}
-                disabled={syncing}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Sync orders from Zerodha"
-              >
-                <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Syncing...' : 'Sync'}
-              </button>
-              <button
-                onClick={() => setShowPlaceOrder(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-              >
-                <Plus className="w-5 h-5" />
-                Place Order
-              </button>
-              <div className="flex items-center gap-2">
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSyncOrders}
+                  disabled={syncing}
+                  className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
+                  title="Sync orders from Zerodha"
+                >
+                  <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync'}</span>
+                </button>
+                <button
+                  onClick={() => setShowPlaceOrder(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex-1 md:flex-none"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span className="hidden sm:inline">Place Order</span>
+                </button>
+              </div>
+              <div className="flex items-center gap-2 w-full md:w-auto">
                 <Filter className="w-5 h-5 text-gray-600" />
                 <select
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  className="flex-1 md:flex-none px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 >
                   <option value="all">All Orders</option>
                   <option value="completed">Completed</option>
@@ -676,7 +678,98 @@ export function Orders() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-gray-200">
+              {paginatedOrders.map((order) => (
+                <div key={order.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedOrders.has(order.id)}
+                        onChange={() => handleSelectOrder(order.id)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-900">{order.symbol}</div>
+                        <div className="text-xs text-gray-600">{order.exchange}</div>
+                        <div className="text-xs text-gray-600 mt-1">
+                          {order.broker_connections?.account_holder_name || order.broker_connections?.account_name || 'Default Account'}
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(order.status)}`}>
+                      {order.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-xs text-gray-500">Type / Side</div>
+                      <div className="font-medium text-gray-900">{order.order_type}</div>
+                      <span
+                        className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full mt-1 ${
+                          order.transaction_type === 'BUY'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        {order.transaction_type}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Quantity</div>
+                      <div className="font-medium text-gray-900">
+                        {order.executed_quantity || 0} / {order.quantity}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Price</div>
+                      <div className="font-medium text-gray-900">
+                        ₹{order.executed_price?.toFixed(2) || order.price?.toFixed(2) || '0.00'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Date</div>
+                      <div className="text-xs text-gray-900">
+                        {new Date(order.order_timestamp || order.created_at).toLocaleString('en-IN', {
+                          timeZone: 'Asia/Kolkata',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    {canEditOrder(order.status) && (
+                      <button
+                        onClick={() => handleEditOrder(order)}
+                        className="flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-blue-600 border border-blue-300 hover:bg-blue-50 rounded transition flex-1"
+                      >
+                        <Edit className="w-4 h-4" />
+                        Edit
+                      </button>
+                    )}
+                    {canCancelOrder(order.status) && (
+                      <button
+                        onClick={() => handleCancelOrder(order)}
+                        disabled={cancellingOrders.has(order.id)}
+                        className="flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-red-600 border border-red-300 hover:bg-red-50 rounded transition disabled:opacity-50 disabled:cursor-not-allowed flex-1"
+                      >
+                        <X className="w-4 h-4" />
+                        {cancellingOrders.has(order.id) ? 'Cancelling...' : 'Cancel'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
