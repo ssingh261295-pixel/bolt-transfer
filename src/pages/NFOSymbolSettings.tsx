@@ -191,27 +191,27 @@ export function NFOSymbolSettings() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 max-w-full overflow-x-hidden">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">NFO Symbol Trading Settings</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">NFO Symbol Trading Settings</h1>
+          <p className="text-sm text-gray-600 mt-1">
             Configure ATR multipliers, risk/reward ratios, and lot sizes for each NFO Future symbol
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 md:gap-3">
           <button
             onClick={loadSettings}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 flex-1 sm:flex-none"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
             onClick={handleSave}
             disabled={saving || editedSymbols.size === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex-1 sm:flex-none"
           >
             <Save className="w-4 h-4" />
             {saving ? 'Saving...' : `Save ${editedSymbols.size > 0 ? `(${editedSymbols.size})` : ''}`}
@@ -237,7 +237,7 @@ export function NFOSymbolSettings() {
       )}
 
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-4 mb-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
@@ -252,7 +252,7 @@ export function NFOSymbolSettings() {
           <select
             value={selectedBroker}
             onChange={(e) => setSelectedBroker(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full md:w-auto"
           >
             <option value="global">Global Settings (All Accounts)</option>
             {brokers.map(broker => (
@@ -264,36 +264,36 @@ export function NFOSymbolSettings() {
         </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-blue-800">
+          <div className="flex flex-col gap-3">
+            <div className="text-xs md:text-sm text-blue-800">
               <span className="font-medium">Bulk Update:</span> Apply same values to filtered symbols ({filteredSymbols.length})
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 sm:flex gap-2">
               <input
                 type="number"
                 step="0.1"
                 placeholder="ATR"
-                className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500"
+                className="px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 w-full sm:w-20"
                 onBlur={(e) => e.target.value && handleBulkUpdate('atr_multiplier', parseFloat(e.target.value))}
               />
               <input
                 type="number"
                 step="0.1"
                 placeholder="SL"
-                className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500"
+                className="px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 w-full sm:w-20"
                 onBlur={(e) => e.target.value && handleBulkUpdate('sl_multiplier', parseFloat(e.target.value))}
               />
               <input
                 type="number"
                 step="0.1"
                 placeholder="Target"
-                className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500"
+                className="px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 w-full sm:w-20"
                 onBlur={(e) => e.target.value && handleBulkUpdate('target_multiplier', parseFloat(e.target.value))}
               />
               <input
                 type="number"
                 placeholder="Lot"
-                className="w-20 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500"
+                className="px-2 py-1 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 w-full sm:w-20"
                 onBlur={(e) => e.target.value && handleBulkUpdate('lot_multiplier', parseInt(e.target.value))}
               />
             </div>
@@ -307,94 +307,189 @@ export function NFOSymbolSettings() {
           <p className="text-gray-600">Loading NFO symbols...</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto max-h-[600px]">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Symbol</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-32">
-                    <div>ATR Multiplier</div>
-                    <div className="text-[10px] text-gray-400 font-normal normal-case">Base ATR calc</div>
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-32">
-                    <div>SL Multiplier</div>
-                    <div className="text-[10px] text-gray-400 font-normal normal-case">Risk ratio</div>
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-32">
-                    <div>Target Multiplier</div>
-                    <div className="text-[10px] text-gray-400 font-normal normal-case">Reward ratio</div>
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-28">
-                    <div>Lot Multiplier</div>
-                    <div className="text-[10px] text-gray-400 font-normal normal-case">Position size</div>
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">Enabled</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredSymbols.map(symbol => {
-                  const setting = settings.get(symbol);
-                  if (!setting) return null;
+        <>
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {filteredSymbols.map(symbol => {
+              const setting = settings.get(symbol);
+              if (!setting) return null;
 
-                  const isEdited = editedSymbols.has(symbol);
+              const isEdited = editedSymbols.has(symbol);
 
-                  return (
-                    <tr key={symbol} className={`hover:bg-gray-50 ${isEdited ? 'bg-yellow-50' : ''}`}>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        {symbol}
-                        {isEdited && <span className="ml-2 text-xs text-yellow-600">●</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={setting.atr_multiplier}
-                          onChange={(e) => handleSettingChange(symbol, 'atr_multiplier', parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-1.5 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={setting.sl_multiplier}
-                          onChange={(e) => handleSettingChange(symbol, 'sl_multiplier', parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-1.5 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={setting.target_multiplier}
-                          onChange={(e) => handleSettingChange(symbol, 'target_multiplier', parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-1.5 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          value={setting.lot_multiplier}
-                          onChange={(e) => handleSettingChange(symbol, 'lot_multiplier', parseInt(e.target.value) || 0)}
-                          className="w-full px-3 py-1.5 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={setting.is_enabled}
-                          onChange={(e) => handleSettingChange(symbol, 'is_enabled', e.target.checked)}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+              return (
+                <div
+                  key={symbol}
+                  className={`bg-white rounded-lg border border-gray-200 p-4 ${
+                    isEdited ? 'border-yellow-400 bg-yellow-50' : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-semibold text-gray-900">{symbol}</span>
+                      {isEdited && <span className="text-xs text-yellow-600">● Edited</span>}
+                    </div>
+                    <label className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">Enabled</span>
+                      <input
+                        type="checkbox"
+                        checked={setting.is_enabled}
+                        onChange={(e) => handleSettingChange(symbol, 'is_enabled', e.target.checked)}
+                        className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        ATR Multiplier
+                        <span className="text-[10px] text-gray-400 block">Base ATR calc</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={setting.atr_multiplier}
+                        onChange={(e) => handleSettingChange(symbol, 'atr_multiplier', parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        SL Multiplier
+                        <span className="text-[10px] text-gray-400 block">Risk ratio</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={setting.sl_multiplier}
+                        onChange={(e) => handleSettingChange(symbol, 'sl_multiplier', parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        Target Multiplier
+                        <span className="text-[10px] text-gray-400 block">Reward ratio</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={setting.target_multiplier}
+                        onChange={(e) => handleSettingChange(symbol, 'target_multiplier', parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        Lot Multiplier
+                        <span className="text-[10px] text-gray-400 block">Position size</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={setting.lot_multiplier}
+                        onChange={(e) => handleSettingChange(symbol, 'lot_multiplier', parseInt(e.target.value) || 0)}
+                        className="w-full px-3 py-2 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto max-h-[600px]">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Symbol</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-32">
+                      <div>ATR Multiplier</div>
+                      <div className="text-[10px] text-gray-400 font-normal normal-case">Base ATR calc</div>
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-32">
+                      <div>SL Multiplier</div>
+                      <div className="text-[10px] text-gray-400 font-normal normal-case">Risk ratio</div>
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-32">
+                      <div>Target Multiplier</div>
+                      <div className="text-[10px] text-gray-400 font-normal normal-case">Reward ratio</div>
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-28">
+                      <div>Lot Multiplier</div>
+                      <div className="text-[10px] text-gray-400 font-normal normal-case">Position size</div>
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase w-24">Enabled</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredSymbols.map(symbol => {
+                    const setting = settings.get(symbol);
+                    if (!setting) return null;
+
+                    const isEdited = editedSymbols.has(symbol);
+
+                    return (
+                      <tr key={symbol} className={`hover:bg-gray-50 ${isEdited ? 'bg-yellow-50' : ''}`}>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                          {symbol}
+                          {isEdited && <span className="ml-2 text-xs text-yellow-600">●</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={setting.atr_multiplier}
+                            onChange={(e) => handleSettingChange(symbol, 'atr_multiplier', parseFloat(e.target.value) || 0)}
+                            className="w-full px-3 py-1.5 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={setting.sl_multiplier}
+                            onChange={(e) => handleSettingChange(symbol, 'sl_multiplier', parseFloat(e.target.value) || 0)}
+                            className="w-full px-3 py-1.5 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={setting.target_multiplier}
+                            onChange={(e) => handleSettingChange(symbol, 'target_multiplier', parseFloat(e.target.value) || 0)}
+                            className="w-full px-3 py-1.5 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            value={setting.lot_multiplier}
+                            onChange={(e) => handleSettingChange(symbol, 'lot_multiplier', parseInt(e.target.value) || 0)}
+                            className="w-full px-3 py-1.5 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={setting.is_enabled}
+                            onChange={(e) => handleSettingChange(symbol, 'is_enabled', e.target.checked)}
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

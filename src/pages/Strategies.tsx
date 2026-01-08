@@ -134,15 +134,15 @@ export function Strategies() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 max-w-full overflow-x-hidden">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">TradingView Integration</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900">TradingView Integration</h2>
           <p className="text-sm text-gray-600 mt-1">Manage webhook keys for automated execution</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition w-full md:w-auto"
         >
           <Plus className="w-5 h-5" />
           Create Webhook Key
@@ -164,19 +164,20 @@ export function Strategies() {
               <li>TradingView sends signals → Platform validates & places MARKET order → Creates HMT GTT (SL + Target)</li>
             </ol>
             <div className="mt-3 pt-3 border-t border-blue-200">
-              <div className="flex items-start gap-3">
+              <div className="flex flex-col gap-3">
                 <div className="flex-1">
                   <p className="text-xs text-blue-700 font-medium mb-1">Webhook URL:</p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs bg-white px-2 py-1 rounded border border-blue-300 font-mono">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                    <code className="flex-1 text-xs bg-white px-2 py-1 rounded border border-blue-300 font-mono break-all w-full">
                       {import.meta.env.VITE_SUPABASE_URL}/functions/v1/tradingview-webhook
                     </code>
                     <button
                       onClick={copyWebhookUrl}
-                      className="text-blue-600 hover:text-blue-700 p-1"
+                      className="text-blue-600 hover:text-blue-700 p-1 flex items-center gap-1 whitespace-nowrap"
                       title="Copy URL"
                     >
                       <Copy className="w-4 h-4" />
+                      <span className="text-xs sm:hidden">Copy URL</span>
                     </button>
                   </div>
                 </div>
@@ -196,9 +197,9 @@ export function Strategies() {
         {webhookKeys.map((key) => (
           <div key={key.id} className="bg-white rounded-lg border border-gray-200">
             <div className="p-4">
-              <div className="flex items-start justify-between mb-3">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
                     <Key className="w-4 h-4 text-gray-400" />
                     <h3 className="font-semibold text-gray-900">{key.name}</h3>
                     <span className={`px-2 py-0.5 rounded-full text-xs ${
@@ -209,7 +210,7 @@ export function Strategies() {
                       {key.is_active ? 'Active' : 'Disabled'}
                     </span>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-gray-600">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs text-gray-600">
                     <span className="flex items-center gap-1">
                       <TrendingUp className="w-3 h-3" />
                       {key.account_mappings?.length || 0} account{(key.account_mappings?.length || 0) !== 1 ? 's' : ''} mapped

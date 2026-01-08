@@ -641,10 +641,10 @@ export function GTTOrders() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 max-w-full overflow-x-hidden">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">GTT ({filteredGttOrders.length})</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900">GTT ({filteredGttOrders.length})</h2>
           <div className="flex items-center gap-3 mt-1">
             {isConnected && (
               <div className="flex items-center gap-1.5 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs w-fit">
@@ -659,11 +659,11 @@ export function GTTOrders() {
             )}
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <button
             onClick={syncWithZerodha}
             disabled={syncing || loading}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
             title="Refresh from Zerodha"
           >
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
@@ -673,7 +673,7 @@ export function GTTOrders() {
             <select
               value={selectedBrokerId}
               onChange={(e) => setSelectedBrokerId(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm w-full sm:w-auto"
             >
               <option value="all">All Accounts</option>
               {brokers.map((broker) => (
@@ -684,20 +684,22 @@ export function GTTOrders() {
             </select>
           )}
           {uniqueInstruments.length > 0 && (
-            <MultiSelectFilter
-              label="Instruments"
-              options={uniqueInstruments}
-              selectedValues={selectedInstruments}
-              onChange={setSelectedInstruments}
-              placeholder="All Instruments"
-            />
+            <div className="w-full sm:w-auto">
+              <MultiSelectFilter
+                label="Instruments"
+                options={uniqueInstruments}
+                selectedValues={selectedInstruments}
+                onChange={setSelectedInstruments}
+                placeholder="All Instruments"
+              />
+            </div>
           )}
           <button
             onClick={() => {
               setEditingGTT(null);
               setShowCreateModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm w-full sm:w-auto"
           >
             <Plus className="w-4 h-4" />
             New GTT
@@ -782,7 +784,112 @@ export function GTTOrders() {
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full">
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-gray-200">
+            {filteredGttOrders.map((gtt) => {
+              const isOCO = gtt.type === 'two-leg';
+              const transactionType = gtt.orders?.[0]?.transaction_type;
+              const quantity = gtt.orders?.[0]?.quantity || 0;
+              const instrumentToken = gtt.condition?.instrument_token;
+              const ltp = instrumentToken ? getLTP(instrumentToken) : null;
+              const currentPrice = ltp ?? gtt.condition?.last_price ?? 0;
+
+              return (
+                <div key={gtt.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedOrders.has(gtt.id.toString())}
+                        onChange={() => toggleOrderSelection(gtt.id.toString())}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 mt-1"
+                      />
+                      <div>
+                        <div className="font-medium text-gray-900">{gtt.condition?.tradingsymbol || 'N/A'}</div>
+                        <div className="text-xs text-gray-500">
+                          {new Date(gtt.created_at).toLocaleDateString('en-IN', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            timeZone: 'Asia/Kolkata'
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
+                      gtt.status === 'active' ? 'bg-green-100 text-green-700' :
+                      gtt.status === 'triggered' ? 'bg-blue-100 text-blue-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {gtt.status?.toUpperCase()}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
+                      isOCO ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {isOCO ? 'OCO' : 'SINGLE'}
+                    </span>
+                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
+                      transactionType === 'BUY' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {transactionType}
+                    </span>
+                  </div>
+
+                  {selectedBrokerId === 'all' && (
+                    <div className="text-xs text-gray-600">
+                      Account: {(gtt.broker_info?.account_holder_name || gtt.broker_info?.account_name || 'Account')}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-xs text-gray-500">Trigger Price</div>
+                      {isOCO ? (
+                        <div className="space-y-1 mt-1">
+                          <div className="font-medium">₹{gtt.condition?.trigger_values?.[0]?.toFixed(2)}</div>
+                          <div className="font-medium">₹{gtt.condition?.trigger_values?.[1]?.toFixed(2)}</div>
+                        </div>
+                      ) : (
+                        <div className="font-medium mt-1">₹{gtt.condition?.trigger_values?.[0]?.toFixed(2)}</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Current Price</div>
+                      <div className="font-medium mt-1">₹{currentPrice?.toFixed(2) || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Quantity</div>
+                      <div className="font-medium mt-1">{quantity}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={() => handleEditClick(gtt)}
+                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClick(gtt.id, gtt.broker_info?.id)}
+                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-4 py-3 text-center w-12">
@@ -1018,6 +1125,7 @@ export function GTTOrders() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
