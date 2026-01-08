@@ -460,9 +460,6 @@ export function HMTGTTOrders() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">HMT GTT ({filteredHmtGttOrders.length})</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Server-Side Trigger Engine - <span className="font-medium">Runs Automatically 24/7</span>
-          </p>
           <div className="flex items-center gap-3 mt-2">
             {engineStatus ? (
               <>
