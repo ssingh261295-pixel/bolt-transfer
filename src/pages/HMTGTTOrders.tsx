@@ -116,13 +116,8 @@ export function HMTGTTOrders() {
             if (order.id === updatedFields.id) {
               return {
                 ...order,
-                status: updatedFields.status,
-                trigger_price_1: updatedFields.trigger_price_1,
-                trigger_price_2: updatedFields.trigger_price_2,
-                quantity_1: updatedFields.quantity_1,
-                quantity_2: updatedFields.quantity_2,
-                transaction_type: updatedFields.transaction_type,
-                updated_at: updatedFields.updated_at
+                ...updatedFields,
+                broker_connections: order.broker_connections
               };
             }
             return order;
