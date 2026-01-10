@@ -88,10 +88,8 @@ export function Orders() {
             if (order.id === updatedFields.id) {
               return {
                 ...order,
-                status: updatedFields.status,
-                executed_quantity: updatedFields.executed_quantity,
-                executed_price: updatedFields.executed_price,
-                updated_at: updatedFields.updated_at
+                ...updatedFields,
+                broker_connections: order.broker_connections
               };
             }
             return order;

@@ -96,9 +96,8 @@ export function GTTOrders() {
           const updated = prev.map(order => {
             if (order.id === updatedOrder.zerodha_gtt_id && order.broker_info?.id === updatedOrder.broker_connection_id) {
               return {
-                ...order,
-                status: updatedOrder.status,
-                ...updatedOrder.raw_data
+                ...updatedOrder.raw_data,
+                broker_info: order.broker_info
               };
             }
             return order;
