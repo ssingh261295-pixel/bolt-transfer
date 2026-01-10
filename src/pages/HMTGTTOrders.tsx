@@ -151,6 +151,54 @@ export function HMTGTTOrders() {
     };
   }, [user?.id, sortField, sortDirection, brokers]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const positionsChannel = supabase
+      .channel('positions_changes')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'positions',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const newPosition = payload.new as any;
+        setPositions(prev => {
+          const exists = prev.find(p => p.id === newPosition.id);
+          if (exists) return prev;
+          return [...prev, newPosition];
+        });
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'positions',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const updatedPosition = payload.new as any;
+        setPositions(prev => {
+          if (updatedPosition.quantity === 0) {
+            return prev.filter(p => p.id !== updatedPosition.id);
+          }
+          return prev.map(p => p.id === updatedPosition.id ? updatedPosition : p);
+        });
+      })
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'positions',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const deletedId = payload.old.id;
+        setPositions(prev => prev.filter(p => p.id !== deletedId));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(positionsChannel);
+    };
+  }, [user?.id]);
+
   const loadBrokers = async () => {
     const { data } = await supabase
       .from('broker_connections')
