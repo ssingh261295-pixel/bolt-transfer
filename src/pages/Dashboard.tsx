@@ -253,7 +253,7 @@ export function Dashboard() {
             const activeGtt = gttOrders.filter((gtt: any) => gtt.status === 'active').length;
 
             const metrics = {
-              available_margin: parseFloat(equity.available?.cash || 0),
+              available_margin: parseFloat(equity.available?.live_balance || equity.available?.cash || 0),
               used_margin: parseFloat(equity.utilised?.debits || 0),
               available_cash: openingBalance,
               today_pnl: todayPnl,
