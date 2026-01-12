@@ -720,6 +720,8 @@ export function HMTGTTOrders() {
             {filteredHmtGttOrders.map((gtt) => {
               const ltp = getLTP(gtt.instrument_token);
               const position = getPositionForGTT(gtt);
+              const currentPrice = ltp ?? 0;
+              const pnl = position && currentPrice ? (currentPrice - position.average_price) * position.quantity : null;
 
               return (
                 <div key={gtt.id} className="p-4 space-y-3 transition-colors">
@@ -824,8 +826,8 @@ export function HMTGTTOrders() {
                         </div>
                         <div className="min-w-0">
                           <div className="text-xs text-gray-500">P&L</div>
-                          <div className={`font-semibold tabular-nums ${position.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {position.pnl >= 0 ? '+' : ''}₹{position.pnl?.toFixed(2)}
+                          <div className={`font-semibold tabular-nums ${pnl !== null && pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {pnl !== null ? `${pnl >= 0 ? '+' : ''}₹${pnl.toFixed(2)}` : '-'}
                           </div>
                         </div>
                       </>
