@@ -295,6 +295,14 @@ export function HMTGTTOrders() {
 
   const sortHMTGTTOrders = (data: any[]) => {
     return [...data].sort((a, b) => {
+      const statusPriority = { 'active': 0, 'triggered': 1 };
+      const aStatus = statusPriority[a.status as keyof typeof statusPriority] ?? 2;
+      const bStatus = statusPriority[b.status as keyof typeof statusPriority] ?? 2;
+
+      if (aStatus !== bStatus) {
+        return aStatus - bStatus;
+      }
+
       let aVal, bVal;
 
       switch (sortField) {
