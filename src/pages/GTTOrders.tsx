@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, ArrowUpDown, Activity, RefreshCw, TrendingUp } from 'lucide-react';
+import { Plus, Edit2, Trash2, ArrowUpDown, Activity, RefreshCw, TrendingUp, MoreVertical } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
@@ -52,6 +52,10 @@ export function GTTOrders() {
   const [deleting, setDeleting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [converting, setConverting] = useState(false);
+  const [convertMessage, setConvertMessage] = useState('');
+  const [convertError, setConvertError] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -59,6 +63,20 @@ export function GTTOrders() {
       loadPositions();
     }
   }, [user]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openMenuId) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.relative')) {
+          setOpenMenuId(null);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openMenuId]);
 
   useEffect(() => {
     if (brokers.length > 0 && (!selectedBrokerId || selectedBrokerId === '')) {
@@ -661,6 +679,79 @@ export function GTTOrders() {
     return `${sign}${absPercent.toFixed(2)}%`;
   };
 
+  const handleConvertToHMT = async (gtt: any) => {
+    setOpenMenuId(null);
+    setConverting(true);
+    setConvertError('');
+    setConvertMessage('');
+
+    try {
+      const isOCO = gtt.type === 'two-leg';
+      const transactionType = gtt.orders?.[0]?.transaction_type;
+
+      const hmtGttData: any = {
+        user_id: user?.id,
+        broker_connection_id: gtt.broker_info?.id,
+        trading_symbol: gtt.condition?.tradingsymbol,
+        exchange: gtt.condition?.exchange,
+        instrument_token: gtt.condition?.instrument_token,
+        transaction_type: transactionType,
+        quantity_1: gtt.orders?.[0]?.quantity || 0,
+        order_type_1: gtt.orders?.[0]?.order_type || 'LIMIT',
+        order_price_1: gtt.orders?.[0]?.price || 0,
+        product_type_1: gtt.orders?.[0]?.product || 'CNC',
+        trigger_price_1: gtt.condition?.trigger_values?.[0] || 0,
+        condition_type: isOCO ? 'two-leg' : 'single',
+        status: 'active'
+      };
+
+      if (isOCO) {
+        hmtGttData.trigger_price_2 = gtt.condition?.trigger_values?.[1] || 0;
+        hmtGttData.quantity_2 = gtt.orders?.[1]?.quantity || gtt.orders?.[0]?.quantity || 0;
+        hmtGttData.order_type_2 = gtt.orders?.[1]?.order_type || 'LIMIT';
+        hmtGttData.order_price_2 = gtt.orders?.[1]?.price || 0;
+        hmtGttData.product_type_2 = gtt.orders?.[1]?.product || 'CNC';
+      }
+
+      const { error: insertError } = await supabase
+        .from('hmt_gtt_orders')
+        .insert(hmtGttData);
+
+      if (insertError) {
+        throw new Error(insertError.message);
+      }
+
+      const brokerIdToUse = gtt.broker_info?.id || selectedBrokerId;
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerIdToUse}&gtt_id=${gtt.id}`;
+
+      const response = await fetch(apiUrl, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+        },
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setConvertMessage('Successfully converted GTT to HMT GTT');
+        setTimeout(() => setConvertMessage(''), 5000);
+        syncWithZerodha();
+      } else {
+        setConvertError('GTT converted to HMT but failed to delete original GTT: ' + result.error);
+        setTimeout(() => setConvertError(''), 5000);
+      }
+    } catch (err: any) {
+      console.error('Error converting to HMT GTT:', err);
+      setConvertError('Failed to convert: ' + err.message);
+      setTimeout(() => setConvertError(''), 5000);
+    } finally {
+      setConverting(false);
+    }
+  };
+
   return (
     <div className="space-y-4 max-w-full overflow-x-hidden">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -743,6 +834,24 @@ export function GTTOrders() {
       {deleting && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-800 font-medium">Deleting GTT order(s)...</p>
+        </div>
+      )}
+
+      {convertMessage && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <p className="text-sm text-green-800 font-medium">{convertMessage}</p>
+        </div>
+      )}
+
+      {convertError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-sm text-red-800 font-medium">{convertError}</p>
+        </div>
+      )}
+
+      {converting && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800 font-medium">Converting to HMT GTT...</p>
         </div>
       )}
 
@@ -887,31 +996,36 @@ export function GTTOrders() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2 pt-2">
+                  <div className="flex gap-2 pt-2 relative">
                     <button
-                      onClick={() => {
-                        setFilterStateBeforeEdit({
-                          brokerId: selectedBrokerId,
-                          instruments: selectedInstruments
-                        });
-                        if (gtt.broker_info?.id) {
-                          setSelectedBrokerId(gtt.broker_info.id);
-                        }
-                        setEditingGTT(gtt);
-                        setShowCreateModal(true);
-                      }}
-                      className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-blue-600 border border-blue-300 hover:bg-blue-50 rounded transition"
+                      onClick={() => setOpenMenuId(openMenuId === gtt.id.toString() ? null : gtt.id.toString())}
+                      className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-gray-700 border border-gray-300 hover:bg-gray-50 rounded transition"
                     >
-                      <Edit2 className="w-4 h-4" />
-                      Edit
+                      <MoreVertical className="w-4 h-4" />
+                      Actions
                     </button>
-                    <button
-                      onClick={() => handleDelete(gtt.id, gtt.broker_info?.id)}
-                      className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-red-600 border border-red-300 hover:bg-red-50 rounded transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </button>
+
+                    {openMenuId === gtt.id.toString() && (
+                      <div className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10">
+                        <button
+                          onClick={() => handleConvertToHMT(gtt)}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <Activity className="w-4 h-4" />
+                          Convert to HMT GTT
+                        </button>
+                        <button
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            handleDelete(gtt.id, gtt.broker_info?.id);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Delete GTT
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1124,31 +1238,36 @@ export function GTTOrders() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-2">
+                      <div className="relative">
                         <button
-                          onClick={() => {
-                            setFilterStateBeforeEdit({
-                              brokerId: selectedBrokerId,
-                              instruments: selectedInstruments
-                            });
-                            if (gtt.broker_info?.id) {
-                              setSelectedBrokerId(gtt.broker_info.id);
-                            }
-                            setEditingGTT(gtt);
-                            setShowCreateModal(true);
-                          }}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition"
-                          title="Edit GTT"
+                          onClick={() => setOpenMenuId(openMenuId === gtt.id.toString() ? null : gtt.id.toString())}
+                          className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition"
+                          title="Actions"
                         >
-                          <Edit2 className="w-4 h-4" />
+                          <MoreVertical className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleDelete(gtt.id, gtt.broker_info?.id)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition"
-                          title="Delete GTT"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+
+                        {openMenuId === gtt.id.toString() && (
+                          <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10 min-w-[180px]">
+                            <button
+                              onClick={() => handleConvertToHMT(gtt)}
+                              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Activity className="w-4 h-4" />
+                              Convert to HMT GTT
+                            </button>
+                            <button
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                handleDelete(gtt.id, gtt.broker_info?.id);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete GTT
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
