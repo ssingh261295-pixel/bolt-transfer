@@ -28,8 +28,10 @@ function ProtectedLayout() {
   const location = useLocation();
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [showGTTModal, setShowGTTModal] = useState(false);
+  const [showHMTGTTModal, setShowHMTGTTModal] = useState(false);
   const [orderDefaults, setOrderDefaults] = useState<any>({});
   const [gttDefaults, setGttDefaults] = useState<any>({});
+  const [hmtGttDefaults, setHmtGttDefaults] = useState<any>({});
   const [brokers, setBrokers] = useState<any[]>([]);
   const [brokerId, setBrokerId] = useState<string>('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -99,6 +101,15 @@ function ProtectedLayout() {
     setShowGTTModal(true);
   };
 
+  const handleHMTGTTClick = (symbol: string, exchange: string, token: number) => {
+    setHmtGttDefaults({
+      symbol,
+      exchange,
+      instrumentToken: token
+    });
+    setShowHMTGTTModal(true);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50 max-w-full overflow-x-hidden">
       <TopNavigation onMobileMenuToggle={() => setMobileMenuOpen(true)} />
@@ -108,6 +119,7 @@ function ProtectedLayout() {
           onBuyClick={handleBuyClick}
           onSellClick={handleSellClick}
           onGTTClick={handleGTTClick}
+          onHMTGTTClick={handleHMTGTTClick}
         />
         <main className="flex-1 overflow-y-auto p-4 md:p-6 max-w-full">
           <Routes>
@@ -153,6 +165,21 @@ function ProtectedLayout() {
           initialSymbol={gttDefaults.symbol}
           initialExchange={gttDefaults.exchange}
           allBrokers={brokers}
+        />
+      )}
+
+      {showHMTGTTModal && (
+        <GTTModal
+          isOpen={showHMTGTTModal}
+          onClose={() => {
+            setShowHMTGTTModal(false);
+            setHmtGttDefaults({});
+          }}
+          brokerConnectionId={brokerId || 'all'}
+          initialSymbol={hmtGttDefaults.symbol}
+          initialExchange={hmtGttDefaults.exchange}
+          allBrokers={brokers}
+          isHMTMode={true}
         />
       )}
     </div>

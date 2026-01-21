@@ -19,9 +19,10 @@ interface WatchlistSidebarProps {
   onBuyClick: (symbol: string, exchange: string, token: number) => void;
   onSellClick: (symbol: string, exchange: string, token: number) => void;
   onGTTClick: (symbol: string, exchange: string, token: number) => void;
+  onHMTGTTClick?: (symbol: string, exchange: string, token: number) => void;
 }
 
-export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }: WatchlistSidebarProps) {
+export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, onHMTGTTClick }: WatchlistSidebarProps) {
   const { user } = useAuth();
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -217,6 +218,15 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
                         >
                           S
                         </button>
+                        {onHMTGTTClick && (
+                          <button
+                            onClick={() => onHMTGTTClick(item.tradingsymbol, item.exchange, item.instrument_token)}
+                            className="px-2.5 py-1 bg-purple-600 text-white text-xs font-semibold rounded hover:bg-purple-700 transition-colors"
+                            title="HMT GTT"
+                          >
+                            H
+                          </button>
+                        )}
                         <button
                           onClick={() => onGTTClick(item.tradingsymbol, item.exchange, item.instrument_token)}
                           className="px-2.5 py-1 bg-gray-600 text-white text-xs font-semibold rounded hover:bg-gray-700 transition-colors"
@@ -240,25 +250,22 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick }
                           {item.tradingsymbol}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2.5 flex-shrink-0">
-                        {change !== 0 ? (
-                          <div className={`flex items-center gap-0.5 text-[11px] font-semibold ${getPriceColor(change)} min-w-[50px]`}>
+                      <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                        <div className={`font-bold text-[13px] ${getPriceColor(change)} text-right`}>
+                          {lastPrice > 0 ? `₹${lastPrice.toFixed(2)}` : '₹0.00'}
+                        </div>
+                        {change !== 0 && (
+                          <div className={`flex items-center gap-0.5 text-[10px] font-semibold ${getPriceColor(change)}`}>
                             {change > 0 ? (
-                              <TrendingUp className="w-3 h-3 flex-shrink-0" />
+                              <TrendingUp className="w-2.5 h-2.5 flex-shrink-0" />
                             ) : (
-                              <TrendingDown className="w-3 h-3 flex-shrink-0" />
+                              <TrendingDown className="w-2.5 h-2.5 flex-shrink-0" />
                             )}
                             <span className="whitespace-nowrap">
-                              {change > 0 ? '+' : ''}
-                              {changePercent.toFixed(2)}%
+                              {change > 0 ? '+' : ''}₹{Math.abs(change).toFixed(2)} ({changePercent.toFixed(2)}%)
                             </span>
                           </div>
-                        ) : (
-                          <div className="w-[50px]" />
                         )}
-                        <div className={`font-bold text-[13px] ${getPriceColor(change)} text-right min-w-[55px]`}>
-                          {lastPrice > 0 ? lastPrice.toFixed(2) : '0.00'}
-                        </div>
                       </div>
                     </div>
                   )}
