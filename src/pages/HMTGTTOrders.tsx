@@ -485,44 +485,38 @@ export function HMTGTTOrders() {
     try {
       const isOCO = hmtGtt.condition_type === 'two-leg';
 
+      // Build payload in the format expected by zerodha-gtt edge function
       const gttPayload: any = {
-        tradingsymbol: hmtGtt.trading_symbol,
-        exchange: hmtGtt.exchange,
-        trigger_type: isOCO ? 'two-leg' : 'single',
-        trigger_values: isOCO
-          ? [parseFloat(hmtGtt.trigger_price_1), parseFloat(hmtGtt.trigger_price_2)]
-          : [parseFloat(hmtGtt.trigger_price_1)],
-        last_price: 0,
-        orders: []
+        type: isOCO ? 'two-leg' : 'single',
+        'condition[exchange]': hmtGtt.exchange,
+        'condition[tradingsymbol]': hmtGtt.trading_symbol,
+        'condition[instrument_token]': hmtGtt.instrument_token,
+        'condition[trigger_values][0]': parseFloat(hmtGtt.trigger_price_1),
+        'condition[last_price]': parseFloat(hmtGtt.trigger_price_1) + 5,
       };
 
       if (isOCO) {
-        gttPayload.orders = [
-          {
-            transaction_type: hmtGtt.transaction_type,
-            quantity: parseInt(hmtGtt.quantity_1),
-            price: parseFloat(hmtGtt.order_price_1) || 0,
-            order_type: hmtGtt.order_type_1 || 'LIMIT',
-            product: hmtGtt.product_type_1 || 'CNC'
-          },
-          {
-            transaction_type: hmtGtt.transaction_type,
-            quantity: parseInt(hmtGtt.quantity_2 || hmtGtt.quantity_1),
-            price: parseFloat(hmtGtt.order_price_2) || 0,
-            order_type: hmtGtt.order_type_2 || 'LIMIT',
-            product: hmtGtt.product_type_2 || 'CNC'
-          }
-        ];
+        gttPayload['condition[trigger_values][1]'] = parseFloat(hmtGtt.trigger_price_2);
+
+        // First order
+        gttPayload['orders[0][transaction_type]'] = hmtGtt.transaction_type;
+        gttPayload['orders[0][quantity]'] = parseInt(hmtGtt.quantity_1);
+        gttPayload['orders[0][price]'] = parseFloat(hmtGtt.order_price_1) || 0;
+        gttPayload['orders[0][order_type]'] = hmtGtt.order_type_1 || 'LIMIT';
+        gttPayload['orders[0][product]'] = hmtGtt.product_type_1 || 'CNC';
+
+        // Second order
+        gttPayload['orders[1][transaction_type]'] = hmtGtt.transaction_type;
+        gttPayload['orders[1][quantity]'] = parseInt(hmtGtt.quantity_2 || hmtGtt.quantity_1);
+        gttPayload['orders[1][price]'] = parseFloat(hmtGtt.order_price_2) || 0;
+        gttPayload['orders[1][order_type]'] = hmtGtt.order_type_2 || 'LIMIT';
+        gttPayload['orders[1][product]'] = hmtGtt.product_type_2 || 'CNC';
       } else {
-        gttPayload.orders = [
-          {
-            transaction_type: hmtGtt.transaction_type,
-            quantity: parseInt(hmtGtt.quantity_1),
-            price: parseFloat(hmtGtt.order_price_1) || 0,
-            order_type: hmtGtt.order_type_1 || 'LIMIT',
-            product: hmtGtt.product_type_1 || 'CNC'
-          }
-        ];
+        gttPayload['orders[0][transaction_type]'] = hmtGtt.transaction_type;
+        gttPayload['orders[0][quantity]'] = parseInt(hmtGtt.quantity_1);
+        gttPayload['orders[0][price]'] = parseFloat(hmtGtt.order_price_1) || 0;
+        gttPayload['orders[0][order_type]'] = hmtGtt.order_type_1 || 'LIMIT';
+        gttPayload['orders[0][product]'] = hmtGtt.product_type_1 || 'CNC';
       }
 
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${hmtGtt.broker_connection_id}`;
