@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, List, Trash2, Eye, Activity, Search, X } from 'lucide-react';
+import { Plus, List, Trash2, Eye, Activity, Search, X, MoreVertical, ArrowUpDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
@@ -24,8 +24,11 @@ export function Watchlist() {
   const itemsPerPage = 50;
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [showGTTModal, setShowGTTModal] = useState(false);
+  const [showHMTGTTModal, setShowHMTGTTModal] = useState(false);
   const [orderDefaults, setOrderDefaults] = useState<any>({});
   const [gttDefaults, setGttDefaults] = useState<any>({});
+  const [sortByName, setSortByName] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(brokerId);
 
@@ -277,6 +280,22 @@ export function Watchlist() {
       instrumentToken: token
     });
     setShowGTTModal(true);
+    setOpenMenuId(null);
+  };
+
+  const handleHMTGTTClick = (symbol: string, exchange: string, token: number) => {
+    setGttDefaults({
+      symbol,
+      exchange,
+      instrumentToken: token
+    });
+    setShowHMTGTTModal(true);
+    setOpenMenuId(null);
+  };
+
+  const sortedSymbols = (symbols: any[]) => {
+    if (!sortByName) return symbols;
+    return [...symbols].sort((a, b) => a.symbol.localeCompare(b.symbol));
   };
 
   return (
@@ -500,7 +519,15 @@ export function Watchlist() {
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-gray-200">
-                          <th className="text-left py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Symbol</th>
+                          <th className="text-left py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">
+                            <button
+                              onClick={() => setSortByName(!sortByName)}
+                              className="flex items-center gap-1 hover:text-gray-900 transition"
+                            >
+                              Symbol
+                              <ArrowUpDown className={`w-3 h-3 ${sortByName ? 'text-blue-600' : ''}`} />
+                            </button>
+                          </th>
                           <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Last</th>
                           <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Chg</th>
                           <th className="text-right py-2 px-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Chg%</th>
@@ -511,7 +538,7 @@ export function Watchlist() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {selectedWatchlist.symbols
+                        {sortedSymbols(selectedWatchlist.symbols)
                           .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
                           .map((symbol: any, index: number) => {
                         const ltp = symbol.instrument_token ? getLTP(symbol.instrument_token) : null;
@@ -557,35 +584,71 @@ export function Watchlist() {
                               <p className="text-sm text-gray-600">{tick?.volume_traded ? tick.volume_traded.toLocaleString() : '-'}</p>
                             </td>
                             <td className="py-3 px-3">
-                              <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition">
-                                <button
-                                  onClick={() => handleBuyClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
-                                  className="px-3 py-1 text-xs font-semibold bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-                                  title="Buy"
-                                >
-                                  B
-                                </button>
-                                <button
-                                  onClick={() => handleSellClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
-                                  className="px-3 py-1 text-xs font-semibold bg-red-600 text-white rounded hover:bg-red-700 transition"
-                                  title="Sell"
-                                >
-                                  S
-                                </button>
-                                <button
-                                  onClick={() => handleGTTClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
-                                  className="px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 rounded transition"
-                                  title="GTT"
-                                >
-                                  GTT
-                                </button>
-                                <button
-                                  onClick={() => removeInstrumentFromWatchlist(symbol.instrument_token)}
-                                  className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
-                                  title="Remove"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
+                              <div className="flex items-center justify-center">
+                                <div className="relative">
+                                  <button
+                                    onClick={() => setOpenMenuId(openMenuId === index ? null : index)}
+                                    className="p-1.5 hover:bg-gray-100 rounded-lg transition"
+                                    title="Actions"
+                                  >
+                                    <MoreVertical className="w-4 h-4 text-gray-600" />
+                                  </button>
+                                  {openMenuId === index && (
+                                    <>
+                                      <div
+                                        className="fixed inset-0 z-10"
+                                        onClick={() => setOpenMenuId(null)}
+                                      />
+                                      <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                                        <button
+                                          onClick={() => handleHMTGTTClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
+                                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition flex items-center gap-2"
+                                        >
+                                          <Activity className="w-4 h-4" />
+                                          Create HMT GTT
+                                        </button>
+                                        <button
+                                          onClick={() => handleGTTClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
+                                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition flex items-center gap-2"
+                                        >
+                                          <List className="w-4 h-4" />
+                                          Create GTT
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            handleBuyClick(symbol.symbol, symbol.exchange, symbol.instrument_token);
+                                            setOpenMenuId(null);
+                                          }}
+                                          className="w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 transition flex items-center gap-2"
+                                        >
+                                          <span className="font-semibold">↑</span>
+                                          Buy
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            handleSellClick(symbol.symbol, symbol.exchange, symbol.instrument_token);
+                                            setOpenMenuId(null);
+                                          }}
+                                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition flex items-center gap-2"
+                                        >
+                                          <span className="font-semibold">↓</span>
+                                          Sell
+                                        </button>
+                                        <div className="border-t border-gray-200 my-1"></div>
+                                        <button
+                                          onClick={() => {
+                                            removeInstrumentFromWatchlist(symbol.instrument_token);
+                                            setOpenMenuId(null);
+                                          }}
+                                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition flex items-center gap-2"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                          Delete
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             </td>
                           </tr>
@@ -630,6 +693,21 @@ export function Watchlist() {
           initialSymbol={gttDefaults.symbol}
           initialExchange={gttDefaults.exchange}
           allBrokers={brokers}
+        />
+      )}
+
+      {showHMTGTTModal && (
+        <GTTModal
+          isOpen={showHMTGTTModal}
+          onClose={() => {
+            setShowHMTGTTModal(false);
+            setGttDefaults({});
+          }}
+          brokerConnectionId={brokerId || 'all'}
+          initialSymbol={gttDefaults.symbol}
+          initialExchange={gttDefaults.exchange}
+          allBrokers={brokers}
+          isHMTMode={true}
         />
       )}
     </div>
