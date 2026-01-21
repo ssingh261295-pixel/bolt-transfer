@@ -99,11 +99,12 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
     return roundToTickSize(numValue);
   };
 
-  useEffect(() => {
-    if (isOpen && exchange) {
-      loadInstruments();
-    }
-  }, [isOpen, exchange]);
+  // Don't load all instruments upfront - only load when user searches
+  // useEffect(() => {
+  //   if (isOpen && exchange) {
+  //     loadInstruments();
+  //   }
+  // }, [isOpen, exchange]);
 
   // Don't auto-select any account - let user choose
 
@@ -413,28 +414,50 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
     }
   };
 
-  const handleSymbolSearch = (value: string) => {
+  const handleSymbolSearch = async (value: string) => {
     setSymbol(value);
 
     if (!editingGTT && value !== selectedInstrument?.tradingsymbol) {
       setSelectedInstrument(null);
     }
 
-    if (!value || value.length < 1) {
+    if (!value || value.length < 2) {
       setFilteredInstruments([]);
       setShowSuggestions(false);
       return;
     }
 
-    const searchLower = value.toLowerCase();
-    const filtered = instruments.filter(
-      (inst) =>
-        inst.tradingsymbol?.toLowerCase().includes(searchLower) ||
-        inst.name?.toLowerCase().includes(searchLower)
-    ).slice(0, 30);
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=${exchange}&search=${encodeURIComponent(value)}`;
 
-    setFilteredInstruments(filtered);
-    setShowSuggestions(filtered.length > 0);
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        console.error('[GTTModal] Search API returned error:', response.status);
+        setFilteredInstruments([]);
+        return;
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.instruments) {
+        const filtered = data.instruments.slice(0, 30);
+        setFilteredInstruments(filtered);
+        setShowSuggestions(filtered.length > 0);
+      } else {
+        setFilteredInstruments([]);
+        setShowSuggestions(false);
+      }
+    } catch (err) {
+      console.error('[GTTModal] Search failed:', err);
+      setFilteredInstruments([]);
+      setShowSuggestions(false);
+    }
   };
 
   const fetchLTP = async (instrumentToken: string, tradingsymbol?: string, exchangeValue?: string, manualRefresh = false) => {

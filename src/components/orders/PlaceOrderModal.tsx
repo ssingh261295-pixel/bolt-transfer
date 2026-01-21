@@ -70,11 +70,12 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
     wasOpenRef.current = isOpen;
   }, [isOpen, user, initialSymbol, initialExchange, initialTransactionType, prefilledSymbol, prefilledExchange, brokerConnectionId]);
 
-  useEffect(() => {
-    if (formData.exchange && selectedBrokerIds.length > 0 && !searchLoading) {
-      loadInstruments();
-    }
-  }, [formData.exchange, selectedBrokerIds]);
+  // Don't load all instruments upfront - only load when user searches
+  // useEffect(() => {
+  //   if (formData.exchange && selectedBrokerIds.length > 0 && !searchLoading) {
+  //     loadInstruments();
+  //   }
+  // }, [formData.exchange, selectedBrokerIds]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -113,6 +114,8 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
       const brokerId = selectedBrokerIds[0];
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=${formData.exchange}&broker_id=${brokerId}`;
 
+      console.log('[PlaceOrderModal] Loading instruments from:', apiUrl);
+
       const response = await fetch(apiUrl, {
         headers: {
           'Authorization': `Bearer ${session?.access_token}`,
@@ -120,18 +123,34 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
         },
       });
 
+      if (!response.ok) {
+        console.error('[PlaceOrderModal] Instruments API returned error:', response.status, response.statusText);
+        const errorData = await response.json();
+        console.error('[PlaceOrderModal] Error details:', errorData);
+        return;
+      }
+
       const data = await response.json();
+      console.log('[PlaceOrderModal] Instruments loaded:', {
+        success: data.success,
+        total: data.total,
+        sampleInstruments: data.instruments?.slice(0, 3)
+      });
+
       if (data.success && data.instruments) {
         setInstruments(data.instruments);
+        console.log('[PlaceOrderModal] Set instruments array, length:', data.instruments.length);
+      } else {
+        console.error('[PlaceOrderModal] Invalid response format:', data);
       }
     } catch (err) {
-      console.error('Failed to load instruments:', err);
+      console.error('[PlaceOrderModal] Failed to load instruments:', err);
     } finally {
       setSearchLoading(false);
     }
   };
 
-  const handleSymbolSearch = (value: string) => {
+  const handleSymbolSearch = async (value: string) => {
     setFormData({ ...formData, symbol: value });
 
     if (searchTimeoutRef.current) {
@@ -145,28 +164,59 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
       return;
     }
 
-    searchTimeoutRef.current = setTimeout(() => {
+    searchTimeoutRef.current = setTimeout(async () => {
+      if (selectedBrokerIds.length === 0) return;
+
+      setSearchLoading(true);
       const searchLower = value.toLowerCase();
-      const filtered = instruments.filter(
-        (inst) =>
-          inst.tradingsymbol?.toLowerCase().includes(searchLower) ||
-          inst.name?.toLowerCase().includes(searchLower)
-      ).slice(0, 20);
+      console.log('[PlaceOrderModal] Searching for:', searchLower);
 
-      setFilteredInstruments(filtered);
-      setShowSuggestions(true);
+      try {
+        const brokerId = selectedBrokerIds[0];
+        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=${formData.exchange}&search=${encodeURIComponent(value)}`;
 
-      // Auto-select if there's an exact match
-      const exactMatch = instruments.find(
-        (inst) => inst.tradingsymbol?.toLowerCase() === searchLower
-      );
-      if (exactMatch) {
-        const lotSize = parseInt(exactMatch.lot_size) || 1;
-        setSelectedInstrument(exactMatch);
-        // Update quantity to match lot size if not already set correctly
-        if (!formData.quantity || formData.quantity === 1) {
-          setFormData(prev => ({ ...prev, symbol: value, quantity: lotSize }));
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          console.error('[PlaceOrderModal] Search API returned error:', response.status);
+          setFilteredInstruments([]);
+          return;
         }
+
+        const data = await response.json();
+        console.log('[PlaceOrderModal] Search results:', data.total, 'instruments found');
+
+        if (data.success && data.instruments) {
+          const filtered = data.instruments.slice(0, 20);
+          setFilteredInstruments(filtered);
+          setShowSuggestions(true);
+
+          // Auto-select if there's an exact match
+          const exactMatch = data.instruments.find(
+            (inst: any) => inst.tradingsymbol?.toLowerCase() === searchLower
+          );
+          if (exactMatch) {
+            console.log('[PlaceOrderModal] Exact match found:', exactMatch.tradingsymbol);
+            const lotSize = parseInt(exactMatch.lot_size) || 1;
+            setSelectedInstrument(exactMatch);
+            // Update quantity to match lot size if not already set correctly
+            if (!formData.quantity || formData.quantity === 1) {
+              setFormData(prev => ({ ...prev, symbol: value, quantity: lotSize }));
+            }
+          }
+        } else {
+          setFilteredInstruments([]);
+        }
+      } catch (err) {
+        console.error('[PlaceOrderModal] Search failed:', err);
+        setFilteredInstruments([]);
+      } finally {
+        setSearchLoading(false);
       }
     }, 300);
   };
@@ -427,7 +477,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
                   }
                 }}
                 className="w-full px-3 py-2 pr-10 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder={searchLoading ? "Loading instruments..." : "Search symbol (e.g., NIFTY, BANKNIFTY)"}
+                placeholder={searchLoading ? "Searching..." : "Type to search symbol (e.g., MAXHEALTH, NIFTY)"}
                 required
                 disabled={searchLoading}
               />
@@ -455,8 +505,11 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
               </div>
             )}
 
-            {formData.symbol && filteredInstruments.length === 0 && !searchLoading && formData.symbol.length >= 2 && (
+            {formData.symbol && filteredInstruments.length === 0 && !searchLoading && formData.symbol.length >= 2 && !showSuggestions && (
               <p className="text-xs text-gray-500 mt-1">No instruments found. Try a different search term.</p>
+            )}
+            {searchLoading && formData.symbol.length >= 2 && (
+              <p className="text-xs text-gray-500 mt-1">Searching...</p>
             )}
           </div>
 
