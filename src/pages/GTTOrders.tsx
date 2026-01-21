@@ -477,6 +477,11 @@ export function GTTOrders() {
     : gttOrders.filter(order => selectedInstruments.includes(order.condition?.tradingsymbol));
 
   useEffect(() => {
+    if (selectedInstruments.length === 0 && selectedOrders.size > 0) {
+      setSelectedOrders(new Set());
+      return;
+    }
+
     if (selectedOrders.size > 0) {
       const filteredOrderIds = new Set(filteredGttOrders.map(order => order.id.toString()));
       const updatedSelectedOrders = new Set<string>();
@@ -491,7 +496,7 @@ export function GTTOrders() {
         setSelectedOrders(updatedSelectedOrders);
       }
     }
-  }, [filteredGttOrders]);
+  }, [filteredGttOrders, selectedInstruments]);
 
   const isStopLossAboveBreakeven = (gtt: any, currentPrice: number): boolean => {
     const position = getPositionForGTT(gtt);
