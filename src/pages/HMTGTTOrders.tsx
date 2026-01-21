@@ -36,6 +36,7 @@ export function HMTGTTOrders() {
   const [convertMessage, setConvertMessage] = useState('');
   const [convertError, setConvertError] = useState('');
   const [converting, setConverting] = useState(false);
+  const [openMobileMenu, setOpenMobileMenu] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -869,7 +870,7 @@ export function HMTGTTOrders() {
               const position = getPositionForGTT(gtt);
               const currentPrice = ltp ?? 0;
               const pnl = position && currentPrice ? (currentPrice - position.average_price) * position.quantity : null;
-              const [showMobileMenu, setShowMobileMenu] = useState(false);
+              const showMobileMenu = openMobileMenu === gtt.id;
 
               return (
                 <div key={gtt.id} className="p-4 space-y-3 transition-colors relative">
@@ -985,7 +986,7 @@ export function HMTGTTOrders() {
                   <div className="flex justify-end pt-2">
                     <div className="relative">
                       <button
-                        onClick={() => setShowMobileMenu(!showMobileMenu)}
+                        onClick={() => setOpenMobileMenu(showMobileMenu ? null : gtt.id)}
                         className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
                         title="Actions"
                       >
@@ -996,14 +997,14 @@ export function HMTGTTOrders() {
                         <>
                           <div
                             className="fixed inset-0 z-40"
-                            onClick={() => setShowMobileMenu(false)}
+                            onClick={() => setOpenMobileMenu(null)}
                           />
                           <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                             <div className="py-1">
                               <button
                                 onClick={() => {
                                   handleEdit(gtt);
-                                  setShowMobileMenu(false);
+                                  setOpenMobileMenu(null);
                                 }}
                                 disabled={gtt.status !== 'active'}
                                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
@@ -1014,7 +1015,7 @@ export function HMTGTTOrders() {
                               <button
                                 onClick={() => {
                                   handleConvertToGTT(gtt);
-                                  setShowMobileMenu(false);
+                                  setOpenMobileMenu(null);
                                 }}
                                 disabled={gtt.status !== 'active'}
                                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
@@ -1025,7 +1026,7 @@ export function HMTGTTOrders() {
                               <button
                                 onClick={() => {
                                   handleDelete(gtt.id);
-                                  setShowMobileMenu(false);
+                                  setOpenMobileMenu(null);
                                 }}
                                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 transition"
                               >
