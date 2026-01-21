@@ -389,6 +389,10 @@ export function HMTGTTOrders() {
     }
   }, [filteredHmtGttOrders]);
 
+  useEffect(() => {
+    setSelectedOrders(new Set());
+  }, [selectedInstruments]);
+
   const toggleSelectAll = () => {
     if (selectedOrders.size === filteredHmtGttOrders.length) {
       setSelectedOrders(new Set());
