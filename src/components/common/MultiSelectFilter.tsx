@@ -31,16 +31,16 @@ export function MultiSelectFilter({
   }, []);
 
   const toggleOption = (option: string) => {
-    if (selectedValues.includes(option)) {
-      onChange(selectedValues.filter(v => v !== option));
-    } else {
-      onChange([...selectedValues, option]);
-    }
+    const newValues = selectedValues.includes(option)
+      ? selectedValues.filter(v => v !== option)
+      : [...selectedValues, option];
+    onChange(newValues);
   };
 
   const removeValue = (value: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    onChange(selectedValues.filter(v => v !== value));
+    const newValues = selectedValues.filter(v => v !== value);
+    onChange(newValues);
   };
 
   return (
@@ -80,20 +80,23 @@ export function MultiSelectFilter({
             <div className="mb-2 px-2 py-1 text-xs font-semibold text-gray-600 uppercase tracking-wide">
               {label}
             </div>
-            {options.map(option => (
-              <label
-                key={option}
-                className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded cursor-pointer transition"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedValues.includes(option)}
-                  onChange={() => toggleOption(option)}
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-900">{option}</span>
-              </label>
-            ))}
+            {options.map(option => {
+              const isChecked = selectedValues.includes(option);
+              return (
+                <label
+                  key={option}
+                  className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded cursor-pointer transition"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggleOption(option)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-900">{option}</span>
+                </label>
+              );
+            })}
             {options.length === 0 && (
               <div className="px-2 py-4 text-sm text-gray-500 text-center">
                 No options available
