@@ -1,5 +1,5 @@
-import { memo } from 'react';
-import { Edit2, Trash2, TrendingUp } from 'lucide-react';
+import { memo, useState, useRef, useEffect } from 'react';
+import { Edit2, Trash2, TrendingUp, MoreVertical, ArrowRightLeft } from 'lucide-react';
 import { formatIndianCurrency } from '../../lib/formatters';
 
 interface HMTGTTRowProps {
@@ -8,6 +8,7 @@ interface HMTGTTRowProps {
   onToggleSelect: (id: string) => void;
   onEdit: (gtt: any) => void;
   onDelete: (id: string) => void;
+  onConvertToGTT: (gtt: any) => void;
   showAccount: boolean;
   ltp: number | undefined;
   isConnected: boolean;
@@ -20,13 +21,27 @@ const HMTGTTRowComponent = ({
   onToggleSelect,
   onEdit,
   onDelete,
+  onConvertToGTT,
   showAccount,
   ltp,
   isConnected,
   position
 }: HMTGTTRowProps) => {
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const isOCO = gtt.condition_type === 'two-leg';
   const currentPrice = ltp ?? 0;
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const calculatePercentage = (triggerValue: number, currentPrice: number): string => {
     if (!currentPrice || currentPrice === 0) return '0% of LTP';
@@ -179,22 +194,53 @@ const HMTGTTRowComponent = ({
         </span>
       </td>
       <td className="px-4 py-3 align-middle">
-        <div className="flex gap-2">
+        <div className="relative" ref={menuRef}>
           <button
-            onClick={() => onEdit(gtt)}
-            disabled={gtt.status !== 'active'}
-            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Edit HMT GTT"
+            onClick={() => setShowMenu(!showMenu)}
+            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition"
+            title="Actions"
           >
-            <Edit2 className="w-4 h-4" />
+            <MoreVertical className="w-4 h-4" />
           </button>
-          <button
-            onClick={() => onDelete(gtt.id)}
-            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition"
-            title="Delete HMT GTT"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+
+          {showMenu && (
+            <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+              <div className="py-1">
+                <button
+                  onClick={() => {
+                    onEdit(gtt);
+                    setShowMenu(false);
+                  }}
+                  disabled={gtt.status !== 'active'}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit HMT GTT
+                </button>
+                <button
+                  onClick={() => {
+                    onConvertToGTT(gtt);
+                    setShowMenu(false);
+                  }}
+                  disabled={gtt.status !== 'active'}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  HMT to GTT
+                </button>
+                <button
+                  onClick={() => {
+                    onDelete(gtt.id);
+                    setShowMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 transition"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </td>
     </tr>

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, CreditCard as Edit2, Trash2, ArrowUpDown, Activity, Power, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, CreditCard as Edit2, Trash2, ArrowUpDown, Activity, Power, AlertCircle, CheckCircle, MoreVertical, ArrowRightLeft } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
@@ -33,6 +33,9 @@ export function HMTGTTOrders() {
   const [deleting, setDeleting] = useState(false);
   const [engineStatus, setEngineStatus] = useState<any>(null);
   const [loadingEngine, setLoadingEngine] = useState(false);
+  const [convertMessage, setConvertMessage] = useState('');
+  const [convertError, setConvertError] = useState('');
+  const [converting, setConverting] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -461,6 +464,102 @@ export function HMTGTTOrders() {
     setShowCreateModal(true);
   }, [selectedBrokerId, selectedInstruments]);
 
+  const handleConvertToGTT = useCallback(async (hmtGtt: any) => {
+    if (!session?.access_token) {
+      setConvertError('Not authenticated');
+      setTimeout(() => setConvertError(''), 5000);
+      return;
+    }
+
+    if (hmtGtt.status !== 'active') {
+      setConvertError('Can only convert active HMT GTT orders');
+      setTimeout(() => setConvertError(''), 5000);
+      return;
+    }
+
+    setConverting(true);
+    setConvertError('');
+    setConvertMessage('');
+
+    try {
+      const isOCO = hmtGtt.condition_type === 'two-leg';
+
+      const gttPayload: any = {
+        tradingsymbol: hmtGtt.trading_symbol,
+        exchange: hmtGtt.exchange,
+        trigger_type: isOCO ? 'two-leg' : 'single',
+        trigger_values: isOCO
+          ? [parseFloat(hmtGtt.trigger_price_1), parseFloat(hmtGtt.trigger_price_2)]
+          : [parseFloat(hmtGtt.trigger_price_1)],
+        last_price: 0,
+        orders: []
+      };
+
+      if (isOCO) {
+        gttPayload.orders = [
+          {
+            transaction_type: hmtGtt.transaction_type,
+            quantity: parseInt(hmtGtt.quantity_1),
+            price: parseFloat(hmtGtt.order_price_1) || 0,
+            order_type: hmtGtt.order_type_1 || 'LIMIT',
+            product: hmtGtt.product_type_1 || 'CNC'
+          },
+          {
+            transaction_type: hmtGtt.transaction_type,
+            quantity: parseInt(hmtGtt.quantity_2 || hmtGtt.quantity_1),
+            price: parseFloat(hmtGtt.order_price_2) || 0,
+            order_type: hmtGtt.order_type_2 || 'LIMIT',
+            product: hmtGtt.product_type_2 || 'CNC'
+          }
+        ];
+      } else {
+        gttPayload.orders = [
+          {
+            transaction_type: hmtGtt.transaction_type,
+            quantity: parseInt(hmtGtt.quantity_1),
+            price: parseFloat(hmtGtt.order_price_1) || 0,
+            order_type: hmtGtt.order_type_1 || 'LIMIT',
+            product: hmtGtt.product_type_1 || 'CNC'
+          }
+        ];
+      }
+
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${hmtGtt.broker_connection_id}`;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(gttPayload)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await supabase
+          .from('hmt_gtt_orders')
+          .update({ status: 'completed' })
+          .eq('id', hmtGtt.id)
+          .eq('user_id', user?.id);
+
+        setConvertMessage('Successfully converted HMT GTT to regular GTT');
+        setTimeout(() => setConvertMessage(''), 5000);
+        loadHMTGTTOrders(true);
+      } else {
+        setConvertError('Failed to create GTT: ' + (result.error || 'Unknown error'));
+        setTimeout(() => setConvertError(''), 5000);
+      }
+    } catch (err: any) {
+      console.error('Error converting to GTT:', err);
+      setConvertError('Failed to convert: ' + err.message);
+      setTimeout(() => setConvertError(''), 5000);
+    } finally {
+      setConverting(false);
+    }
+  }, [session, user, loadHMTGTTOrders]);
+
   const confirmSingleDelete = async () => {
     if (!deleteTarget) return;
     setShowDeleteConfirm(false);
@@ -665,6 +764,24 @@ export function HMTGTTOrders() {
         </div>
       )}
 
+      {convertMessage && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <p className="text-sm text-green-800 font-medium">{convertMessage}</p>
+        </div>
+      )}
+
+      {convertError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-sm text-red-800 font-medium">{convertError}</p>
+        </div>
+      )}
+
+      {converting && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800 font-medium">Converting HMT GTT to regular GTT...</p>
+        </div>
+      )}
+
       {selectedOrders.size > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 lg:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <span className="text-sm text-blue-800 font-medium">
@@ -752,9 +869,10 @@ export function HMTGTTOrders() {
               const position = getPositionForGTT(gtt);
               const currentPrice = ltp ?? 0;
               const pnl = position && currentPrice ? (currentPrice - position.average_price) * position.quantity : null;
+              const [showMobileMenu, setShowMobileMenu] = useState(false);
 
               return (
-                <div key={gtt.id} className="p-4 space-y-3 transition-colors">
+                <div key={gtt.id} className="p-4 space-y-3 transition-colors relative">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       <input
@@ -864,21 +982,61 @@ export function HMTGTTOrders() {
                     )}
                   </div>
 
-                  <div className="flex gap-2 pt-2">
-                    <button
-                      onClick={() => handleEdit(gtt)}
-                      className="flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-blue-600 border border-blue-300 hover:bg-blue-50 rounded transition flex-1"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(gtt.id)}
-                      className="flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-red-600 border border-red-300 hover:bg-red-50 rounded transition flex-1"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </button>
+                  <div className="flex justify-end pt-2">
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowMobileMenu(!showMobileMenu)}
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                        title="Actions"
+                      >
+                        <MoreVertical className="w-5 h-5" />
+                      </button>
+
+                      {showMobileMenu && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setShowMobileMenu(false)}
+                          />
+                          <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                            <div className="py-1">
+                              <button
+                                onClick={() => {
+                                  handleEdit(gtt);
+                                  setShowMobileMenu(false);
+                                }}
+                                disabled={gtt.status !== 'active'}
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                                Edit HMT GTT
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleConvertToGTT(gtt);
+                                  setShowMobileMenu(false);
+                                }}
+                                disabled={gtt.status !== 'active'}
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                              >
+                                <ArrowRightLeft className="w-4 h-4" />
+                                HMT to GTT
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleDelete(gtt.id);
+                                  setShowMobileMenu(false);
+                                }}
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 transition"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -969,6 +1127,7 @@ export function HMTGTTOrders() {
                   onToggleSelect={toggleOrderSelection}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
+                  onConvertToGTT={handleConvertToGTT}
                   showAccount={selectedBrokerId === 'all'}
                   ltp={getLTP(gtt.instrument_token)}
                   isConnected={isConnected}
