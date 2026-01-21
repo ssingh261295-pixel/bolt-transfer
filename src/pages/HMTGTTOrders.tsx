@@ -372,6 +372,23 @@ export function HMTGTTOrders() {
     [hmtGttOrders, selectedInstruments]
   );
 
+  useEffect(() => {
+    if (selectedOrders.size > 0) {
+      const filteredOrderIds = new Set(filteredHmtGttOrders.map(order => order.id));
+      const updatedSelectedOrders = new Set<string>();
+
+      selectedOrders.forEach(orderId => {
+        if (filteredOrderIds.has(orderId)) {
+          updatedSelectedOrders.add(orderId);
+        }
+      });
+
+      if (updatedSelectedOrders.size !== selectedOrders.size) {
+        setSelectedOrders(updatedSelectedOrders);
+      }
+    }
+  }, [filteredHmtGttOrders]);
+
   const toggleSelectAll = () => {
     if (selectedOrders.size === filteredHmtGttOrders.length) {
       setSelectedOrders(new Set());
