@@ -147,11 +147,11 @@ const HMTGTTRowComponent = ({
         ₹{currentPrice?.toFixed(2) || 'N/A'}
       </td>
       <td className="px-4 py-3 text-sm text-gray-900 align-middle">
-        {gtt.quantity_1}
+        {gtt.transaction_type === 'BUY' ? gtt.quantity_1 : -gtt.quantity_1}
       </td>
       <td className="px-4 py-3 align-middle">
         {position ? (
-          <span className={`text-sm font-medium px-2 py-1 rounded ${pnl !== null && pnl >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          <span className="text-sm font-medium text-gray-900">
             ₹{position.average_price?.toFixed(2)}
           </span>
         ) : (
@@ -162,7 +162,7 @@ const HMTGTTRowComponent = ({
         {pnl === null ? (
           <span className="text-sm text-gray-400">-</span>
         ) : (
-          <span className={`text-sm font-medium ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <span className={`text-sm font-medium px-2 py-1 rounded ${pnl >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
             {pnl >= 0 ? '+' : ''}{formatIndianCurrency(pnl)}
           </span>
         )}
@@ -207,6 +207,14 @@ export const HMTGTTRow = memo(HMTGTTRowComponent, (prevProps, nextProps) => {
     prevProps.gtt.status === nextProps.gtt.status &&
     prevProps.gtt.trigger_price_1 === nextProps.gtt.trigger_price_1 &&
     prevProps.gtt.trigger_price_2 === nextProps.gtt.trigger_price_2 &&
+    prevProps.gtt.quantity_1 === nextProps.gtt.quantity_1 &&
+    prevProps.gtt.order_price_1 === nextProps.gtt.order_price_1 &&
+    prevProps.gtt.order_price_2 === nextProps.gtt.order_price_2 &&
+    prevProps.gtt.product_type_1 === nextProps.gtt.product_type_1 &&
+    prevProps.gtt.product_type_2 === nextProps.gtt.product_type_2 &&
+    prevProps.gtt.condition_type === nextProps.gtt.condition_type &&
+    prevProps.gtt.transaction_type === nextProps.gtt.transaction_type &&
+    prevProps.gtt.trading_symbol === nextProps.gtt.trading_symbol &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.ltp === nextProps.ltp &&
     prevProps.isConnected === nextProps.isConnected &&
