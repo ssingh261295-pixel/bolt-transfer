@@ -485,14 +485,67 @@ export function HMTGTTOrders() {
     try {
       const isOCO = hmtGtt.condition_type === 'two-leg';
 
+      // Fetch the current LTP (Last Traded Price) for the instrument
+      const ltpUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${hmtGtt.broker_connection_id}`;
+      const ltpResponse = await fetch(ltpUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instruments: [`${hmtGtt.exchange}:${hmtGtt.trading_symbol}`]
+        })
+      });
+
+      const ltpResult = await ltpResponse.json();
+
+      let lastPrice: number;
+      const instrumentKey = `${hmtGtt.exchange}:${hmtGtt.trading_symbol}`;
+
+      if (ltpResult.success && ltpResult.data && ltpResult.data[instrumentKey]) {
+        lastPrice = ltpResult.data[instrumentKey].last_price;
+      } else {
+        // Fallback: Calculate last_price to be at least 0.5% away from trigger prices
+        const triggerPrice1 = parseFloat(hmtGtt.trigger_price_1);
+        const triggerPrice2 = isOCO ? parseFloat(hmtGtt.trigger_price_2) : null;
+
+        if (isOCO && triggerPrice2) {
+          // For two-leg, use midpoint between the two triggers
+          lastPrice = (triggerPrice1 + triggerPrice2) / 2;
+        } else {
+          // For single, place last_price 1% away from trigger
+          lastPrice = triggerPrice1 * 0.99; // 1% below trigger
+        }
+      }
+
+      // Ensure last_price is at least 0.5% different from all trigger prices
+      const triggerPrice1 = parseFloat(hmtGtt.trigger_price_1);
+      const diff1Percent = Math.abs((lastPrice - triggerPrice1) / triggerPrice1) * 100;
+
+      if (diff1Percent < 0.5) {
+        // Adjust last_price to be 0.5% away
+        lastPrice = triggerPrice1 * (triggerPrice1 > lastPrice ? 0.995 : 1.005);
+      }
+
+      if (isOCO) {
+        const triggerPrice2 = parseFloat(hmtGtt.trigger_price_2);
+        const diff2Percent = Math.abs((lastPrice - triggerPrice2) / triggerPrice2) * 100;
+
+        if (diff2Percent < 0.5) {
+          // For two-leg, position last_price between the two triggers
+          lastPrice = (triggerPrice1 + triggerPrice2) / 2;
+        }
+      }
+
       // Build payload in the format expected by zerodha-gtt edge function
       const gttPayload: any = {
         type: isOCO ? 'two-leg' : 'single',
         'condition[exchange]': hmtGtt.exchange,
         'condition[tradingsymbol]': hmtGtt.trading_symbol,
         'condition[instrument_token]': hmtGtt.instrument_token,
-        'condition[trigger_values][0]': parseFloat(hmtGtt.trigger_price_1),
-        'condition[last_price]': parseFloat(hmtGtt.trigger_price_1) + 5,
+        'condition[trigger_values][0]': triggerPrice1,
+        'condition[last_price]': lastPrice,
       };
 
       if (isOCO) {
