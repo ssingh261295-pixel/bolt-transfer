@@ -147,7 +147,7 @@ const HMTGTTRowComponent = ({
         ₹{currentPrice?.toFixed(2) || 'N/A'}
       </td>
       <td className="px-4 py-3 text-sm text-gray-900 align-middle">
-        {gtt.transaction_type === 'BUY' ? gtt.quantity_1 : -gtt.quantity_1}
+        {gtt.transaction_type === 'SELL' ? gtt.quantity_1 : -gtt.quantity_1}
       </td>
       <td className="px-4 py-3 align-middle">
         {position ? (
