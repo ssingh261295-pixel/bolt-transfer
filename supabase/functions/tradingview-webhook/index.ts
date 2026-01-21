@@ -352,7 +352,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: brokerAccounts, error: brokerError } = await supabase
       .from('broker_connections')
-      .select('id, account_name, broker_name, api_key, access_token, is_active')
+      .select('id, account_name, account_holder_name, broker_name, api_key, access_token, is_active')
       .in('id', accountIds)
       .eq('is_active', true);
 
@@ -435,7 +435,7 @@ Deno.serve(async (req: Request) => {
     for (const account of brokerAccounts) {
       const accountResult: any = {
         account_id: account.id,
-        account_name: account.account_name,
+        account_name: account.account_name || account.account_holder_name || 'Unknown Account',
         broker_name: account.broker_name,
         order_placed: false,
         hmt_gtt_created: false
