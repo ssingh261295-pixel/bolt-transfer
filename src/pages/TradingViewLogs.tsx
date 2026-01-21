@@ -498,8 +498,8 @@ export function TradingViewLogs() {
                       <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                         <div className="flex items-start justify-between mb-3">
                           <div>
-                            <p className="font-medium text-gray-900">{account.account_name}</p>
-                            <p className="text-sm text-gray-600">{account.broker_name}</p>
+                            <p className="font-medium text-gray-900">{account.account_name || 'Unknown Account'}</p>
+                            <p className="text-sm text-gray-600 capitalize">{account.broker_name || 'Unknown Broker'}</p>
                           </div>
                           <div className="flex gap-2">
                             {account.order_placed && (

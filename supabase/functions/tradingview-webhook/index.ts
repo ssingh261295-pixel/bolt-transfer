@@ -572,6 +572,9 @@ Deno.serve(async (req: Request) => {
           });
 
           let executedPrice = normalized.price;
+          let orderCompleted = false;
+          let orderRejected = false;
+          let orderStatus = 'UNKNOWN';
           let maxRetries = 10;
           let retryCount = 0;
 
@@ -591,91 +594,122 @@ Deno.serve(async (req: Request) => {
             if (orderDetailsResult.status === 'success' && orderDetailsResult.data) {
               const placedOrder = orderDetailsResult.data.find((o: any) => o.order_id === orderResult.data.order_id);
 
-              if (placedOrder && placedOrder.status === 'COMPLETE' && placedOrder.average_price > 0) {
-                executedPrice = placedOrder.average_price;
-                console.log(`[TradingView Webhook] Order executed at: ${executedPrice} (attempt ${retryCount + 1})`);
-                break;
+              if (placedOrder) {
+                orderStatus = placedOrder.status;
+
+                if (placedOrder.status === 'COMPLETE' && placedOrder.average_price > 0) {
+                  executedPrice = placedOrder.average_price;
+                  orderCompleted = true;
+                  console.log(`[TradingView Webhook] Order executed at: ${executedPrice} (attempt ${retryCount + 1})`);
+                  break;
+                } else if (placedOrder.status === 'REJECTED') {
+                  orderRejected = true;
+                  accountResult.order_error = placedOrder.status_message || 'Order rejected by broker';
+                  console.log(`[TradingView Webhook] Order rejected: ${placedOrder.status_message}`);
+                  break;
+                }
               }
             }
 
             retryCount++;
           }
 
-          if (retryCount === maxRetries) {
-            console.warn(`[TradingView Webhook] Failed to fetch executed price for order ${orderResult.data.order_id}, using CASH price as fallback`);
+          if (retryCount === maxRetries && !orderCompleted && !orderRejected) {
+            console.warn(`[TradingView Webhook] Failed to fetch order status for ${orderResult.data.order_id} after ${maxRetries} attempts, last status: ${orderStatus}`);
           }
 
-          let stopLossPrice: number;
-          let targetPrice: number;
+          // CRITICAL: Only create HMT GTT if order was successfully COMPLETED
+          // Do NOT create HMT GTT if order was rejected (e.g., insufficient balance)
+          if (orderCompleted) {
+            let stopLossPrice: number;
+            let targetPrice: number;
 
-          if (normalized.trade_type === 'BUY') {
-            stopLossPrice = executedPrice - (adjustedATR * slMultiplier);
-            targetPrice = executedPrice + (adjustedATR * targetMultiplier);
-          } else {
-            stopLossPrice = executedPrice + (adjustedATR * slMultiplier);
-            targetPrice = executedPrice - (adjustedATR * targetMultiplier);
-          }
+            if (normalized.trade_type === 'BUY') {
+              stopLossPrice = executedPrice - (adjustedATR * slMultiplier);
+              targetPrice = executedPrice + (adjustedATR * targetMultiplier);
+            } else {
+              stopLossPrice = executedPrice + (adjustedATR * slMultiplier);
+              targetPrice = executedPrice - (adjustedATR * targetMultiplier);
+            }
 
-          const { data: hmtGtt, error: hmtError } = await supabase
-            .from('hmt_gtt_orders')
-            .insert({
+            const { data: hmtGtt, error: hmtError } = await supabase
+              .from('hmt_gtt_orders')
+              .insert({
+                user_id: keyData.user_id,
+                broker_connection_id: account.id,
+                trading_symbol: instrument.tradingsymbol,
+                exchange: instrument.exchange,
+                instrument_token: instrument.instrument_token,
+                condition_type: 'two-leg',
+                transaction_type: normalized.trade_type === 'BUY' ? 'SELL' : 'BUY',
+                product_type_1: 'NRML',
+                trigger_price_1: stopLossPrice,
+                order_price_1: stopLossPrice,
+                quantity_1: quantity,
+                product_type_2: 'NRML',
+                trigger_price_2: targetPrice,
+                order_price_2: targetPrice,
+                quantity_2: quantity,
+                status: 'active',
+                metadata: {
+                  source: 'tradingview_webhook',
+                  webhook_key_name: keyData.name,
+                  entry_price: executedPrice,
+                  cash_price: normalized.price,
+                  atr: normalized.atr,
+                  timeframe: rawPayload.timeframe || null
+                }
+              })
+              .select()
+              .single();
+
+            if (!hmtError && hmtGtt) {
+              accountResult.hmt_gtt_created = true;
+              accountResult.hmt_gtt_id = hmtGtt.id;
+              accountResult.stop_loss = stopLossPrice;
+              accountResult.target = targetPrice;
+              accountResult.executed_price = executedPrice;
+            } else {
+              accountResult.hmt_gtt_error = hmtError?.message || 'Unknown error';
+            }
+
+            await supabase.from('notifications').insert({
               user_id: keyData.user_id,
-              broker_connection_id: account.id,
-              trading_symbol: instrument.tradingsymbol,
-              exchange: instrument.exchange,
-              instrument_token: instrument.instrument_token,
-              condition_type: 'two-leg',
-              transaction_type: normalized.trade_type === 'BUY' ? 'SELL' : 'BUY',
-              product_type_1: 'NRML',
-              trigger_price_1: stopLossPrice,
-              order_price_1: stopLossPrice,
-              quantity_1: quantity,
-              product_type_2: 'NRML',
-              trigger_price_2: targetPrice,
-              order_price_2: targetPrice,
-              quantity_2: quantity,
-              status: 'active',
+              broker_account_id: account.id,
+              type: 'trade',
+              title: `TradingView: ${normalized.trade_type} ${instrument.tradingsymbol}`,
+              message: `Order placed: ${normalized.trade_type} ${quantity} @ ₹${executedPrice.toFixed(2)}\nSL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}\nATR: ${normalized.atr.toFixed(2)} | Timeframe: ${rawPayload.timeframe || 'N/A'}`,
               metadata: {
-                source: 'tradingview_webhook',
-                webhook_key_name: keyData.name,
+                source: 'tradingview',
+                trade_type: normalized.trade_type,
+                symbol: instrument.tradingsymbol,
                 entry_price: executedPrice,
                 cash_price: normalized.price,
+                quantity,
+                stop_loss: stopLossPrice,
+                target: targetPrice,
                 atr: normalized.atr,
-                timeframe: rawPayload.timeframe || null
+                order_id: orderResult.data.order_id
               }
-            })
-            .select()
-            .single();
-
-          if (!hmtError && hmtGtt) {
-            accountResult.hmt_gtt_created = true;
-            accountResult.hmt_gtt_id = hmtGtt.id;
-            accountResult.stop_loss = stopLossPrice;
-            accountResult.target = targetPrice;
-            accountResult.executed_price = executedPrice;
-          } else {
-            accountResult.hmt_gtt_error = hmtError?.message || 'Unknown error';
+            });
+          } else if (orderRejected) {
+            // Send notification for rejected order (insufficient balance, margin issue, etc.)
+            await supabase.from('notifications').insert({
+              user_id: keyData.user_id,
+              broker_account_id: account.id,
+              type: 'trade_blocked',
+              title: `TradingView: Order Rejected for ${instrument.tradingsymbol}`,
+              message: `Order rejected by broker.\n\nReason: ${accountResult.order_error}\nSymbol: ${instrument.tradingsymbol}\nTrade Type: ${normalized.trade_type}\nQuantity: ${quantity}\n\nPlease check your account balance and margin requirements.`,
+              metadata: {
+                source: 'tradingview',
+                blocked_reason: 'order_rejected',
+                trade_type: normalized.trade_type,
+                symbol: instrument.tradingsymbol,
+                quantity,
+                order_id: orderResult.data.order_id
+              }
+            });
           }
-
-          await supabase.from('notifications').insert({
-            user_id: keyData.user_id,
-            broker_account_id: account.id,
-            type: 'trade',
-            title: `TradingView: ${normalized.trade_type} ${instrument.tradingsymbol}`,
-            message: `Order placed: ${normalized.trade_type} ${quantity} @ ₹${executedPrice.toFixed(2)}\nSL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}\nATR: ${normalized.atr.toFixed(2)} | Timeframe: ${rawPayload.timeframe || 'N/A'}`,
-            metadata: {
-              source: 'tradingview',
-              trade_type: normalized.trade_type,
-              symbol: instrument.tradingsymbol,
-              entry_price: executedPrice,
-              cash_price: normalized.price,
-              quantity,
-              stop_loss: stopLossPrice,
-              target: targetPrice,
-              atr: normalized.atr,
-              order_id: orderResult.data.order_id
-            }
-          });
 
         } else {
           accountResult.order_error = orderResult.message || 'Order placement failed';
