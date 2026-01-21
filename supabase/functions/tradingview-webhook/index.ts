@@ -291,6 +291,44 @@ Deno.serve(async (req: Request) => {
 
     webhookKeyId = keyData.id;
 
+    // CRITICAL: Check for duplicate IMMEDIATELY after webhook key validation
+    // This prevents duplicate webhooks from TradingView from being logged multiple times
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istTime = new Date(now.getTime() + istOffset);
+    const executionDate = istTime.toISOString().split('T')[0];
+    const payloadHash = `${normalized.symbol}_${normalized.trade_type}_${Math.floor(normalized.price)}`;
+
+    const trackerInsertResult = await supabase.rpc('try_insert_execution_tracker', {
+      p_webhook_key_id: keyData.id,
+      p_symbol: normalized.symbol,
+      p_trade_type: normalized.trade_type,
+      p_price: normalized.price,
+      p_execution_date: executionDate,
+      p_payload_hash: payloadHash
+    });
+
+    if (trackerInsertResult.error || !trackerInsertResult.data) {
+      console.log('[TradingView Webhook] DUPLICATE SIGNAL BLOCKED (TradingView retry detected):', {
+        symbol: normalized.symbol,
+        trade_type: normalized.trade_type,
+        execution_date: executionDate,
+        webhook_key: keyData.name
+      });
+
+      // Return immediately WITHOUT logging to avoid duplicate log entries
+      // The original webhook was already logged with status 'success'
+      return new Response(
+        JSON.stringify({
+          success: false,
+          blocked_by_platform: true,
+          reason: 'Duplicate signal - already processed',
+          message: `This ${normalized.trade_type} signal for ${normalized.symbol} was already executed today. Webhook duplicate detected.`
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     await supabase
       .from('webhook_keys')
       .update({ last_used_at: new Date().toISOString() })
@@ -389,70 +427,8 @@ Deno.serve(async (req: Request) => {
       day_of_month: day
     });
 
-    const now = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const istTime = new Date(now.getTime() + istOffset);
-    const executionDate = istTime.toISOString().split('T')[0];
-
-    const payloadHash = `${normalized.symbol}_${normalized.trade_type}_${Math.floor(normalized.price)}`;
-
-    const trackerInsertResult = await supabase.rpc('try_insert_execution_tracker', {
-      p_webhook_key_id: keyData.id,
-      p_symbol: normalized.symbol,
-      p_trade_type: normalized.trade_type,
-      p_price: normalized.price,
-      p_execution_date: executionDate,
-      p_payload_hash: payloadHash
-    });
-
-    if (trackerInsertResult.error || !trackerInsertResult.data) {
-      console.log('[TradingView Webhook] DUPLICATE SIGNAL BLOCKED (race condition prevented):', {
-        symbol: normalized.symbol,
-        trade_type: normalized.trade_type,
-        execution_date: executionDate
-      });
-
-      await supabase.from('tradingview_webhook_logs').insert({
-        webhook_key_id: keyData.id,
-        source_ip: sourceIp,
-        payload: rawPayload,
-        status: 'rejected',
-        error_message: `Duplicate signal blocked: Same ${normalized.trade_type} signal for ${normalized.symbol} already executed today (${executionDate})`
-      });
-
-      const accountIds = keyData.account_mappings || [];
-      if (accountIds.length > 0) {
-        const notificationPromises = accountIds.map((accountId: string) =>
-          supabase.from('notifications').insert({
-            user_id: keyData.user_id,
-            broker_account_id: accountId,
-            type: 'trade_blocked',
-            title: 'Duplicate Signal Blocked',
-            message: `TradingView ${normalized.trade_type} signal for ${normalized.symbol} was blocked.\n\nReason: Same signal already executed today\nPrice: ₹${normalized.price}\nATR: ${normalized.atr}\n\nThis prevents multiple entries from the same signal.`,
-            metadata: {
-              source: 'tradingview_webhook',
-              webhook_key_name: keyData.name,
-              blocked_reason: 'duplicate_signal',
-              symbol: normalized.symbol,
-              trade_type: normalized.trade_type,
-              price: normalized.price,
-              execution_date: executionDate
-            }
-          })
-        );
-        await Promise.all(notificationPromises);
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          blocked_by_platform: true,
-          reason: 'Duplicate signal',
-          message: `Same ${normalized.trade_type} signal for ${normalized.symbol} already executed today.`
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Duplicate detection already performed earlier after webhook key validation
+    // No need to check again here
 
     const executionResults = [];
 
