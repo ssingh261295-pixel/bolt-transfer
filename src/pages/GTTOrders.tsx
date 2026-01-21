@@ -689,6 +689,12 @@ export function GTTOrders() {
       const isOCO = gtt.type === 'two-leg';
       const transactionType = gtt.orders?.[0]?.transaction_type;
 
+      const mapProductType = (product: string): string => {
+        if (product === 'CNC') return 'NRML';
+        if (product === 'MIS') return 'MIS';
+        return 'NRML';
+      };
+
       const hmtGttData: any = {
         user_id: user?.id,
         broker_connection_id: gtt.broker_info?.id,
@@ -697,9 +703,8 @@ export function GTTOrders() {
         instrument_token: gtt.condition?.instrument_token,
         transaction_type: transactionType,
         quantity_1: gtt.orders?.[0]?.quantity || 0,
-        order_type_1: gtt.orders?.[0]?.order_type || 'LIMIT',
-        order_price_1: gtt.orders?.[0]?.price || 0,
-        product_type_1: gtt.orders?.[0]?.product || 'CNC',
+        order_price_1: gtt.orders?.[0]?.price || gtt.condition?.trigger_values?.[0] || 0,
+        product_type_1: mapProductType(gtt.orders?.[0]?.product || 'CNC'),
         trigger_price_1: gtt.condition?.trigger_values?.[0] || 0,
         condition_type: isOCO ? 'two-leg' : 'single',
         status: 'active'
@@ -708,9 +713,8 @@ export function GTTOrders() {
       if (isOCO) {
         hmtGttData.trigger_price_2 = gtt.condition?.trigger_values?.[1] || 0;
         hmtGttData.quantity_2 = gtt.orders?.[1]?.quantity || gtt.orders?.[0]?.quantity || 0;
-        hmtGttData.order_type_2 = gtt.orders?.[1]?.order_type || 'LIMIT';
-        hmtGttData.order_price_2 = gtt.orders?.[1]?.price || 0;
-        hmtGttData.product_type_2 = gtt.orders?.[1]?.product || 'CNC';
+        hmtGttData.order_price_2 = gtt.orders?.[1]?.price || gtt.condition?.trigger_values?.[1] || 0;
+        hmtGttData.product_type_2 = mapProductType(gtt.orders?.[1]?.product || gtt.orders?.[0]?.product || 'CNC');
       }
 
       const { error: insertError } = await supabase
