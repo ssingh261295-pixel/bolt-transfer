@@ -470,8 +470,8 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         const ltp = data.data[instrumentKey].last_price;
         setCurrentLTP(ltp);
 
-        // Only update prices if this is a manual refresh
-        if (manualRefresh && ltp) {
+        // Only update prices if this is a manual refresh AND not editing an existing GTT
+        if (manualRefresh && ltp && !editingGTT) {
           prefillPricesBasedOnLTP(ltp);
         }
 
@@ -487,7 +487,27 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
 
   const handleManualLTPRefresh = async () => {
     if (selectedInstrument?.instrument_token) {
-      await fetchLTP(selectedInstrument.instrument_token, selectedInstrument.tradingsymbol, selectedInstrument.exchange || exchange, true);
+      const newLTP = await fetchLTP(selectedInstrument.instrument_token, selectedInstrument.tradingsymbol, selectedInstrument.exchange || exchange, true);
+
+      // If editing, recalculate percentages based on existing trigger prices and new LTP
+      if (editingGTT && newLTP) {
+        if (triggerPrice1) {
+          const triggerPct = ((parseFloat(triggerPrice1) - newLTP) / newLTP * 100).toFixed(2);
+          setTriggerPercent1(triggerPct);
+        }
+        if (price1) {
+          const pricePct = ((parseFloat(price1) - newLTP) / newLTP * 100).toFixed(2);
+          setPricePercent1(pricePct);
+        }
+        if (triggerPrice2) {
+          const triggerPct = ((parseFloat(triggerPrice2) - newLTP) / newLTP * 100).toFixed(2);
+          setTriggerPercent2(triggerPct);
+        }
+        if (price2) {
+          const pricePct = ((parseFloat(price2) - newLTP) / newLTP * 100).toFixed(2);
+          setPricePercent2(pricePct);
+        }
+      }
     }
   };
 
