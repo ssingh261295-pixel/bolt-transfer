@@ -43,6 +43,11 @@ export function MultiSelectFilter({
     onChange(newValues);
   };
 
+  const clearAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange([]);
+  };
+
   return (
     <div className="relative" ref={dropdownRef}>
       <div
@@ -77,8 +82,18 @@ export function MultiSelectFilter({
       {isOpen && (
         <div className="absolute z-50 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
           <div className="p-2">
-            <div className="mb-2 px-2 py-1 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-              {label}
+            <div className="flex items-center justify-between mb-2 px-2 py-1">
+              <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                {label}
+              </div>
+              {selectedValues.length > 0 && (
+                <button
+                  onClick={clearAll}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium transition"
+                >
+                  Clear All
+                </button>
+              )}
             </div>
             {options.map(option => {
               const isChecked = selectedValues.includes(option);
