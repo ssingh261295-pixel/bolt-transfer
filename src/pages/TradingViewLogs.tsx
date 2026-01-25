@@ -12,12 +12,14 @@ interface WebhookLog {
   received_at: string;
   status: string;
   error_message?: string;
+  response_message?: string;
   accounts_executed?: any[];
 }
 
 export function TradingViewLogs() {
   const { user, session } = useAuth();
   const [logs, setLogs] = useState<WebhookLog[]>([]);
+  const [allLogsForFilters, setAllLogsForFilters] = useState<WebhookLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -38,8 +40,28 @@ export function TradingViewLogs() {
   useEffect(() => {
     if (user) {
       loadLogs();
+      loadFilterOptions();
     }
-  }, [user, dateFilter, statusFilter, currentPage]);
+  }, [user, dateFilter, statusFilter, currentPage, symbolFilter, entryPhaseFilter, tradeGradeFilter, tradeScoreFilter, tradeTypeFilter]);
+
+  const loadFilterOptions = async () => {
+    try {
+      const { data } = await supabase
+        .from('tradingview_webhook_logs')
+        .select(`
+          payload,
+          webhook_keys!inner(user_id)
+        `)
+        .eq('webhook_keys.user_id', user?.id)
+        .limit(1000);
+
+      if (data) {
+        setAllLogsForFilters(data as any[]);
+      }
+    } catch (err) {
+      console.error('Error loading filter options:', err);
+    }
+  };
 
   const loadLogs = async () => {
     setLoading(true);
@@ -85,6 +107,23 @@ export function TradingViewLogs() {
 
         console.log('Date filter:', dateFilter, 'Start date:', startDate.toISOString());
         query = query.gte('received_at', startDate.toISOString());
+      }
+
+      // Apply JSON payload filters
+      if (symbolFilter !== 'all') {
+        query = query.eq('payload->symbol', symbolFilter);
+      }
+      if (entryPhaseFilter !== 'all') {
+        query = query.eq('payload->entry_phase', entryPhaseFilter);
+      }
+      if (tradeGradeFilter !== 'all') {
+        query = query.eq('payload->trade_grade', tradeGradeFilter);
+      }
+      if (tradeScoreFilter !== 'all') {
+        query = query.eq('payload->trade_score', parseInt(tradeScoreFilter));
+      }
+      if (tradeTypeFilter !== 'all') {
+        query = query.eq('payload->trade_type', tradeTypeFilter);
       }
 
       const from = (currentPage - 1) * pageSize;
@@ -228,29 +267,29 @@ export function TradingViewLogs() {
   });
 
   const uniqueSymbols = useMemo(() => {
-    const symbols = new Set(logs.map(log => log.payload?.symbol).filter(Boolean));
+    const symbols = new Set(allLogsForFilters.map(log => log.payload?.symbol).filter(Boolean));
     return Array.from(symbols).sort();
-  }, [logs]);
+  }, [allLogsForFilters]);
 
   const uniqueEntryPhases = useMemo(() => {
-    const phases = new Set(logs.map(log => log.payload?.entry_phase).filter(Boolean));
+    const phases = new Set(allLogsForFilters.map(log => log.payload?.entry_phase).filter(Boolean));
     return Array.from(phases).sort();
-  }, [logs]);
+  }, [allLogsForFilters]);
 
   const uniqueTradeGrades = useMemo(() => {
-    const grades = new Set(logs.map(log => log.payload?.trade_grade).filter(Boolean));
+    const grades = new Set(allLogsForFilters.map(log => log.payload?.trade_grade).filter(Boolean));
     return Array.from(grades).sort();
-  }, [logs]);
+  }, [allLogsForFilters]);
 
   const uniqueTradeScores = useMemo(() => {
-    const scores = new Set(logs.map(log => log.payload?.trade_score).filter(Boolean));
+    const scores = new Set(allLogsForFilters.map(log => log.payload?.trade_score).filter(Boolean));
     return Array.from(scores).sort((a, b) => Number(a) - Number(b));
-  }, [logs]);
+  }, [allLogsForFilters]);
 
   const uniqueTradeTypes = useMemo(() => {
-    const types = new Set(logs.map(log => log.payload?.trade_type).filter(Boolean));
+    const types = new Set(allLogsForFilters.map(log => log.payload?.trade_type).filter(Boolean));
     return Array.from(types).sort();
-  }, [logs]);
+  }, [allLogsForFilters]);
 
   const exportToCSV = () => {
     const headers = [
@@ -563,6 +602,12 @@ export function TradingViewLogs() {
                     </div>
                   )}
 
+                  {log.response_message && (
+                    <div className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded">
+                      {log.response_message}
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     <button
                       onClick={() => setSelectedLog(log)}
@@ -740,6 +785,18 @@ export function TradingViewLogs() {
                   <div className="mt-1">{getStatusBadge(selectedLog.status)}</div>
                 </div>
               </div>
+
+              {selectedLog.response_message && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-medium text-green-900">Response Message</h3>
+                      <p className="text-green-700 text-sm mt-1">{selectedLog.response_message}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {selectedLog.error_message && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">

@@ -194,13 +194,16 @@ Deno.serve(async (req: Request) => {
         .eq('webhook_key', normalized.webhook_key)
         .maybeSingle();
 
+      const exitMessage = `${normalized.trade_type} signal received and logged. No action taken (exit signals are informational only).`;
+
       if (keyData) {
         await supabase.from('tradingview_webhook_logs').insert({
           webhook_key_id: keyData.id,
           source_ip: sourceIp,
           payload: rawPayload,
           status: 'success',
-          error_message: `Exit signal logged: ${normalized.trade_type} - No action taken`
+          error_message: `Exit signal logged: ${normalized.trade_type} - No action taken`,
+          response_message: exitMessage
         });
 
         console.log('[TradingView Webhook] EXIT signal logged (no action taken):', {
@@ -213,14 +216,15 @@ Deno.serve(async (req: Request) => {
           source_ip: sourceIp,
           payload: rawPayload,
           status: 'success',
-          error_message: `Exit signal logged: ${normalized.trade_type} - No action taken`
+          error_message: `Exit signal logged: ${normalized.trade_type} - No action taken`,
+          response_message: exitMessage
         });
       }
 
       return new Response(
         JSON.stringify({
           success: true,
-          message: `${normalized.trade_type} signal received and logged. No action taken (exit signals are informational only).`,
+          message: exitMessage,
           signal: {
             trade_type: normalized.trade_type,
             symbol: normalized.symbol,
@@ -773,13 +777,15 @@ Deno.serve(async (req: Request) => {
     }
 
     const successCount = executionResults.filter(r => r.order_placed).length;
+    const responseMessage = `Executed on ${successCount}/${brokerAccounts.length} account(s)`;
 
     await supabase.from('tradingview_webhook_logs').insert({
       webhook_key_id: keyData.id,
       source_ip: sourceIp,
       payload: rawPayload,
       status: successCount > 0 ? 'success' : 'failed',
-      accounts_executed: executionResults
+      accounts_executed: executionResults,
+      response_message: responseMessage
     });
 
     const firstSuccessfulExecution = executionResults.find(r => r.order_placed);
@@ -800,7 +806,7 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Executed on ${successCount}/${brokerAccounts.length} account(s)`,
+        message: responseMessage,
         signal: responseSignal,
         accounts: executionResults
       }),
