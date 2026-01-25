@@ -566,6 +566,9 @@ export function TradingViewLogs() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
                       <div className="font-medium text-gray-900 text-sm">{log.payload?.symbol || '-'}</div>
+                      {log.payload?.strategy && (
+                        <div className="text-xs text-blue-600 font-medium mt-0.5">{log.payload.strategy}</div>
+                      )}
                       <div className="text-xs text-gray-500 mt-0.5">{formatDate(log.received_at)}</div>
                     </div>
                     {getStatusBadge(log.status)}
@@ -640,6 +643,7 @@ export function TradingViewLogs() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Webhook Key</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Symbol</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Strategy</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trade Type</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -659,6 +663,9 @@ export function TradingViewLogs() {
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       {log.payload?.symbol || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {log.payload?.strategy || '-'}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {log.payload?.trade_type ? (
@@ -775,6 +782,14 @@ export function TradingViewLogs() {
                 <div>
                   <label className="text-sm font-medium text-gray-500">Webhook Key</label>
                   <p className="text-gray-900 font-medium mt-1">{selectedLog.webhook_key_name}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Symbol</label>
+                  <p className="text-gray-900 font-medium mt-1">{selectedLog.payload?.symbol || '-'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Strategy</label>
+                  <p className="text-gray-900 font-medium mt-1">{selectedLog.payload?.strategy || '-'}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Source IP</label>
