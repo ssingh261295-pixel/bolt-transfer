@@ -37,6 +37,7 @@ export function HMTGTTOrders() {
   const [convertError, setConvertError] = useState('');
   const [converting, setConverting] = useState(false);
   const [openMobileMenu, setOpenMobileMenu] = useState<string | null>(null);
+  const [menuOpenUpward, setMenuOpenUpward] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -403,6 +404,22 @@ export function HMTGTTOrders() {
       setSelectedOrders(new Set());
     } else {
       setSelectedOrders(new Set(filteredHmtGttOrders.map(order => order.id)));
+    }
+  };
+
+  const toggleMobileMenu = (gttId: string, event: React.MouseEvent) => {
+    if (openMobileMenu === gttId) {
+      setOpenMobileMenu(null);
+      setMenuOpenUpward(false);
+    } else {
+      setOpenMobileMenu(gttId);
+
+      const buttonElement = event.currentTarget as HTMLElement;
+      const rect = buttonElement.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const menuHeight = 180;
+
+      setMenuOpenUpward(spaceBelow < menuHeight);
     }
   };
 
@@ -1210,7 +1227,7 @@ export function HMTGTTOrders() {
                   <div className="flex justify-end pt-2">
                     <div className="relative">
                       <button
-                        onClick={() => setOpenMobileMenu(showMobileMenu ? null : gtt.id)}
+                        onClick={(e) => toggleMobileMenu(gtt.id, e)}
                         className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
                         title="Actions"
                       >
@@ -1223,7 +1240,9 @@ export function HMTGTTOrders() {
                             className="fixed inset-0 z-40"
                             onClick={() => setOpenMobileMenu(null)}
                           />
-                          <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-[100] overflow-visible">
+                          <div className={`absolute right-0 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-[100] overflow-visible ${
+                            menuOpenUpward ? 'bottom-full mb-1' : 'mt-1'
+                          }`}>
                             <div className="py-1">
                               <button
                                 onClick={() => {

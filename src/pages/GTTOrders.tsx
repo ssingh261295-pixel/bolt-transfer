@@ -56,6 +56,7 @@ export function GTTOrders() {
   const [converting, setConverting] = useState(false);
   const [convertMessage, setConvertMessage] = useState('');
   const [convertError, setConvertError] = useState('');
+  const [menuOpenUpward, setMenuOpenUpward] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -545,6 +546,22 @@ export function GTTOrders() {
       setSelectedOrders(new Set());
     } else {
       setSelectedOrders(new Set(filteredGttOrders.map(order => order.id.toString())));
+    }
+  };
+
+  const toggleMenu = (gttId: string, event: React.MouseEvent) => {
+    if (openMenuId === gttId) {
+      setOpenMenuId(null);
+      setMenuOpenUpward(false);
+    } else {
+      setOpenMenuId(gttId);
+
+      const buttonElement = event.currentTarget as HTMLElement;
+      const rect = buttonElement.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const menuHeight = 180;
+
+      setMenuOpenUpward(spaceBelow < menuHeight);
     }
   };
 
@@ -1101,7 +1118,7 @@ export function GTTOrders() {
 
                   <div className="flex gap-2 pt-2 relative">
                     <button
-                      onClick={() => setOpenMenuId(openMenuId === gtt.id.toString() ? null : gtt.id.toString())}
+                      onClick={(e) => toggleMenu(gtt.id.toString(), e)}
                       className="gtt-actions-button flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-gray-700 border border-gray-300 hover:bg-gray-50 rounded transition"
                     >
                       <MoreVertical className="w-4 h-4" />
@@ -1109,7 +1126,9 @@ export function GTTOrders() {
                     </button>
 
                     {openMenuId === gtt.id.toString() && (
-                      <div className="gtt-actions-menu absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-visible z-[100]">
+                      <div className={`gtt-actions-menu absolute left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg overflow-visible z-[100] ${
+                        menuOpenUpward ? 'bottom-full mb-1' : 'top-full mt-1'
+                      }`}>
                         <button
                           onClick={() => {
                             setOpenMenuId(null);
@@ -1357,7 +1376,7 @@ export function GTTOrders() {
                     <td className="px-4 py-3">
                       <div className="relative">
                         <button
-                          onClick={() => setOpenMenuId(openMenuId === gtt.id.toString() ? null : gtt.id.toString())}
+                          onClick={(e) => toggleMenu(gtt.id.toString(), e)}
                           className="gtt-actions-button p-1.5 text-gray-600 hover:bg-gray-100 rounded transition"
                           title="Actions"
                         >
@@ -1365,7 +1384,9 @@ export function GTTOrders() {
                         </button>
 
                         {openMenuId === gtt.id.toString() && (
-                          <div className="gtt-actions-menu absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg overflow-visible z-[100] min-w-[180px]">
+                          <div className={`gtt-actions-menu absolute right-0 bg-white border border-gray-200 rounded-lg shadow-lg overflow-visible z-[100] min-w-[180px] ${
+                            menuOpenUpward ? 'bottom-full mb-1' : 'mt-1'
+                          }`}>
                             <button
                               onClick={() => {
                                 setOpenMenuId(null);

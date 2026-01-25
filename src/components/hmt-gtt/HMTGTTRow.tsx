@@ -28,6 +28,7 @@ const HMTGTTRowComponent = ({
   position
 }: HMTGTTRowProps) => {
   const [showMenu, setShowMenu] = useState(false);
+  const [menuOpenUpward, setMenuOpenUpward] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const isOCO = gtt.condition_type === 'two-leg';
   const currentPrice = ltp ?? 0;
@@ -36,12 +37,29 @@ const HMTGTTRowComponent = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowMenu(false);
+        setMenuOpenUpward(false);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const toggleMenu = (event: React.MouseEvent) => {
+    if (showMenu) {
+      setShowMenu(false);
+      setMenuOpenUpward(false);
+    } else {
+      setShowMenu(true);
+
+      const buttonElement = event.currentTarget as HTMLElement;
+      const rect = buttonElement.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const menuHeight = 180;
+
+      setMenuOpenUpward(spaceBelow < menuHeight);
+    }
+  };
 
   const calculatePercentage = (triggerValue: number, currentPrice: number): string => {
     if (!currentPrice || currentPrice === 0) return '0% of LTP';
@@ -196,7 +214,7 @@ const HMTGTTRowComponent = ({
       <td className="px-4 py-3 align-middle">
         <div className="relative" ref={menuRef}>
           <button
-            onClick={() => setShowMenu(!showMenu)}
+            onClick={toggleMenu}
             className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition"
             title="Actions"
           >
@@ -204,7 +222,9 @@ const HMTGTTRowComponent = ({
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-[100] overflow-visible">
+            <div className={`absolute right-0 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-[100] overflow-visible ${
+              menuOpenUpward ? 'bottom-full mb-1' : 'mt-1'
+            }`}>
               <div className="py-1">
                 <button
                   onClick={() => {
