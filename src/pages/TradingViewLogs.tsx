@@ -69,16 +69,31 @@ export function TradingViewLogs() {
     try {
       console.log('Loading logs for user:', user?.id);
 
+      const { data: userWebhookKeys } = await supabase
+        .from('webhook_keys')
+        .select('id')
+        .eq('user_id', user?.id);
+
+      const webhookKeyIds = userWebhookKeys?.map(k => k.id) || [];
+
+      if (webhookKeyIds.length === 0) {
+        console.log('No webhook keys found for user');
+        setLogs([]);
+        setTotalCount(0);
+        setLoading(false);
+        return;
+      }
+
       let query = supabase
         .from('tradingview_webhook_logs')
         .select(`
           *,
-          webhook_keys!inner(
+          webhook_keys(
             user_id,
             name
           )
         `, { count: 'exact' })
-        .eq('webhook_keys.user_id', user?.id)
+        .in('webhook_key_id', webhookKeyIds)
         .order('received_at', { ascending: false });
 
       if (statusFilter !== 'all') {
@@ -295,16 +310,17 @@ export function TradingViewLogs() {
     const headers = [
       'Date',
       'Time',
-      'strategy',
-      'symbol',
-      'entry_phase',
-      'trade_grade',
-      'trade_score',
-      'trade_type',
-      'price',
-      'target_points',
-      'sl_points',
-      'adx'
+      'Strategy',
+      'HMT Automation',
+      'Symbol',
+      'Entry Phase',
+      'Trade Grade',
+      'Trade Score',
+      'Trade Type',
+      'Price',
+      'Target Points',
+      'SL Points',
+      'ADX'
     ];
 
     const rows = filteredLogs.map(log => {
@@ -325,6 +341,7 @@ export function TradingViewLogs() {
       return [
         dateStr,
         timeStr,
+        log.payload?.strategy || '',
         log.webhook_key_name || '',
         log.payload?.symbol || '',
         log.payload?.entry_phase || '',
