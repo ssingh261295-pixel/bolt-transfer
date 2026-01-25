@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Play } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -16,7 +16,7 @@ interface WebhookLog {
 }
 
 export function TradingViewLogs() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [logs, setLogs] = useState<WebhookLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,6 +26,9 @@ export function TradingViewLogs() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 50;
+  const [executingLogId, setExecutingLogId] = useState<string | null>(null);
+  const [executeMessage, setExecuteMessage] = useState('');
+  const [executeError, setExecuteError] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -155,6 +158,55 @@ export function TradingViewLogs() {
     });
   };
 
+  const handleExecute = async (log: WebhookLog) => {
+    if (!session?.access_token) {
+      setExecuteError('Not authenticated');
+      setTimeout(() => setExecuteError(''), 5000);
+      return;
+    }
+
+    const isExitSignal = log.payload?.trade_type === 'EXIT_LONG' || log.payload?.trade_type === 'EXIT_SHORT';
+    if (isExitSignal) {
+      setExecuteError('Cannot execute EXIT signals manually');
+      setTimeout(() => setExecuteError(''), 5000);
+      return;
+    }
+
+    setExecutingLogId(log.id);
+    setExecuteError('');
+    setExecuteMessage('');
+
+    try {
+      const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tradingview-webhook`;
+
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(log.payload)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setExecuteMessage(`Successfully executed trade: ${result.message}`);
+        setTimeout(() => setExecuteMessage(''), 5000);
+        loadLogs();
+      } else {
+        setExecuteError(`Execution failed: ${result.error || result.message || 'Unknown error'}`);
+        setTimeout(() => setExecuteError(''), 5000);
+      }
+    } catch (err: any) {
+      console.error('Error executing trade:', err);
+      setExecuteError(`Failed to execute: ${err.message}`);
+      setTimeout(() => setExecuteError(''), 5000);
+    } finally {
+      setExecutingLogId(null);
+    }
+  };
+
   const filteredLogs = logs.filter(log => {
     const matchesSearch =
       log.payload?.symbol?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -173,6 +225,18 @@ export function TradingViewLogs() {
 
   return (
     <div className="space-y-4 md:space-y-6 max-w-full overflow-x-hidden">
+      {executeMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+          {executeMessage}
+        </div>
+      )}
+
+      {executeError && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
+          {executeError}
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">TradingView Webhook Logs</h1>
@@ -302,7 +366,11 @@ export function TradingViewLogs() {
                   <div className="flex items-center gap-2">
                     {log.payload?.trade_type && (
                       <span className={`px-2 py-1 text-xs font-medium rounded ${
-                        log.payload.trade_type === 'BUY' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        log.payload.trade_type === 'BUY' ? 'bg-green-100 text-green-800' :
+                        log.payload.trade_type === 'SELL' ? 'bg-red-100 text-red-800' :
+                        log.payload.trade_type === 'EXIT_LONG' ? 'bg-yellow-100 text-yellow-800' :
+                        log.payload.trade_type === 'EXIT_SHORT' ? 'bg-orange-100 text-orange-800' :
+                        'bg-gray-100 text-gray-800'
                       }`}>
                         {log.payload.trade_type}
                       </span>
@@ -326,12 +394,26 @@ export function TradingViewLogs() {
                     </div>
                   )}
 
-                  <button
-                    onClick={() => setSelectedLog(log)}
-                    className="w-full py-2 px-4 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-sm font-medium transition"
-                  >
-                    View Details
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSelectedLog(log)}
+                      className="flex-1 py-2 px-4 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-sm font-medium transition"
+                    >
+                      View Details
+                    </button>
+                    <button
+                      onClick={() => handleExecute(log)}
+                      disabled={executingLogId === log.id || log.payload?.trade_type === 'EXIT_LONG' || log.payload?.trade_type === 'EXIT_SHORT'}
+                      className="flex items-center justify-center gap-2 py-2 px-4 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={log.payload?.trade_type === 'EXIT_LONG' || log.payload?.trade_type === 'EXIT_SHORT' ? 'Cannot execute EXIT signals' : 'Execute trade'}
+                    >
+                      {executingLogId === log.id ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Play className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -348,7 +430,7 @@ export function TradingViewLogs() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Accounts</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -367,7 +449,11 @@ export function TradingViewLogs() {
                     <td className="px-4 py-3 text-sm">
                       {log.payload?.trade_type ? (
                         <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          log.payload.trade_type === 'BUY' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          log.payload.trade_type === 'BUY' ? 'bg-green-100 text-green-800' :
+                          log.payload.trade_type === 'SELL' ? 'bg-red-100 text-red-800' :
+                          log.payload.trade_type === 'EXIT_LONG' ? 'bg-yellow-100 text-yellow-800' :
+                          log.payload.trade_type === 'EXIT_SHORT' ? 'bg-orange-100 text-orange-800' :
+                          'bg-gray-100 text-gray-800'
                         }`}>
                           {log.payload.trade_type}
                         </span>
@@ -390,12 +476,27 @@ export function TradingViewLogs() {
                       ) : '-'}
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      <button
-                        onClick={() => setSelectedLog(log)}
-                        className="text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        View
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedLog(log)}
+                          className="text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => handleExecute(log)}
+                          disabled={executingLogId === log.id || log.payload?.trade_type === 'EXIT_LONG' || log.payload?.trade_type === 'EXIT_SHORT'}
+                          className="flex items-center gap-1 px-2 py-1 text-green-600 hover:text-green-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={log.payload?.trade_type === 'EXIT_LONG' || log.payload?.trade_type === 'EXIT_SHORT' ? 'Cannot execute EXIT signals' : 'Execute trade'}
+                        >
+                          {executingLogId === log.id ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Play className="w-4 h-4" />
+                          )}
+                          Execute
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

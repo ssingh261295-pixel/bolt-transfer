@@ -81,11 +81,12 @@ function isWithinTradingWindow(): { allowed: boolean; currentTime: string; reaso
 interface NormalizedPayload {
   symbol: string;
   exchange: string;
-  trade_type: 'BUY' | 'SELL';
+  trade_type: 'BUY' | 'SELL' | 'EXIT_LONG' | 'EXIT_SHORT';
   price: number;
   atr: number;
   webhook_key: string;
   raw_payload: any;
+  is_exit_signal?: boolean;
 }
 
 Deno.serve(async (req: Request) => {
@@ -149,16 +150,18 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (tradeType !== 'BUY' && tradeType !== 'SELL') {
+    const isExitSignal = tradeType === 'EXIT_LONG' || tradeType === 'EXIT_SHORT';
+
+    if (tradeType !== 'BUY' && tradeType !== 'SELL' && !isExitSignal) {
       await supabase.from('tradingview_webhook_logs').insert({
         source_ip: sourceIp,
         payload: rawPayload,
         status: 'rejected',
-        error_message: "Invalid trade_type. Must be 'BUY' or 'SELL'"
+        error_message: "Invalid trade_type. Must be 'BUY', 'SELL', 'EXIT_LONG', or 'EXIT_SHORT'"
       });
 
       return new Response(
-        JSON.stringify({ error: "Invalid trade_type. Must be 'BUY' or 'SELL'" }),
+        JSON.stringify({ error: "Invalid trade_type. Must be 'BUY', 'SELL', 'EXIT_LONG', or 'EXIT_SHORT'" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -166,11 +169,12 @@ Deno.serve(async (req: Request) => {
     const normalized: NormalizedPayload = {
       symbol,
       exchange,
-      trade_type: tradeType as 'BUY' | 'SELL',
+      trade_type: tradeType as 'BUY' | 'SELL' | 'EXIT_LONG' | 'EXIT_SHORT',
       price,
       atr,
       webhook_key: webhookKey,
-      raw_payload: rawPayload
+      raw_payload: rawPayload,
+      is_exit_signal: isExitSignal
     };
 
     console.log('[TradingView Webhook] Normalized:', {
@@ -178,8 +182,54 @@ Deno.serve(async (req: Request) => {
       trade_type: normalized.trade_type,
       price: normalized.price,
       exchange: normalized.exchange,
+      is_exit_signal: normalized.is_exit_signal,
       ip: sourceIp
     });
+
+    // If this is an EXIT signal, log it and return immediately without executing
+    if (normalized.is_exit_signal) {
+      const { data: keyData } = await supabase
+        .from('webhook_keys')
+        .select('id, user_id, name')
+        .eq('webhook_key', normalized.webhook_key)
+        .maybeSingle();
+
+      if (keyData) {
+        await supabase.from('tradingview_webhook_logs').insert({
+          webhook_key_id: keyData.id,
+          source_ip: sourceIp,
+          payload: rawPayload,
+          status: 'success',
+          error_message: `Exit signal logged: ${normalized.trade_type} - No action taken`
+        });
+
+        console.log('[TradingView Webhook] EXIT signal logged (no action taken):', {
+          trade_type: normalized.trade_type,
+          symbol: normalized.symbol,
+          webhook_key: keyData.name
+        });
+      } else {
+        await supabase.from('tradingview_webhook_logs').insert({
+          source_ip: sourceIp,
+          payload: rawPayload,
+          status: 'success',
+          error_message: `Exit signal logged: ${normalized.trade_type} - No action taken`
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `${normalized.trade_type} signal received and logged. No action taken (exit signals are informational only).`,
+          signal: {
+            trade_type: normalized.trade_type,
+            symbol: normalized.symbol,
+            price: normalized.price
+          }
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const tradingWindow = isWithinTradingWindow();
     if (!tradingWindow.allowed) {
