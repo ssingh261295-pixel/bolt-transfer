@@ -351,8 +351,11 @@ Deno.serve(async (req: Request) => {
     const istOffset = 5.5 * 60 * 60 * 1000;
     const istTime = new Date(now.getTime() + istOffset);
     const executionDate = istTime.toISOString().split('T')[0];
-    const payloadHash = `${normalized.symbol}_${normalized.trade_type}_${Math.floor(normalized.price)}`;
 
+    // Enhanced payload hash with ATR and more precise price to better identify unique signals
+    const payloadHash = `${normalized.symbol}_${normalized.trade_type}_${normalized.price.toFixed(2)}_${normalized.atr.toFixed(2)}`;
+
+    // First check: Try to insert into tracker (handles race conditions at DB level)
     const trackerInsertResult = await supabase.rpc('try_insert_execution_tracker', {
       p_webhook_key_id: keyData.id,
       p_symbol: normalized.symbol,
@@ -367,7 +370,8 @@ Deno.serve(async (req: Request) => {
         symbol: normalized.symbol,
         trade_type: normalized.trade_type,
         execution_date: executionDate,
-        webhook_key: keyData.name
+        webhook_key: keyData.name,
+        payload_hash: payloadHash
       });
 
       // Return immediately WITHOUT logging to avoid duplicate log entries
@@ -378,6 +382,47 @@ Deno.serve(async (req: Request) => {
           blocked_by_platform: true,
           reason: 'Duplicate signal - already processed',
           message: `This ${normalized.trade_type} signal for ${normalized.symbol} was already executed today. Webhook duplicate detected.`
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Second check: Look for recent execution within last 60 seconds (extra safety layer)
+    const sixtySecondsAgo = new Date(now.getTime() - 60000);
+    const { data: recentExecution } = await supabase
+      .from('webhook_execution_tracker')
+      .select('id, execution_timestamp')
+      .eq('webhook_key_id', keyData.id)
+      .eq('symbol', normalized.symbol)
+      .eq('trade_type', normalized.trade_type)
+      .gte('execution_timestamp', sixtySecondsAgo.toISOString())
+      .limit(1)
+      .maybeSingle();
+
+    if (recentExecution) {
+      console.log('[TradingView Webhook] DUPLICATE SIGNAL BLOCKED (within 60 seconds):', {
+        symbol: normalized.symbol,
+        trade_type: normalized.trade_type,
+        recent_execution_time: recentExecution.execution_timestamp,
+        webhook_key: keyData.name
+      });
+
+      // Delete the tracker we just inserted since this is a duplicate
+      await supabase
+        .from('webhook_execution_tracker')
+        .delete()
+        .eq('webhook_key_id', keyData.id)
+        .eq('symbol', normalized.symbol)
+        .eq('trade_type', normalized.trade_type)
+        .eq('execution_date', executionDate)
+        .eq('payload_hash', payloadHash);
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          blocked_by_platform: true,
+          reason: 'Duplicate signal - within 60 seconds of previous execution',
+          message: `This ${normalized.trade_type} signal for ${normalized.symbol} was received within 60 seconds of a previous signal. Blocked to prevent duplicate execution.`
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
