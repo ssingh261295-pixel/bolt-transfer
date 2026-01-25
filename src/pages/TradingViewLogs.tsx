@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Search, Filter, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Play } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, Filter, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Play, Download } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -22,6 +22,11 @@ export function TradingViewLogs() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
+  const [symbolFilter, setSymbolFilter] = useState<string>('all');
+  const [entryPhaseFilter, setEntryPhaseFilter] = useState<string>('all');
+  const [tradeGradeFilter, setTradeGradeFilter] = useState<string>('all');
+  const [tradeScoreFilter, setTradeScoreFilter] = useState<string>('all');
+  const [tradeTypeFilter, setTradeTypeFilter] = useState<string>('all');
   const [selectedLog, setSelectedLog] = useState<WebhookLog | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -213,8 +218,108 @@ export function TradingViewLogs() {
       log.webhook_key_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.payload?.trade_type?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchesSearch;
+    const matchesSymbol = symbolFilter === 'all' || log.payload?.symbol === symbolFilter;
+    const matchesEntryPhase = entryPhaseFilter === 'all' || log.payload?.entry_phase === entryPhaseFilter;
+    const matchesTradeGrade = tradeGradeFilter === 'all' || log.payload?.trade_grade === tradeGradeFilter;
+    const matchesTradeScore = tradeScoreFilter === 'all' || log.payload?.trade_score?.toString() === tradeScoreFilter;
+    const matchesTradeType = tradeTypeFilter === 'all' || log.payload?.trade_type === tradeTypeFilter;
+
+    return matchesSearch && matchesSymbol && matchesEntryPhase && matchesTradeGrade && matchesTradeScore && matchesTradeType;
   });
+
+  const uniqueSymbols = useMemo(() => {
+    const symbols = new Set(logs.map(log => log.payload?.symbol).filter(Boolean));
+    return Array.from(symbols).sort();
+  }, [logs]);
+
+  const uniqueEntryPhases = useMemo(() => {
+    const phases = new Set(logs.map(log => log.payload?.entry_phase).filter(Boolean));
+    return Array.from(phases).sort();
+  }, [logs]);
+
+  const uniqueTradeGrades = useMemo(() => {
+    const grades = new Set(logs.map(log => log.payload?.trade_grade).filter(Boolean));
+    return Array.from(grades).sort();
+  }, [logs]);
+
+  const uniqueTradeScores = useMemo(() => {
+    const scores = new Set(logs.map(log => log.payload?.trade_score).filter(Boolean));
+    return Array.from(scores).sort((a, b) => Number(a) - Number(b));
+  }, [logs]);
+
+  const uniqueTradeTypes = useMemo(() => {
+    const types = new Set(logs.map(log => log.payload?.trade_type).filter(Boolean));
+    return Array.from(types).sort();
+  }, [logs]);
+
+  const exportToCSV = () => {
+    const headers = [
+      'Date',
+      'Time',
+      'strategy',
+      'symbol',
+      'entry_phase',
+      'trade_grade',
+      'trade_score',
+      'trade_type',
+      'price',
+      'target_points',
+      'sl_points',
+      'adx'
+    ];
+
+    const rows = filteredLogs.map(log => {
+      const date = new Date(log.received_at);
+      const dateStr = date.toLocaleDateString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+      const timeStr = date.toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+
+      return [
+        dateStr,
+        timeStr,
+        log.webhook_key_name || '',
+        log.payload?.symbol || '',
+        log.payload?.entry_phase || '',
+        log.payload?.trade_grade || '',
+        log.payload?.trade_score || '',
+        log.payload?.trade_type || '',
+        log.payload?.price || '',
+        log.payload?.target_points || '',
+        log.payload?.sl_points || '',
+        log.payload?.adx || ''
+      ];
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => {
+        const cellStr = String(cell);
+        if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+          return `"${cellStr.replace(/"/g, '""')}"`;
+        }
+        return cellStr;
+      }).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `tradingview_logs_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const stats = {
     total: logs.length,
@@ -298,7 +403,7 @@ export function TradingViewLogs() {
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200">
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4 border-b border-gray-200 space-y-3">
           <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -311,30 +416,94 @@ export function TradingViewLogs() {
               />
             </div>
 
-            <div className="flex gap-3">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="flex-1 md:flex-none px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Status</option>
-                <option value="success">Success</option>
-                <option value="failed">Failed</option>
-                <option value="rejected">Rejected</option>
-                <option value="rejected_time_window">Outside Trading Hours</option>
-              </select>
+            <button
+              onClick={exportToCSV}
+              disabled={filteredLogs.length === 0}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </button>
+          </div>
 
-              <select
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="flex-1 md:flex-none px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Time</option>
-                <option value="today">Today</option>
-                <option value="week">Last 7 Days</option>
-                <option value="month">Last 30 Days</option>
-              </select>
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">All Status</option>
+              <option value="success">Success</option>
+              <option value="failed">Failed</option>
+              <option value="rejected">Rejected</option>
+              <option value="rejected_time_window">Outside Trading Hours</option>
+            </select>
+
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="week">Last 7 Days</option>
+              <option value="month">Last 30 Days</option>
+            </select>
+
+            <select
+              value={symbolFilter}
+              onChange={(e) => setSymbolFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">All Symbols</option>
+              {uniqueSymbols.map(symbol => (
+                <option key={symbol} value={symbol}>{symbol}</option>
+              ))}
+            </select>
+
+            <select
+              value={tradeTypeFilter}
+              onChange={(e) => setTradeTypeFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">All Trade Types</option>
+              {uniqueTradeTypes.map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+
+            <select
+              value={entryPhaseFilter}
+              onChange={(e) => setEntryPhaseFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">All Entry Phases</option>
+              {uniqueEntryPhases.map(phase => (
+                <option key={phase} value={phase}>{phase}</option>
+              ))}
+            </select>
+
+            <select
+              value={tradeGradeFilter}
+              onChange={(e) => setTradeGradeFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">All Trade Grades</option>
+              {uniqueTradeGrades.map(grade => (
+                <option key={grade} value={grade}>{grade}</option>
+              ))}
+            </select>
+
+            <select
+              value={tradeScoreFilter}
+              onChange={(e) => setTradeScoreFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="all">All Trade Scores</option>
+              {uniqueTradeScores.map(score => (
+                <option key={score} value={score.toString()}>{score}</option>
+              ))}
+            </select>
           </div>
         </div>
 
