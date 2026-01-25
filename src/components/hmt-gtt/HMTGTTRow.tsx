@@ -204,7 +204,7 @@ const HMTGTTRowComponent = ({
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+            <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-[100] overflow-visible">
               <div className="py-1">
                 <button
                   onClick={() => {

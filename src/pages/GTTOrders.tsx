@@ -1016,7 +1016,7 @@ export function GTTOrders() {
           <p className="text-gray-600 mb-4">Create your first GTT order to automate your trading</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
           {/* Mobile Card View */}
           <div className="md:hidden divide-y divide-gray-200">
             {filteredGttOrders.map((gtt) => {
@@ -1109,7 +1109,7 @@ export function GTTOrders() {
                     </button>
 
                     {openMenuId === gtt.id.toString() && (
-                      <div className="gtt-actions-menu absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10">
+                      <div className="gtt-actions-menu absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-visible z-[100]">
                         <button
                           onClick={() => {
                             setOpenMenuId(null);
@@ -1150,7 +1150,7 @@ export function GTTOrders() {
           </div>
 
           {/* Desktop Table View */}
-          <div className="hidden md:block overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto overflow-y-visible">
             <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -1365,7 +1365,7 @@ export function GTTOrders() {
                         </button>
 
                         {openMenuId === gtt.id.toString() && (
-                          <div className="gtt-actions-menu absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10 min-w-[180px]">
+                          <div className="gtt-actions-menu absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg overflow-visible z-[100] min-w-[180px]">
                             <button
                               onClick={() => {
                                 setOpenMenuId(null);

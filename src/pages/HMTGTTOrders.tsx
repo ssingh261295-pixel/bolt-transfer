@@ -1067,7 +1067,7 @@ export function HMTGTTOrders() {
           <p className="text-gray-600 mb-4">Create your first Host-Monitored GTT order</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
           {/* Mobile Card View */}
           <div className="md:hidden">
             {/* Mobile Select All Header */}
@@ -1223,7 +1223,7 @@ export function HMTGTTOrders() {
                             className="fixed inset-0 z-40"
                             onClick={() => setOpenMobileMenu(null)}
                           />
-                          <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                          <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-[100] overflow-visible">
                             <div className="py-1">
                               <button
                                 onClick={() => {
@@ -1270,7 +1270,7 @@ export function HMTGTTOrders() {
           </div>
 
           {/* Desktop Table View */}
-          <div className="hidden md:block overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto overflow-y-visible">
             <table className="w-full min-w-[1400px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
