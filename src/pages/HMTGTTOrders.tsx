@@ -586,14 +586,19 @@ export function HMTGTTOrders() {
       const result = await response.json();
 
       if (result.success) {
-        await supabase
+        const { error: deleteError } = await supabase
           .from('hmt_gtt_orders')
-          .update({ status: 'completed' })
+          .delete()
           .eq('id', hmtGtt.id)
           .eq('user_id', user?.id);
 
-        setConvertMessage('Successfully converted HMT GTT to regular GTT');
-        setTimeout(() => setConvertMessage(''), 5000);
+        if (deleteError) {
+          setConvertError('GTT created but failed to delete HMT GTT: ' + deleteError.message);
+          setTimeout(() => setConvertError(''), 5000);
+        } else {
+          setConvertMessage('Successfully converted HMT GTT to regular GTT');
+          setTimeout(() => setConvertMessage(''), 5000);
+        }
         loadHMTGTTOrders(true);
       } else {
         setConvertError('Failed to create GTT: ' + (result.error || 'Unknown error'));
@@ -607,6 +612,168 @@ export function HMTGTTOrders() {
       setConverting(false);
     }
   }, [session, user, loadHMTGTTOrders]);
+
+  const handleBulkConvertToGTT = useCallback(async () => {
+    if (selectedOrders.size === 0) return;
+
+    if (!session?.access_token) {
+      setConvertError('Not authenticated');
+      setTimeout(() => setConvertError(''), 5000);
+      return;
+    }
+
+    setConverting(true);
+    setConvertError('');
+    setConvertMessage('');
+
+    const convertPromises = Array.from(selectedOrders).map(async (orderId) => {
+      const hmtGtt = hmtGttOrders.find(o => o.id === orderId);
+      if (!hmtGtt) return { success: false, error: 'Order not found', orderId };
+
+      if (hmtGtt.status !== 'active') {
+        return { success: false, error: 'Only active orders can be converted', orderId };
+      }
+
+      try {
+        const isOCO = hmtGtt.condition_type === 'two-leg';
+
+        // Fetch the current LTP (Last Traded Price) for the instrument
+        const ltpUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${hmtGtt.broker_connection_id}`;
+        const ltpResponse = await fetch(ltpUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            instruments: [`${hmtGtt.exchange}:${hmtGtt.trading_symbol}`]
+          })
+        });
+
+        const ltpResult = await ltpResponse.json();
+
+        let lastPrice: number;
+        const instrumentKey = `${hmtGtt.exchange}:${hmtGtt.trading_symbol}`;
+
+        if (ltpResult.success && ltpResult.data && ltpResult.data[instrumentKey]) {
+          lastPrice = ltpResult.data[instrumentKey].last_price;
+        } else {
+          // Fallback: Calculate last_price to be at least 0.5% away from trigger prices
+          const triggerPrice1 = parseFloat(hmtGtt.trigger_price_1);
+          const triggerPrice2 = isOCO ? parseFloat(hmtGtt.trigger_price_2) : null;
+
+          if (isOCO && triggerPrice2) {
+            // For two-leg, use midpoint between the two triggers
+            lastPrice = (triggerPrice1 + triggerPrice2) / 2;
+          } else {
+            // For single, place last_price 1% away from trigger
+            lastPrice = triggerPrice1 * 0.99; // 1% below trigger
+          }
+        }
+
+        // Ensure last_price is at least 0.5% different from all trigger prices
+        const triggerPrice1 = parseFloat(hmtGtt.trigger_price_1);
+        const diff1Percent = Math.abs((lastPrice - triggerPrice1) / triggerPrice1) * 100;
+
+        if (diff1Percent < 0.5) {
+          // Adjust last_price to be 0.5% away
+          lastPrice = triggerPrice1 * (triggerPrice1 > lastPrice ? 0.995 : 1.005);
+        }
+
+        if (isOCO) {
+          const triggerPrice2 = parseFloat(hmtGtt.trigger_price_2);
+          const diff2Percent = Math.abs((lastPrice - triggerPrice2) / triggerPrice2) * 100;
+
+          if (diff2Percent < 0.5) {
+            // For two-leg, position last_price between the two triggers
+            lastPrice = (triggerPrice1 + triggerPrice2) / 2;
+          }
+        }
+
+        // Build payload in the format expected by zerodha-gtt edge function
+        const gttPayload: any = {
+          type: isOCO ? 'two-leg' : 'single',
+          'condition[exchange]': hmtGtt.exchange,
+          'condition[tradingsymbol]': hmtGtt.trading_symbol,
+          'condition[instrument_token]': hmtGtt.instrument_token,
+          'condition[trigger_values][0]': triggerPrice1,
+          'condition[last_price]': lastPrice,
+        };
+
+        if (isOCO) {
+          gttPayload['condition[trigger_values][1]'] = parseFloat(hmtGtt.trigger_price_2);
+
+          // First order
+          gttPayload['orders[0][transaction_type]'] = hmtGtt.transaction_type;
+          gttPayload['orders[0][quantity]'] = parseInt(hmtGtt.quantity_1);
+          gttPayload['orders[0][price]'] = parseFloat(hmtGtt.order_price_1) || 0;
+          gttPayload['orders[0][order_type]'] = hmtGtt.order_type_1 || 'LIMIT';
+          gttPayload['orders[0][product]'] = hmtGtt.product_type_1 || 'CNC';
+
+          // Second order
+          gttPayload['orders[1][transaction_type]'] = hmtGtt.transaction_type;
+          gttPayload['orders[1][quantity]'] = parseInt(hmtGtt.quantity_2 || hmtGtt.quantity_1);
+          gttPayload['orders[1][price]'] = parseFloat(hmtGtt.order_price_2) || 0;
+          gttPayload['orders[1][order_type]'] = hmtGtt.order_type_2 || 'LIMIT';
+          gttPayload['orders[1][product]'] = hmtGtt.product_type_2 || 'CNC';
+        } else {
+          gttPayload['orders[0][transaction_type]'] = hmtGtt.transaction_type;
+          gttPayload['orders[0][quantity]'] = parseInt(hmtGtt.quantity_1);
+          gttPayload['orders[0][price]'] = parseFloat(hmtGtt.order_price_1) || 0;
+          gttPayload['orders[0][order_type]'] = hmtGtt.order_type_1 || 'LIMIT';
+          gttPayload['orders[0][product]'] = hmtGtt.product_type_1 || 'CNC';
+        }
+
+        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${hmtGtt.broker_connection_id}`;
+
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(gttPayload)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          const { error: deleteError } = await supabase
+            .from('hmt_gtt_orders')
+            .delete()
+            .eq('id', hmtGtt.id)
+            .eq('user_id', user?.id);
+
+          if (deleteError) {
+            return { success: false, error: 'GTT created but failed to delete HMT GTT', orderId };
+          }
+          return { success: true, orderId };
+        } else {
+          return { success: false, error: result.error || 'Unknown error', orderId };
+        }
+      } catch (err: any) {
+        console.error(`Error converting HMT GTT ${hmtGtt.id}:`, err);
+        return { success: false, orderId, error: err.message || 'Unknown error' };
+      }
+    });
+
+    const results = await Promise.all(convertPromises);
+    const successCount = results.filter(r => r.success).length;
+    const failedCount = results.filter(r => !r.success).length;
+
+    if (successCount > 0) {
+      setSelectedOrders(new Set());
+      setConvertMessage(`Successfully converted ${successCount} HMT GTT order(s) to regular GTT.${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
+      setConvertError('');
+      setTimeout(() => setConvertMessage(''), 5000);
+      loadHMTGTTOrders(true);
+    } else {
+      const firstError = results.find(r => !r.success)?.error || 'Unknown error';
+      setConvertError(`Failed to convert HMT GTT orders: ${firstError}`);
+      setTimeout(() => setConvertError(''), 5000);
+    }
+    setConverting(false);
+  }, [session, user, selectedOrders, hmtGttOrders, loadHMTGTTOrders]);
 
   const confirmSingleDelete = async () => {
     if (!deleteTarget) return;
@@ -861,8 +1028,18 @@ export function HMTGTTOrders() {
               <span className="sm:hidden">Edit</span>
             </button>
             <button
+              onClick={handleBulkConvertToGTT}
+              disabled={converting || selectedOrders.size === 0}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ArrowRightLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">HMT to GTT</span>
+              <span className="sm:hidden">To GTT</span>
+            </button>
+            <button
               onClick={handleBulkDelete}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+              disabled={deleting || selectedOrders.size === 0}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Trash2 className="w-4 h-4" />
               <span className="hidden sm:inline">Delete Selected</span>
