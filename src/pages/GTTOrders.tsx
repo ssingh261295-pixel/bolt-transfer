@@ -864,7 +864,7 @@ export function GTTOrders() {
   };
 
   return (
-    <div className="space-y-4 max-w-full overflow-x-hidden">
+    <div className="space-y-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-gray-900">GTT ({filteredGttOrders.length})</h2>
@@ -882,11 +882,11 @@ export function GTTOrders() {
             )}
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
           <button
             onClick={syncWithZerodha}
             disabled={syncing || loading}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             title="Refresh from Zerodha"
           >
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
@@ -896,7 +896,7 @@ export function GTTOrders() {
             <select
               value={selectedBrokerId}
               onChange={(e) => setSelectedBrokerId(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm w-full sm:w-auto"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm w-full md:w-auto"
             >
               <option value="all">All Accounts</option>
               {brokers.map((broker) => (
@@ -907,7 +907,7 @@ export function GTTOrders() {
             </select>
           )}
           {uniqueInstruments.length > 0 && (
-            <div className="w-full sm:w-auto">
+            <div className="w-full md:w-auto">
               <MultiSelectFilter
                 label="Instruments"
                 options={uniqueInstruments}
@@ -922,7 +922,7 @@ export function GTTOrders() {
               setEditingGTT(null);
               setShowCreateModal(true);
             }}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm w-full sm:w-auto"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
           >
             <Plus className="w-4 h-4" />
             New GTT
@@ -1169,7 +1169,7 @@ export function GTTOrders() {
           </div>
 
           {/* Desktop Table View */}
-          <div className="hidden md:block overflow-x-auto overflow-y-visible">
+          <div className="hidden md:block overflow-x-auto pb-44">
             <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>

@@ -937,12 +937,12 @@ export function HMTGTTOrders() {
             )}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 lg:gap-3 items-center">
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
           {brokers.length > 0 && (
             <select
               value={selectedBrokerId}
               onChange={(e) => setSelectedBrokerId(e.target.value)}
-              className="flex-1 min-w-[200px] lg:flex-none px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm w-full md:w-auto"
             >
               <option value="all">All Accounts</option>
               {brokers.map((broker) => (
@@ -953,7 +953,7 @@ export function HMTGTTOrders() {
             </select>
           )}
           {uniqueInstruments.length > 0 && (
-            <div className="flex-1 min-w-[200px] lg:flex-none">
+            <div className="w-full md:w-auto">
               <MultiSelectFilter
                 label="Instruments"
                 options={uniqueInstruments}
@@ -968,11 +968,10 @@ export function HMTGTTOrders() {
               setEditingGTT(null);
               setShowCreateModal(true);
             }}
-            className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm whitespace-nowrap"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
           >
             <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">New HMT GTT</span>
-            <span className="sm:hidden">New</span>
+            New HMT GTT
           </button>
         </div>
       </div>
@@ -1289,7 +1288,7 @@ export function HMTGTTOrders() {
           </div>
 
           {/* Desktop Table View */}
-          <div className="hidden md:block overflow-x-auto overflow-y-visible">
+          <div className="hidden md:block overflow-x-auto pb-44">
             <table className="w-full min-w-[1400px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
