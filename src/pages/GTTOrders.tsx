@@ -68,7 +68,7 @@ export function GTTOrders() {
     const handleClickOutside = (event: MouseEvent) => {
       if (openMenuId) {
         const target = event.target as HTMLElement;
-        if (!target.closest('.relative')) {
+        if (!target.closest('.gtt-actions-menu') && !target.closest('.gtt-actions-button')) {
           setOpenMenuId(null);
         }
       }
@@ -756,6 +756,96 @@ export function GTTOrders() {
     }
   };
 
+  const handleBulkConvertToHMT = async () => {
+    if (selectedOrders.size === 0) return;
+
+    setConverting(true);
+    setConvertError('');
+    setConvertMessage('');
+
+    const convertPromises = Array.from(selectedOrders).map(async (orderId) => {
+      const gtt = gttOrders.find(o => o.id.toString() === orderId);
+      if (!gtt) return { success: false, error: 'Order not found', orderId };
+
+      try {
+        const isOCO = gtt.type === 'two-leg';
+        const transactionType = gtt.orders?.[0]?.transaction_type;
+
+        const mapProductType = (product: string): string => {
+          if (product === 'CNC') return 'NRML';
+          if (product === 'MIS') return 'MIS';
+          return 'NRML';
+        };
+
+        const hmtGttData: any = {
+          user_id: user?.id,
+          broker_connection_id: gtt.broker_info?.id,
+          trading_symbol: gtt.condition?.tradingsymbol,
+          exchange: gtt.condition?.exchange,
+          instrument_token: gtt.condition?.instrument_token,
+          transaction_type: transactionType,
+          quantity_1: gtt.orders?.[0]?.quantity || 0,
+          order_price_1: gtt.orders?.[0]?.price || gtt.condition?.trigger_values?.[0] || 0,
+          product_type_1: mapProductType(gtt.orders?.[0]?.product || 'CNC'),
+          trigger_price_1: gtt.condition?.trigger_values?.[0] || 0,
+          condition_type: isOCO ? 'two-leg' : 'single',
+          status: 'active'
+        };
+
+        if (isOCO) {
+          hmtGttData.trigger_price_2 = gtt.condition?.trigger_values?.[1] || 0;
+          hmtGttData.quantity_2 = gtt.orders?.[1]?.quantity || gtt.orders?.[0]?.quantity || 0;
+          hmtGttData.order_price_2 = gtt.orders?.[1]?.price || gtt.condition?.trigger_values?.[1] || 0;
+          hmtGttData.product_type_2 = mapProductType(gtt.orders?.[1]?.product || gtt.orders?.[0]?.product || 'CNC');
+        }
+
+        const { error: insertError } = await supabase
+          .from('hmt_gtt_orders')
+          .insert(hmtGttData);
+
+        if (insertError) {
+          throw new Error(insertError.message);
+        }
+
+        const brokerIdToUse = gtt.broker_info?.id || selectedBrokerId;
+        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${brokerIdToUse}&gtt_id=${gtt.id}`;
+
+        const response = await fetch(apiUrl, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+          },
+        });
+
+        const result = await response.json();
+
+        return { success: result.success, orderId, error: result.error };
+      } catch (err: any) {
+        console.error(`Error converting GTT ${gtt.id}:`, err);
+        return { success: false, orderId, error: err.message || 'Unknown error' };
+      }
+    });
+
+    const results = await Promise.all(convertPromises);
+    const successCount = results.filter(r => r.success).length;
+    const failedCount = results.filter(r => !r.success).length;
+
+    if (successCount > 0) {
+      setSelectedOrders(new Set());
+      setConvertMessage(`Successfully converted ${successCount} GTT order(s) to HMT GTT.${failedCount > 0 ? ` ${failedCount} failed.` : ''}`);
+      setConvertError('');
+      setTimeout(() => setConvertMessage(''), 5000);
+      syncWithZerodha();
+    } else {
+      const firstError = results.find(r => !r.success)?.error || 'Unknown error';
+      setConvertError(`Failed to convert GTT orders: ${firstError}`);
+      setTimeout(() => setConvertError(''), 5000);
+    }
+    setConverting(false);
+  };
+
   return (
     <div className="space-y-4 max-w-full overflow-x-hidden">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -860,11 +950,11 @@ export function GTTOrders() {
       )}
 
       {selectedOrders.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <span className="text-sm text-blue-800 font-medium">
             {selectedOrders.size} order(s) selected
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             <button
               onClick={() => {
                 const selectedGTTs = filteredGttOrders.filter(gtt => selectedOrders.has(gtt.id.toString()));
@@ -888,8 +978,17 @@ export function GTTOrders() {
               Edit Selected
             </button>
             <button
+              onClick={handleBulkConvertToHMT}
+              disabled={converting}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Activity className="w-4 h-4" />
+              Convert to HMT GTT
+            </button>
+            <button
               onClick={handleBulkDelete}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+              disabled={deleting}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Trash2 className="w-4 h-4" />
               Delete Selected
@@ -1003,16 +1102,30 @@ export function GTTOrders() {
                   <div className="flex gap-2 pt-2 relative">
                     <button
                       onClick={() => setOpenMenuId(openMenuId === gtt.id.toString() ? null : gtt.id.toString())}
-                      className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-gray-700 border border-gray-300 hover:bg-gray-50 rounded transition"
+                      className="gtt-actions-button flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-sm text-gray-700 border border-gray-300 hover:bg-gray-50 rounded transition"
                     >
                       <MoreVertical className="w-4 h-4" />
                       Actions
                     </button>
 
                     {openMenuId === gtt.id.toString() && (
-                      <div className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10">
+                      <div className="gtt-actions-menu absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10">
                         <button
-                          onClick={() => handleConvertToHMT(gtt)}
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            setEditingGTT(gtt);
+                            setShowCreateModal(true);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                          Edit GTT
+                        </button>
+                        <button
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            handleConvertToHMT(gtt);
+                          }}
                           className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                         >
                           <Activity className="w-4 h-4" />
@@ -1245,16 +1358,30 @@ export function GTTOrders() {
                       <div className="relative">
                         <button
                           onClick={() => setOpenMenuId(openMenuId === gtt.id.toString() ? null : gtt.id.toString())}
-                          className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition"
+                          className="gtt-actions-button p-1.5 text-gray-600 hover:bg-gray-100 rounded transition"
                           title="Actions"
                         >
                           <MoreVertical className="w-4 h-4" />
                         </button>
 
                         {openMenuId === gtt.id.toString() && (
-                          <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10 min-w-[180px]">
+                          <div className="gtt-actions-menu absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10 min-w-[180px]">
                             <button
-                              onClick={() => handleConvertToHMT(gtt)}
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                setEditingGTT(gtt);
+                                setShowCreateModal(true);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                              Edit GTT
+                            </button>
+                            <button
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                handleConvertToHMT(gtt);
+                              }}
                               className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                             >
                               <Activity className="w-4 h-4" />
