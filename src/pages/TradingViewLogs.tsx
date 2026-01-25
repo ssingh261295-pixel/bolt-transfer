@@ -31,7 +31,6 @@ export function TradingViewLogs() {
   const [tradeTypeFilter, setTradeTypeFilter] = useState<string>('all');
   const [selectedLog, setSelectedLog] = useState<WebhookLog | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
   const pageSize = 50;
   const [executingLogId, setExecutingLogId] = useState<string | null>(null);
   const [executeMessage, setExecuteMessage] = useState('');
@@ -42,7 +41,11 @@ export function TradingViewLogs() {
       loadLogs();
       loadFilterOptions();
     }
-  }, [user, dateFilter, statusFilter, currentPage, symbolFilter, entryPhaseFilter, tradeGradeFilter, tradeScoreFilter, tradeTypeFilter]);
+  }, [user, dateFilter, statusFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, symbolFilter, entryPhaseFilter, tradeGradeFilter, tradeScoreFilter, tradeTypeFilter]);
 
   const loadFilterOptions = async () => {
     try {
@@ -79,7 +82,6 @@ export function TradingViewLogs() {
       if (webhookKeyIds.length === 0) {
         console.log('No webhook keys found for user');
         setLogs([]);
-        setTotalCount(0);
         setLoading(false);
         return;
       }
@@ -92,7 +94,7 @@ export function TradingViewLogs() {
             user_id,
             name
           )
-        `, { count: 'exact' })
+        `)
         .in('webhook_key_id', webhookKeyIds)
         .order('received_at', { ascending: false });
 
@@ -124,29 +126,11 @@ export function TradingViewLogs() {
         query = query.gte('received_at', startDate.toISOString());
       }
 
-      // Apply JSON payload filters
-      if (symbolFilter !== 'all') {
-        query = query.eq('payload->symbol', symbolFilter);
-      }
-      if (entryPhaseFilter !== 'all') {
-        query = query.eq('payload->entry_phase', entryPhaseFilter);
-      }
-      if (tradeGradeFilter !== 'all') {
-        query = query.eq('payload->trade_grade', tradeGradeFilter);
-      }
-      if (tradeScoreFilter !== 'all') {
-        query = query.eq('payload->trade_score', parseInt(tradeScoreFilter));
-      }
-      if (tradeTypeFilter !== 'all') {
-        query = query.eq('payload->trade_type', tradeTypeFilter);
-      }
+      query = query.limit(1000);
 
-      const from = (currentPage - 1) * pageSize;
-      const to = from + pageSize - 1;
+      const { data, error } = await query;
 
-      const { data, error, count } = await query.range(from, to);
-
-      console.log('Query result:', { data, error, count: data?.length, totalCount: count });
+      console.log('Query result:', { data, error, count: data?.length });
 
       if (error) {
         console.error('Error loading logs:', error);
@@ -159,15 +143,12 @@ export function TradingViewLogs() {
         }));
         console.log('Formatted logs:', formattedLogs.length);
         setLogs(formattedLogs);
-        setTotalCount(count || 0);
       } else {
         setLogs([]);
-        setTotalCount(0);
       }
     } catch (err) {
       console.error('Exception loading logs:', err);
       setLogs([]);
-      setTotalCount(0);
     } finally {
       setLoading(false);
     }
@@ -266,20 +247,22 @@ export function TradingViewLogs() {
     }
   };
 
-  const filteredLogs = logs.filter(log => {
-    const matchesSearch =
-      log.payload?.symbol?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.webhook_key_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.payload?.trade_type?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredLogs = useMemo(() => {
+    return logs.filter(log => {
+      const matchesSearch =
+        log.payload?.symbol?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        log.webhook_key_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        log.payload?.trade_type?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesSymbol = symbolFilter === 'all' || log.payload?.symbol === symbolFilter;
-    const matchesEntryPhase = entryPhaseFilter === 'all' || log.payload?.entry_phase === entryPhaseFilter;
-    const matchesTradeGrade = tradeGradeFilter === 'all' || log.payload?.trade_grade === tradeGradeFilter;
-    const matchesTradeScore = tradeScoreFilter === 'all' || log.payload?.trade_score?.toString() === tradeScoreFilter;
-    const matchesTradeType = tradeTypeFilter === 'all' || log.payload?.trade_type === tradeTypeFilter;
+      const matchesSymbol = symbolFilter === 'all' || log.payload?.symbol === symbolFilter;
+      const matchesEntryPhase = entryPhaseFilter === 'all' || log.payload?.entry_phase === entryPhaseFilter;
+      const matchesTradeGrade = tradeGradeFilter === 'all' || log.payload?.trade_grade === tradeGradeFilter;
+      const matchesTradeScore = tradeScoreFilter === 'all' || log.payload?.trade_score?.toString() === tradeScoreFilter;
+      const matchesTradeType = tradeTypeFilter === 'all' || log.payload?.trade_type === tradeTypeFilter;
 
-    return matchesSearch && matchesSymbol && matchesEntryPhase && matchesTradeGrade && matchesTradeScore && matchesTradeType;
-  });
+      return matchesSearch && matchesSymbol && matchesEntryPhase && matchesTradeGrade && matchesTradeScore && matchesTradeType;
+    });
+  }, [logs, searchTerm, symbolFilter, entryPhaseFilter, tradeGradeFilter, tradeScoreFilter, tradeTypeFilter]);
 
   const uniqueSymbols = useMemo(() => {
     const symbols = new Set(allLogsForFilters.map(log => log.payload?.symbol).filter(Boolean));
@@ -377,12 +360,18 @@ export function TradingViewLogs() {
     document.body.removeChild(link);
   };
 
-  const stats = {
-    total: logs.length,
-    success: logs.filter(l => l.status === 'success').length,
-    failed: logs.filter(l => l.status === 'failed').length,
-    rejected: logs.filter(l => l.status === 'rejected' || l.status === 'rejected_time_window').length
-  };
+  const paginatedLogs = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredLogs.slice(startIndex, endIndex);
+  }, [filteredLogs, currentPage, pageSize]);
+
+  const stats = useMemo(() => ({
+    total: filteredLogs.length,
+    success: filteredLogs.filter(l => l.status === 'success').length,
+    failed: filteredLogs.filter(l => l.status === 'failed').length,
+    rejected: filteredLogs.filter(l => l.status === 'rejected' || l.status === 'rejected_time_window').length
+  }), [filteredLogs]);
 
   return (
     <div className="space-y-4 md:space-y-6 max-w-full overflow-x-hidden">
@@ -568,7 +557,7 @@ export function TradingViewLogs() {
             <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
             Loading webhook logs...
           </div>
-        ) : filteredLogs.length === 0 ? (
+        ) : paginatedLogs.length === 0 ? (
           <div className="p-12 text-center text-gray-500">
             <Filter className="w-12 h-12 mx-auto mb-4 text-gray-300" />
             <p className="text-lg font-medium">No logs found</p>
@@ -578,7 +567,7 @@ export function TradingViewLogs() {
           <>
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-200">
-              {filteredLogs.map((log) => (
+              {paginatedLogs.map((log) => (
                 <div key={log.id} className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
@@ -669,7 +658,7 @@ export function TradingViewLogs() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredLogs.map((log) => (
+                {paginatedLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-gray-50 transition">
                     <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {formatDate(log.received_at)}
@@ -744,10 +733,10 @@ export function TradingViewLogs() {
           </>
         )}
 
-        {!loading && totalCount > pageSize && (
+        {!loading && filteredLogs.length > pageSize && (
           <div className="px-4 py-3 border-t border-gray-200 flex flex-col md:flex-row items-center justify-between gap-3">
             <div className="text-xs md:text-sm text-gray-600 text-center md:text-left">
-              Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount} results
+              Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredLogs.length)} of {filteredLogs.length} results
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -759,11 +748,11 @@ export function TradingViewLogs() {
                 <span className="hidden sm:inline">Previous</span>
               </button>
               <span className="px-3 py-1.5 text-xs md:text-sm text-gray-700 whitespace-nowrap">
-                Page {currentPage} of {Math.ceil(totalCount / pageSize)}
+                Page {currentPage} of {Math.ceil(filteredLogs.length / pageSize)}
               </span>
               <button
-                onClick={() => setCurrentPage(Math.min(Math.ceil(totalCount / pageSize), currentPage + 1))}
-                disabled={currentPage >= Math.ceil(totalCount / pageSize)}
+                onClick={() => setCurrentPage(Math.min(Math.ceil(filteredLogs.length / pageSize), currentPage + 1))}
+                disabled={currentPage >= Math.ceil(filteredLogs.length / pageSize)}
                 className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
                 <span className="hidden sm:inline">Next</span>
