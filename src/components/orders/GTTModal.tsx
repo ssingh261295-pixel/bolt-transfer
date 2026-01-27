@@ -904,7 +904,8 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                     <span className="text-gray-300">•</span>
                     <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
                       {(() => {
-                        const broker = allBrokers.find(b => b.id === (editingGTT.broker_connection_id || brokerConnectionId));
+                        const brokerId = editingGTT.broker_info?.id || editingGTT.broker_connection_id || brokerConnectionId;
+                        const broker = allBrokers.find(b => b.id === brokerId);
                         if (broker) {
                           return `${broker.account_holder_name || broker.account_name || 'Account'} (${broker.client_id || 'No ID'})`;
                         }
