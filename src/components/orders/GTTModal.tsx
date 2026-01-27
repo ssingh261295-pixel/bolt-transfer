@@ -254,14 +254,40 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         (i) => i.tradingsymbol === initialSymbol
       );
       if (instrument) {
-        // Use selectInstrument to properly set tick_size and other data
-        selectInstrument(instrument);
+        setSymbol(instrument.tradingsymbol);
+        setSelectedInstrument(instrument);
+        const lotSize = parseInt(instrument.lot_size) || 1;
+
+        // Set tick size from instrument data
+        const instrumentTickSize = parseFloat(instrument.tick_size);
+        if (!isNaN(instrumentTickSize) && instrumentTickSize > 0) {
+          setTickSize(instrumentTickSize);
+        } else {
+          setTickSize(0.05);
+        }
 
         // Set quantity based on position data if available
         if (positionDataToUse?.quantity) {
           const qty = positionDataToUse.quantity;
           setQuantity1(qty);
           setQuantity2(qty);
+        } else {
+          setQuantity1(lotSize);
+          setQuantity2(lotSize);
+        }
+
+        // Use current price from position data if available, otherwise fetch LTP
+        if (positionDataToUse?.currentPrice) {
+          setCurrentLTP(positionDataToUse.currentPrice);
+          prefillPricesBasedOnLTP(positionDataToUse.currentPrice);
+          setInitialLTPCaptured(true);
+        } else if (instrument.instrument_token) {
+          // Fetch LTP for non-position cases
+          fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange).then(ltp => {
+            if (ltp) {
+              prefillPricesBasedOnLTP(ltp);
+            }
+          }).catch(console.error);
         }
       }
     }
