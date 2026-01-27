@@ -387,46 +387,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Second check: Look for recent execution within last 60 seconds (extra safety layer)
-    const sixtySecondsAgo = new Date(now.getTime() - 60000);
-    const { data: recentExecution } = await supabase
-      .from('webhook_execution_tracker')
-      .select('id, execution_timestamp')
-      .eq('webhook_key_id', keyData.id)
-      .eq('symbol', normalized.symbol)
-      .eq('trade_type', normalized.trade_type)
-      .gte('execution_timestamp', sixtySecondsAgo.toISOString())
-      .limit(1)
-      .maybeSingle();
-
-    if (recentExecution) {
-      console.log('[TradingView Webhook] DUPLICATE SIGNAL BLOCKED (within 60 seconds):', {
-        symbol: normalized.symbol,
-        trade_type: normalized.trade_type,
-        recent_execution_time: recentExecution.execution_timestamp,
-        webhook_key: keyData.name
-      });
-
-      // Delete the tracker we just inserted since this is a duplicate
-      await supabase
-        .from('webhook_execution_tracker')
-        .delete()
-        .eq('webhook_key_id', keyData.id)
-        .eq('symbol', normalized.symbol)
-        .eq('trade_type', normalized.trade_type)
-        .eq('execution_date', executionDate)
-        .eq('payload_hash', payloadHash);
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          blocked_by_platform: true,
-          reason: 'Duplicate signal - within 60 seconds of previous execution',
-          message: `This ${normalized.trade_type} signal for ${normalized.symbol} was received within 60 seconds of a previous signal. Blocked to prevent duplicate execution.`
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Note: 60-second duplicate check removed to allow quick successive signals
+    // The payload hash check above is sufficient for preventing true duplicates
+    // This allows legitimate rapid signals (e.g., quick reversals, multiple strategies)
 
     await supabase
       .from('webhook_keys')
