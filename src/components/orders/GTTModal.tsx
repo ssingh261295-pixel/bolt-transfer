@@ -249,9 +249,44 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
     setupGTT();
   }, [editingGTT, isOpen, initialSymbol, initialExchange]);
 
-  // Fetch LTP when symbol is pre-filled from position or watchlist
+  // Handle position data immediately when modal opens (don't wait for instruments to load)
   useEffect(() => {
-    if (isOpen && initialSymbol && !editingGTT && instruments.length > 0 && !selectedInstrument) {
+    if (isOpen && initialSymbol && positionDataToUse && !editingGTT && !selectedInstrument && !currentLTP) {
+      console.log('[GTTModal] Initializing from position data:', positionDataToUse);
+
+      // Create a minimal instrument object
+      const minimalInstrument = {
+        tradingsymbol: initialSymbol,
+        exchange: initialExchange || 'NFO',
+        instrument_token: null, // We'll search for this if needed
+      };
+
+      setSymbol(initialSymbol);
+      setSelectedInstrument(minimalInstrument);
+      setTickSize(0.05); // Default tick size, will be updated if we fetch instrument details
+
+      // Set quantity from position data
+      if (positionDataToUse.quantity) {
+        setQuantity1(positionDataToUse.quantity);
+        setQuantity2(positionDataToUse.quantity);
+      }
+
+      // Use current price from position data immediately
+      if (positionDataToUse.currentPrice) {
+        console.log('[GTTModal] Using position currentPrice:', positionDataToUse.currentPrice);
+        setCurrentLTP(positionDataToUse.currentPrice);
+        prefillPricesBasedOnLTP(positionDataToUse.currentPrice);
+        setInitialLTPCaptured(true);
+      }
+
+      // Search for the full instrument details in background to get instrument_token and tick_size
+      searchInstruments(initialSymbol);
+    }
+  }, [isOpen, initialSymbol, positionDataToUse, editingGTT, selectedInstrument, currentLTP]);
+
+  // Fetch LTP when symbol is pre-filled from watchlist (when no position data)
+  useEffect(() => {
+    if (isOpen && initialSymbol && !positionDataToUse && !editingGTT && instruments.length > 0 && !selectedInstrument) {
       const instrument = instruments.find(
         (i) => i.tradingsymbol === initialSymbol
       );
@@ -268,24 +303,11 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
           setTickSize(0.05);
         }
 
-        // Set quantity based on position data if available
-        if (positionDataToUse?.quantity) {
-          const qty = positionDataToUse.quantity;
-          setQuantity1(qty);
-          setQuantity2(qty);
-        } else {
-          setQuantity1(lotSize);
-          setQuantity2(lotSize);
-        }
+        setQuantity1(lotSize);
+        setQuantity2(lotSize);
 
-        // Use current price from position data if available, otherwise fetch LTP
-        if (positionDataToUse?.currentPrice) {
-          console.log('[GTTModal] Using position currentPrice:', positionDataToUse.currentPrice);
-          setCurrentLTP(positionDataToUse.currentPrice);
-          prefillPricesBasedOnLTP(positionDataToUse.currentPrice);
-          setInitialLTPCaptured(true);
-        } else if (instrument.instrument_token) {
-          // Fetch LTP for non-position cases
+        // Fetch LTP for non-position cases
+        if (instrument.instrument_token) {
           console.log('[GTTModal] Fetching LTP for instrument:', instrument.tradingsymbol);
           fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange).then(ltp => {
             if (ltp) {
@@ -444,6 +466,50 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
     }
   };
 
+  const searchInstruments = async (searchTerm: string) => {
+    if (!searchTerm || searchTerm.length < 2) return null;
+
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=${exchange}&search=${encodeURIComponent(searchTerm)}`;
+
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        console.error('[GTTModal] Instrument search failed:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.instruments && data.instruments.length > 0) {
+        const exactMatch = data.instruments.find((i: any) => i.tradingsymbol === searchTerm);
+        const instrument = exactMatch || data.instruments[0];
+
+        console.log('[GTTModal] Found instrument details:', instrument);
+
+        // Update instrument details without overwriting existing prices/quantities
+        setSelectedInstrument(instrument);
+
+        // Update tick size
+        const instrumentTickSize = parseFloat(instrument.tick_size);
+        if (!isNaN(instrumentTickSize) && instrumentTickSize > 0) {
+          setTickSize(instrumentTickSize);
+        }
+
+        return instrument;
+      }
+    } catch (err) {
+      console.error('[GTTModal] Instrument search error:', err);
+    }
+
+    return null;
+  };
+
   const handleSymbolSearch = async (value: string) => {
     setSymbol(value);
 
@@ -564,12 +630,9 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
     }
   };
 
-  const selectInstrument = (instrument: any) => {
+  const selectInstrument = (instrument: any, preserveExistingData: boolean = false) => {
     setSymbol(instrument.tradingsymbol);
     setSelectedInstrument(instrument);
-    const lotSize = parseInt(instrument.lot_size) || 1;
-    setQuantity1(lotSize);
-    setQuantity2(lotSize);
 
     // Set tick size from instrument data
     const instrumentTickSize = parseFloat(instrument.tick_size);
@@ -579,17 +642,24 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
       setTickSize(0.05); // Default fallback
     }
 
+    // Only update quantities and fetch LTP if not preserving existing data
+    if (!preserveExistingData) {
+      const lotSize = parseInt(instrument.lot_size) || 1;
+      setQuantity1(lotSize);
+      setQuantity2(lotSize);
+
+      if (instrument.instrument_token) {
+        // Fetch LTP immediately without blocking UI
+        fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange).then(ltp => {
+          if (ltp) {
+            prefillPricesBasedOnLTP(ltp);
+          }
+        }).catch(console.error);
+      }
+    }
+
     setShowSuggestions(false);
     setFilteredInstruments([]);
-
-    if (instrument.instrument_token) {
-      // Fetch LTP immediately without blocking UI
-      fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange).then(ltp => {
-        if (ltp) {
-          prefillPricesBasedOnLTP(ltp);
-        }
-      }).catch(console.error);
-    }
   };
 
   const calculatePercentFromLTP = (price: string) => {
@@ -609,8 +679,17 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         throw new Error('Please enter a symbol');
       }
 
-      if (!selectedInstrument || !selectedInstrument.instrument_token) {
-        throw new Error('Please select a valid instrument from the dropdown list');
+      // If we don't have instrument_token yet, try to fetch it
+      let instrumentToUse = selectedInstrument;
+      if (!instrumentToUse || !instrumentToUse.instrument_token) {
+        console.log('[GTTModal] Missing instrument token, searching...');
+        const foundInstrument = await searchInstruments(symbol);
+
+        if (!foundInstrument || !foundInstrument.instrument_token) {
+          throw new Error('Please select a valid instrument from the dropdown list');
+        }
+
+        instrumentToUse = foundInstrument;
       }
 
       if (!editingGTT && selectedBrokerIds.length === 0) {
@@ -684,7 +763,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                 broker_connection_id: orderInfo.brokerId,
                 trading_symbol: symbol,
                 exchange: exchange,
-                instrument_token: selectedInstrument.instrument_token,
+                instrument_token: instrumentToUse.instrument_token,
                 condition_type: gttType,
                 transaction_type: transactionType,
                 product_type_1: product1,
@@ -750,13 +829,13 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         return;
       }
 
-      const ltp = await fetchLTP(selectedInstrument.instrument_token);
+      const ltp = await fetchLTP(instrumentToUse.instrument_token);
 
       const gttData: any = {
         type: gttType,
         'condition[exchange]': exchange,
         'condition[tradingsymbol]': symbol,
-        'condition[instrument_token]': selectedInstrument.instrument_token,
+        'condition[instrument_token]': instrumentToUse.instrument_token,
         'orders[0][exchange]': exchange,
         'orders[0][tradingsymbol]': symbol,
         'orders[0][transaction_type]': transactionType,
@@ -828,7 +907,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
       }
 
       const firstTriggerValue = gttData['condition[trigger_values][0]'];
-      let lastPrice = ltp || selectedInstrument.last_price;
+      let lastPrice = ltp || instrumentToUse.last_price;
       if (!lastPrice || lastPrice === firstTriggerValue) {
         lastPrice = Math.round((firstTriggerValue + 5) * 100) / 100;
       }
