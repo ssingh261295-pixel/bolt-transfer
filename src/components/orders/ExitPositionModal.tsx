@@ -172,13 +172,44 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
           const gttOrderIds = associatedOrders.filter(o => o.type === 'GTT').map(o => o.id);
           const hmtOrderIds = associatedOrders.filter(o => o.type === 'HMT GTT').map(o => o.id);
 
+          // Delete GTT orders from Zerodha API first, then from database
           if (gttOrderIds.length > 0) {
-            await supabase
+            // Fetch GTT orders to get their gtt_trigger_id and broker_connection_id
+            const { data: gttOrders } = await supabase
               .from('gtt_orders')
-              .delete()
+              .select('id, gtt_trigger_id, broker_connection_id')
               .in('id', gttOrderIds);
+
+            if (gttOrders) {
+              // Delete each GTT from Zerodha API
+              for (const gttOrder of gttOrders) {
+                if (gttOrder.gtt_trigger_id && gttOrder.broker_connection_id) {
+                  try {
+                    await fetch(
+                      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-gtt?broker_id=${gttOrder.broker_connection_id}&gtt_id=${gttOrder.gtt_trigger_id}`,
+                      {
+                        method: 'DELETE',
+                        headers: {
+                          'Authorization': `Bearer ${session?.access_token}`,
+                          'Content-Type': 'application/json',
+                        },
+                      }
+                    );
+                  } catch (apiErr) {
+                    console.error(`Failed to delete GTT ${gttOrder.gtt_trigger_id} from Zerodha:`, apiErr);
+                  }
+                }
+              }
+
+              // Now delete from local database
+              await supabase
+                .from('gtt_orders')
+                .delete()
+                .in('id', gttOrderIds);
+            }
           }
 
+          // Cancel HMT GTT orders
           if (hmtOrderIds.length > 0) {
             await supabase
               .from('hmt_gtt_orders')
