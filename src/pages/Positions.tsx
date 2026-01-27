@@ -334,6 +334,8 @@ export function Positions() {
     const ltp = position.instrument_token ? getLTP(position.instrument_token) : null;
     const capturedPrice = ltp ?? position.current_price ?? position.average_price;
 
+    console.log('[Positions] Opening GTT - LTP:', ltp, 'Current Price:', position.current_price, 'Average Price:', position.average_price, 'Captured Price:', capturedPrice);
+
     const positionSnapshot = {
       ...position,
       current_price: capturedPrice
@@ -352,6 +354,8 @@ export function Positions() {
   const handleOpenHMTGTT = (position: any) => {
     const ltp = position.instrument_token ? getLTP(position.instrument_token) : null;
     const capturedPrice = ltp ?? position.current_price ?? position.average_price;
+
+    console.log('[Positions] Opening HMT GTT - LTP:', ltp, 'Current Price:', position.current_price, 'Average Price:', position.average_price, 'Captured Price:', capturedPrice);
 
     const positionSnapshot = {
       ...position,

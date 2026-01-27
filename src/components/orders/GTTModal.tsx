@@ -28,15 +28,17 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
   const { session } = useAuth();
   const initialPositionDataRef = useRef<typeof positionData | null>(null);
 
-  if (isOpen && positionData && !initialPositionDataRef.current) {
-    initialPositionDataRef.current = positionData;
-  }
+  // Capture position data when modal opens and clear when it closes
+  useEffect(() => {
+    if (isOpen && positionData) {
+      console.log('[GTTModal] Position data received:', positionData);
+      initialPositionDataRef.current = positionData;
+    } else if (!isOpen) {
+      initialPositionDataRef.current = null;
+    }
+  }, [isOpen, positionData]);
 
-  if (!isOpen && initialPositionDataRef.current) {
-    initialPositionDataRef.current = null;
-  }
-
-  const positionDataToUse = initialPositionDataRef.current || positionData;
+  const positionDataToUse = positionData || initialPositionDataRef.current;
 
   const [symbol, setSymbol] = useState(initialSymbol || '');
   const [exchange, setExchange] = useState(initialExchange || 'NFO');
@@ -278,11 +280,13 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
 
         // Use current price from position data if available, otherwise fetch LTP
         if (positionDataToUse?.currentPrice) {
+          console.log('[GTTModal] Using position currentPrice:', positionDataToUse.currentPrice);
           setCurrentLTP(positionDataToUse.currentPrice);
           prefillPricesBasedOnLTP(positionDataToUse.currentPrice);
           setInitialLTPCaptured(true);
         } else if (instrument.instrument_token) {
           // Fetch LTP for non-position cases
+          console.log('[GTTModal] Fetching LTP for instrument:', instrument.tradingsymbol);
           fetchLTP(instrument.instrument_token, instrument.tradingsymbol, instrument.exchange).then(ltp => {
             if (ltp) {
               prefillPricesBasedOnLTP(ltp);
@@ -291,7 +295,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         }
       }
     }
-  }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT, selectedInstrument]);
+  }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT, selectedInstrument, positionDataToUse]);
 
   // Re-calculate prefilled values when GTT type or transaction type changes
   useEffect(() => {
