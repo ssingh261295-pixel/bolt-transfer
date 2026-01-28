@@ -712,6 +712,27 @@ export function GTTOrders() {
         return 'NRML';
       };
 
+      let currentLTP = null;
+      try {
+        const brokerIdToUse = gtt.broker_info?.id || selectedBrokerId;
+        const instrumentKey = `${gtt.condition?.exchange}:${gtt.condition?.tradingsymbol}`;
+        const ltpUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${brokerIdToUse}&instruments=${instrumentKey}`;
+
+        const ltpResponse = await fetch(ltpUrl, {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const ltpData = await ltpResponse.json();
+        if (ltpData.success && ltpData.data && ltpData.data[instrumentKey]) {
+          currentLTP = ltpData.data[instrumentKey].last_price;
+        }
+      } catch (err) {
+        console.error('Failed to fetch LTP, continuing without reference price:', err);
+      }
+
       const hmtGttData: any = {
         user_id: user?.id,
         broker_connection_id: gtt.broker_info?.id,
@@ -724,7 +745,8 @@ export function GTTOrders() {
         product_type_1: mapProductType(gtt.orders?.[0]?.product || 'CNC'),
         trigger_price_1: gtt.condition?.trigger_values?.[0] || 0,
         condition_type: isOCO ? 'two-leg' : 'single',
-        status: 'active'
+        status: 'active',
+        reference_price: currentLTP
       };
 
       if (isOCO) {
@@ -794,6 +816,27 @@ export function GTTOrders() {
           return 'NRML';
         };
 
+        let currentLTP = null;
+        try {
+          const brokerIdToUse = gtt.broker_info?.id || selectedBrokerId;
+          const instrumentKey = `${gtt.condition?.exchange}:${gtt.condition?.tradingsymbol}`;
+          const ltpUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-ltp?broker_id=${brokerIdToUse}&instruments=${instrumentKey}`;
+
+          const ltpResponse = await fetch(ltpUrl, {
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          const ltpData = await ltpResponse.json();
+          if (ltpData.success && ltpData.data && ltpData.data[instrumentKey]) {
+            currentLTP = ltpData.data[instrumentKey].last_price;
+          }
+        } catch (err) {
+          console.error('Failed to fetch LTP, continuing without reference price:', err);
+        }
+
         const hmtGttData: any = {
           user_id: user?.id,
           broker_connection_id: gtt.broker_info?.id,
@@ -806,7 +849,8 @@ export function GTTOrders() {
           product_type_1: mapProductType(gtt.orders?.[0]?.product || 'CNC'),
           trigger_price_1: gtt.condition?.trigger_values?.[0] || 0,
           condition_type: isOCO ? 'two-leg' : 'single',
-          status: 'active'
+          status: 'active',
+          reference_price: currentLTP
         };
 
         if (isOCO) {

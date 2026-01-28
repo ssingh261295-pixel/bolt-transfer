@@ -19,6 +19,7 @@ export interface HMTTrigger {
   trigger_price_2: number | null;
   order_price_2: number | null;
   quantity_2: number | null;
+  reference_price?: number | null;
   status: 'active' | 'processing' | 'triggered' | 'failed' | 'cancelled' | 'expired';
   parent_id: string | null;
   metadata?: {

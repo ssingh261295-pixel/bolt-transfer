@@ -25,19 +25,33 @@ export class TriggerEvaluator {
 
   /**
    * Evaluate single trigger condition
+   * If reference_price exists, verify price has CROSSED the trigger threshold
    */
   private static evaluateSingleTrigger(
     trigger: HMTTrigger,
     ltp: number
   ): TriggerExecution | null {
     let shouldTrigger = false;
+    const hasReferencePrice = trigger.reference_price !== null && trigger.reference_price !== undefined;
 
     if (trigger.transaction_type === 'BUY') {
       // Buy trigger: LTP >= trigger price
-      shouldTrigger = ltp >= trigger.trigger_price_1;
+      if (hasReferencePrice) {
+        // Verify price has crossed from below: reference was below trigger, now at or above
+        shouldTrigger = ltp >= trigger.trigger_price_1 && trigger.reference_price! < trigger.trigger_price_1;
+      } else {
+        // No reference price, use simple comparison (legacy behavior)
+        shouldTrigger = ltp >= trigger.trigger_price_1;
+      }
     } else {
       // Sell trigger: LTP <= trigger price
-      shouldTrigger = ltp <= trigger.trigger_price_1;
+      if (hasReferencePrice) {
+        // Verify price has crossed from above: reference was above trigger, now at or below
+        shouldTrigger = ltp <= trigger.trigger_price_1 && trigger.reference_price! > trigger.trigger_price_1;
+      } else {
+        // No reference price, use simple comparison (legacy behavior)
+        shouldTrigger = ltp <= trigger.trigger_price_1;
+      }
     }
 
     if (!shouldTrigger) {
@@ -77,14 +91,26 @@ export class TriggerEvaluator {
     trigger: HMTTrigger,
     ltp: number
   ): TriggerExecution | null {
+    const hasReferencePrice = trigger.reference_price !== null && trigger.reference_price !== undefined;
+
     // Check Leg 1 (typically stop-loss)
     let leg1Triggered = false;
     if (trigger.transaction_type === 'SELL') {
       // Exiting long position: stop-loss triggers when price goes DOWN
-      leg1Triggered = ltp <= trigger.trigger_price_1;
+      if (hasReferencePrice) {
+        // Verify price has crossed from above: reference was above trigger, now at or below
+        leg1Triggered = ltp <= trigger.trigger_price_1 && trigger.reference_price! > trigger.trigger_price_1;
+      } else {
+        leg1Triggered = ltp <= trigger.trigger_price_1;
+      }
     } else {
       // Exiting short position: stop-loss triggers when price goes UP
-      leg1Triggered = ltp >= trigger.trigger_price_1;
+      if (hasReferencePrice) {
+        // Verify price has crossed from below: reference was below trigger, now at or above
+        leg1Triggered = ltp >= trigger.trigger_price_1 && trigger.reference_price! < trigger.trigger_price_1;
+      } else {
+        leg1Triggered = ltp >= trigger.trigger_price_1;
+      }
     }
 
     // Check Leg 2 (typically target)
@@ -92,10 +118,20 @@ export class TriggerEvaluator {
     if (trigger.trigger_price_2 !== null) {
       if (trigger.transaction_type === 'SELL') {
         // Exiting long position: target triggers when price goes UP
-        leg2Triggered = ltp >= trigger.trigger_price_2;
+        if (hasReferencePrice) {
+          // Verify price has crossed from below: reference was below trigger, now at or above
+          leg2Triggered = ltp >= trigger.trigger_price_2 && trigger.reference_price! < trigger.trigger_price_2;
+        } else {
+          leg2Triggered = ltp >= trigger.trigger_price_2;
+        }
       } else {
         // Exiting short position: target triggers when price goes DOWN
-        leg2Triggered = ltp <= trigger.trigger_price_2;
+        if (hasReferencePrice) {
+          // Verify price has crossed from above: reference was above trigger, now at or below
+          leg2Triggered = ltp <= trigger.trigger_price_2 && trigger.reference_price! > trigger.trigger_price_2;
+        } else {
+          leg2Triggered = ltp <= trigger.trigger_price_2;
+        }
       }
     }
 

@@ -770,7 +770,8 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                 trigger_price_1: trigger1,
                 order_price_1: limitPrice1,
                 quantity_1: quantity1,
-                status: 'active'
+                status: 'active',
+                reference_price: currentLTP
               };
 
               if (gttType === 'two-leg') {
