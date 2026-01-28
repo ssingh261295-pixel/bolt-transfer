@@ -1398,7 +1398,11 @@ export function HMTGTTOrders() {
           onSuccess={() => {
             loadHMTGTTOrders(true);
           }}
-          brokerConnectionId={editingGTT ? editingGTT.broker_connection_id : selectedBrokerId}
+          brokerConnectionId={
+            editingGTT && !editingGTT.bulkEdit
+              ? editingGTT.broker_connection_id || selectedBrokerId
+              : selectedBrokerId
+          }
           editingGTT={editingGTT}
           allBrokers={brokers}
           isHMTMode={true}

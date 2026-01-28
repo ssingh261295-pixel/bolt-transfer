@@ -1446,7 +1446,11 @@ export function GTTOrders() {
           onSuccess={() => {
             syncWithZerodha();
           }}
-          brokerConnectionId={selectedBrokerId}
+          brokerConnectionId={
+            editingGTT && !editingGTT.bulkEdit
+              ? editingGTT.broker_info?.id || selectedBrokerId
+              : selectedBrokerId
+          }
           editingGTT={editingGTT}
           allBrokers={brokers}
         />
