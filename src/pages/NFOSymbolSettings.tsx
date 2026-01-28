@@ -139,9 +139,25 @@ export function NFOSymbolSettings() {
 
     try {
       const brokerId = selectedBroker === 'global' ? null : selectedBroker;
-      const updates = Array.from(editedSymbols).map(symbol => {
+
+      for (const symbol of Array.from(editedSymbols)) {
         const setting = settings.get(symbol)!;
-        return {
+
+        let query = supabase
+          .from('nfo_symbol_settings')
+          .select('id')
+          .eq('user_id', user?.id!)
+          .eq('symbol', symbol);
+
+        if (brokerId) {
+          query = query.eq('broker_connection_id', brokerId);
+        } else {
+          query = query.is('broker_connection_id', null);
+        }
+
+        const { data: existing } = await query.single();
+
+        const settingData = {
           user_id: user?.id,
           broker_connection_id: brokerId,
           symbol: setting.symbol,
@@ -151,15 +167,22 @@ export function NFOSymbolSettings() {
           lot_multiplier: setting.lot_multiplier,
           is_enabled: setting.is_enabled
         };
-      });
 
-      const { error } = await supabase
-        .from('nfo_symbol_settings')
-        .upsert(updates, {
-          onConflict: 'user_id,symbol,broker_connection_id'
-        });
+        if (existing) {
+          const { error } = await supabase
+            .from('nfo_symbol_settings')
+            .update(settingData)
+            .eq('id', existing.id);
 
-      if (error) throw error;
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('nfo_symbol_settings')
+            .insert([settingData]);
+
+          if (error) throw error;
+        }
+      }
 
       setMessage(`Successfully saved ${editedSymbols.size} symbol settings`);
       setMessageType('success');
