@@ -225,7 +225,10 @@ export function TradingViewLogs() {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(log.payload)
+        body: JSON.stringify({
+          ...log.payload,
+          _execution_mode: 'MANUAL'
+        })
       });
 
       const result = await response.json();

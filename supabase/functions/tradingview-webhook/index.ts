@@ -345,46 +345,56 @@ Deno.serve(async (req: Request) => {
 
     webhookKeyId = keyData.id;
 
-    // CRITICAL: Check for duplicate IMMEDIATELY after webhook key validation
+    // Extract execution mode (MANUAL from UI, AUTOMATED from TradingView)
+    const executionMode = rawPayload._execution_mode ?? 'AUTOMATED';
+
+    console.log('[TradingView Webhook] Execution mode:', executionMode);
+
+    // CRITICAL: Check for duplicate ONLY for AUTOMATED TradingView webhooks
     // This prevents duplicate webhooks from TradingView from being logged multiple times
-    const now = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const istTime = new Date(now.getTime() + istOffset);
-    const executionDate = istTime.toISOString().split('T')[0];
+    // MANUAL execution from UI is ALWAYS allowed (operator override)
+    if (executionMode === 'AUTOMATED') {
+      const now = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istTime = new Date(now.getTime() + istOffset);
+      const executionDate = istTime.toISOString().split('T')[0];
 
-    // Enhanced payload hash with ATR and more precise price to better identify unique signals
-    const payloadHash = `${normalized.symbol}_${normalized.trade_type}_${normalized.price.toFixed(2)}_${normalized.atr.toFixed(2)}`;
+      // Enhanced payload hash with ATR and more precise price to better identify unique signals
+      const payloadHash = `${normalized.symbol}_${normalized.trade_type}_${normalized.price.toFixed(2)}_${normalized.atr.toFixed(2)}`;
 
-    // First check: Try to insert into tracker (handles race conditions at DB level)
-    const trackerInsertResult = await supabase.rpc('try_insert_execution_tracker', {
-      p_webhook_key_id: keyData.id,
-      p_symbol: normalized.symbol,
-      p_trade_type: normalized.trade_type,
-      p_price: normalized.price,
-      p_execution_date: executionDate,
-      p_payload_hash: payloadHash
-    });
-
-    if (trackerInsertResult.error || !trackerInsertResult.data) {
-      console.log('[TradingView Webhook] DUPLICATE SIGNAL BLOCKED (TradingView retry detected):', {
-        symbol: normalized.symbol,
-        trade_type: normalized.trade_type,
-        execution_date: executionDate,
-        webhook_key: keyData.name,
-        payload_hash: payloadHash
+      // First check: Try to insert into tracker (handles race conditions at DB level)
+      const trackerInsertResult = await supabase.rpc('try_insert_execution_tracker', {
+        p_webhook_key_id: keyData.id,
+        p_symbol: normalized.symbol,
+        p_trade_type: normalized.trade_type,
+        p_price: normalized.price,
+        p_execution_date: executionDate,
+        p_payload_hash: payloadHash
       });
 
-      // Return immediately WITHOUT logging to avoid duplicate log entries
-      // The original webhook was already logged with status 'success'
-      return new Response(
-        JSON.stringify({
-          success: false,
-          blocked_by_platform: true,
-          reason: 'Duplicate signal - already processed',
-          message: `This ${normalized.trade_type} signal for ${normalized.symbol} was already executed today. Webhook duplicate detected.`
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (trackerInsertResult.error || !trackerInsertResult.data) {
+        console.log('[TradingView Webhook] DUPLICATE SIGNAL BLOCKED (TradingView retry detected):', {
+          symbol: normalized.symbol,
+          trade_type: normalized.trade_type,
+          execution_date: executionDate,
+          webhook_key: keyData.name,
+          payload_hash: payloadHash
+        });
+
+        // Return immediately WITHOUT logging to avoid duplicate log entries
+        // The original webhook was already logged with status 'success'
+        return new Response(
+          JSON.stringify({
+            success: false,
+            blocked_by_platform: true,
+            reason: 'Duplicate signal - already processed',
+            message: `This ${normalized.trade_type} signal for ${normalized.symbol} was already executed today. Webhook duplicate detected.`
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else {
+      console.log('[TradingView Webhook] MANUAL execution - duplicate detection SKIPPED');
     }
 
     // Note: 60-second duplicate check removed to allow quick successive signals
@@ -790,7 +800,7 @@ Deno.serve(async (req: Request) => {
     await supabase.from('tradingview_webhook_logs').insert({
       webhook_key_id: keyData.id,
       source_ip: sourceIp,
-      payload: rawPayload,
+      payload: { ...rawPayload, _execution_mode: executionMode },
       status: successCount > 0 ? 'success' : 'failed',
       accounts_executed: executionResults,
       response_message: responseMessage
