@@ -304,6 +304,7 @@ export function TradingViewLogs() {
       'Trade Score',
       'Trade Type',
       'Price',
+      'ATR',
       'Target Points',
       'SL Points',
       'ADX'
@@ -335,6 +336,7 @@ export function TradingViewLogs() {
         log.payload?.trade_score || '',
         log.payload?.trade_type || '',
         log.payload?.price || '',
+        log.payload?.atr || '',
         log.payload?.target_points || '',
         log.payload?.sl_points || '',
         log.payload?.adx || ''
