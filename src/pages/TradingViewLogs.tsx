@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Filter, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Play, Download } from 'lucide-react';
+import { Search, Filter, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Play, Download, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -35,6 +35,13 @@ export function TradingViewLogs() {
   const [executingLogId, setExecutingLogId] = useState<string | null>(null);
   const [executeMessage, setExecuteMessage] = useState('');
   const [executeError, setExecuteError] = useState('');
+  const [deletingLogId, setDeletingLogId] = useState<string | null>(null);
+  const [deleteMessage, setDeleteMessage] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [logToDelete, setLogToDelete] = useState<string | null>(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [selectedLogs, setSelectedLogs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) {
@@ -250,6 +257,96 @@ export function TradingViewLogs() {
     }
   };
 
+  const handleDeleteConfirm = (logId: string) => {
+    setLogToDelete(logId);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDelete = async () => {
+    if (!logToDelete) return;
+
+    setDeletingLogId(logToDelete);
+    setDeleteError('');
+    setDeleteMessage('');
+
+    try {
+      const { error } = await supabase
+        .from('tradingview_webhook_logs')
+        .delete()
+        .eq('id', logToDelete);
+
+      if (error) throw error;
+
+      setDeleteMessage('Log deleted successfully');
+      setTimeout(() => setDeleteMessage(''), 3000);
+      loadLogs();
+      setSelectedLogs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(logToDelete);
+        return newSet;
+      });
+    } catch (err: any) {
+      console.error('Error deleting log:', err);
+      setDeleteError(`Failed to delete: ${err.message}`);
+      setTimeout(() => setDeleteError(''), 5000);
+    } finally {
+      setDeletingLogId(null);
+      setShowDeleteConfirm(false);
+      setLogToDelete(null);
+    }
+  };
+
+  const handleBulkDeleteConfirm = () => {
+    setShowBulkDeleteConfirm(true);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedLogs.size === 0) return;
+
+    setDeleteError('');
+    setDeleteMessage('');
+
+    try {
+      const { error } = await supabase
+        .from('tradingview_webhook_logs')
+        .delete()
+        .in('id', Array.from(selectedLogs));
+
+      if (error) throw error;
+
+      setDeleteMessage(`Successfully deleted ${selectedLogs.size} log(s)`);
+      setTimeout(() => setDeleteMessage(''), 3000);
+      setSelectedLogs(new Set());
+      loadLogs();
+    } catch (err: any) {
+      console.error('Error deleting logs:', err);
+      setDeleteError(`Failed to delete: ${err.message}`);
+      setTimeout(() => setDeleteError(''), 5000);
+    } finally {
+      setShowBulkDeleteConfirm(false);
+    }
+  };
+
+  const toggleSelectLog = (logId: string) => {
+    setSelectedLogs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(logId)) {
+        newSet.delete(logId);
+      } else {
+        newSet.add(logId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedLogs.size === paginatedLogs.length) {
+      setSelectedLogs(new Set());
+    } else {
+      setSelectedLogs(new Set(paginatedLogs.map(log => log.id)));
+    }
+  };
+
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
       const matchesSearch =
@@ -296,18 +393,41 @@ export function TradingViewLogs() {
     const headers = [
       'Date',
       'Time',
+      'Webhook Key',
+      'Status',
       'Strategy',
-      'HMT Automation',
       'Symbol',
+      'Trade Type',
       'Entry Phase',
       'Trade Grade',
       'Trade Score',
-      'Trade Type',
       'Price',
+      'Close',
+      'Open',
+      'High',
+      'Low',
+      'Volume',
       'ATR',
+      'ADX',
+      'Plus DI',
+      'Minus DI',
+      'RSI',
+      'MACD',
+      'MACD Signal',
+      'MACD Histogram',
       'Target Points',
       'SL Points',
-      'ADX'
+      'Target Price',
+      'SL Price',
+      'Risk Reward',
+      'Timeframe',
+      'Ticker',
+      'Exchange',
+      'Interval',
+      'Source IP',
+      'Accounts Executed',
+      'Response Message',
+      'Error Message'
     ];
 
     const rows = filteredLogs.map(log => {
@@ -325,21 +445,48 @@ export function TradingViewLogs() {
         second: '2-digit'
       });
 
+      const accountsExecutedCount = log.accounts_executed
+        ? `${log.accounts_executed.filter((a: any) => a.order_placed).length}/${log.accounts_executed.length}`
+        : '0/0';
+
       return [
         dateStr,
         timeStr,
-        log.payload?.strategy || '',
         log.webhook_key_name || '',
+        log.status || '',
+        log.payload?.strategy || '',
         log.payload?.symbol || '',
+        log.payload?.trade_type || '',
         log.payload?.entry_phase || '',
         log.payload?.trade_grade || '',
         log.payload?.trade_score || '',
-        log.payload?.trade_type || '',
         log.payload?.price || '',
+        log.payload?.close || '',
+        log.payload?.open || '',
+        log.payload?.high || '',
+        log.payload?.low || '',
+        log.payload?.volume || '',
         log.payload?.atr || '',
+        log.payload?.adx || '',
+        log.payload?.plus_di || '',
+        log.payload?.minus_di || '',
+        log.payload?.rsi || '',
+        log.payload?.macd || '',
+        log.payload?.macd_signal || '',
+        log.payload?.macd_histogram || '',
         log.payload?.target_points || '',
         log.payload?.sl_points || '',
-        log.payload?.adx || ''
+        log.payload?.target_price || '',
+        log.payload?.sl_price || '',
+        log.payload?.risk_reward || '',
+        log.payload?.timeframe || '',
+        log.payload?.ticker || '',
+        log.payload?.exchange || '',
+        log.payload?.interval || '',
+        log.source_ip || '',
+        accountsExecutedCount,
+        log.response_message || '',
+        log.error_message || ''
       ];
     });
 
@@ -389,6 +536,18 @@ export function TradingViewLogs() {
       {executeError && (
         <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
           {executeError}
+        </div>
+      )}
+
+      {deleteMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+          {deleteMessage}
+        </div>
+      )}
+
+      {deleteError && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
+          {deleteError}
         </div>
       )}
 
@@ -474,6 +633,16 @@ export function TradingViewLogs() {
               <Download className="w-4 h-4" />
               Export CSV
             </button>
+
+            {selectedLogs.size > 0 && (
+              <button
+                onClick={handleBulkDeleteConfirm}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 whitespace-nowrap"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete ({selectedLogs.size})
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
@@ -575,12 +744,20 @@ export function TradingViewLogs() {
               {paginatedLogs.map((log) => (
                 <div key={log.id} className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 text-sm">{log.payload?.symbol || '-'}</div>
-                      {log.payload?.strategy && (
-                        <div className="text-xs text-blue-600 font-medium mt-0.5">{log.payload.strategy}</div>
-                      )}
-                      <div className="text-xs text-gray-500 mt-0.5">{formatDate(log.received_at)}</div>
+                    <div className="flex items-start gap-2 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedLogs.has(log.id)}
+                        onChange={() => toggleSelectLog(log.id)}
+                        className="w-4 h-4 mt-1 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900 text-sm">{log.payload?.symbol || '-'}</div>
+                        {log.payload?.strategy && (
+                          <div className="text-xs text-blue-600 font-medium mt-0.5">{log.payload.strategy}</div>
+                        )}
+                        <div className="text-xs text-gray-500 mt-0.5">{formatDate(log.received_at)}</div>
+                      </div>
                     </div>
                     {getStatusBadge(log.status)}
                   </div>
@@ -641,6 +818,18 @@ export function TradingViewLogs() {
                         <Play className="w-4 h-4" />
                       )}
                     </button>
+                    <button
+                      onClick={() => handleDeleteConfirm(log.id)}
+                      disabled={deletingLogId === log.id}
+                      className="py-2 px-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition disabled:opacity-50"
+                      title="Delete log"
+                    >
+                      {deletingLogId === log.id ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -651,6 +840,14 @@ export function TradingViewLogs() {
               <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="px-4 py-3 w-12">
+                    <input
+                      type="checkbox"
+                      checked={paginatedLogs.length > 0 && selectedLogs.size === paginatedLogs.length}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Webhook Key</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Symbol</th>
@@ -665,6 +862,14 @@ export function TradingViewLogs() {
               <tbody className="divide-y divide-gray-200">
                 {paginatedLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-gray-50 transition">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedLogs.has(log.id)}
+                        onChange={() => toggleSelectLog(log.id)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {formatDate(log.received_at)}
                     </td>
@@ -726,7 +931,18 @@ export function TradingViewLogs() {
                           ) : (
                             <Play className="w-4 h-4" />
                           )}
-                          Execute
+                        </button>
+                        <button
+                          onClick={() => handleDeleteConfirm(log.id)}
+                          disabled={deletingLogId === log.id}
+                          className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                          title="Delete log"
+                        >
+                          {deletingLogId === log.id ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
                         </button>
                       </div>
                     </td>
@@ -903,6 +1119,65 @@ export function TradingViewLogs() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="w-6 h-6 text-red-600" />
+              <h2 className="text-xl font-bold text-gray-900">Confirm Delete</h2>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete this webhook log? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setLogToDelete(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="w-6 h-6 text-red-600" />
+              <h2 className="text-xl font-bold text-gray-900">Confirm Bulk Delete</h2>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete {selectedLogs.size} selected log(s)? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+              >
+                Delete {selectedLogs.size} Log(s)
+              </button>
             </div>
           </div>
         </div>
