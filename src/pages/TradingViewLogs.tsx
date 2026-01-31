@@ -1036,7 +1036,12 @@ export function TradingViewLogs() {
                             <p className="font-medium text-gray-900">{account.account_name || 'Unknown Account'}</p>
                             <p className="text-sm text-gray-600 capitalize">{account.broker_name || 'Unknown Broker'}</p>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap justify-end">
+                            {account.filter_passed === false && (
+                              <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs font-medium rounded">
+                                Filtered
+                              </span>
+                            )}
                             {account.order_placed && (
                               <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded">
                                 Order Placed
@@ -1051,6 +1056,12 @@ export function TradingViewLogs() {
                         </div>
 
                         <div className="grid grid-cols-2 gap-3 text-sm">
+                          {account.filter_passed === false && account.filter_reason && (
+                            <div className="col-span-2 bg-orange-50 border border-orange-200 rounded p-2">
+                              <span className="text-orange-800 text-sm font-medium">Signal Filtered: </span>
+                              <span className="text-orange-700 text-sm">{account.filter_reason}</span>
+                            </div>
+                          )}
                           {account.order_id && (
                             <div>
                               <span className="text-gray-600">Order ID:</span>

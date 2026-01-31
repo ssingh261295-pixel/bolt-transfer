@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Link as LinkIcon, Trash2, CheckCircle, ExternalLink, Info, AlertCircle, Edit2, XCircle } from 'lucide-react';
+import { Plus, Link as LinkIcon, Trash2, CheckCircle, ExternalLink, Info, AlertCircle, Edit2, XCircle, Filter } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { SignalFiltersModal } from '../components/brokers/SignalFiltersModal';
 
 export function Brokers() {
   const { user, session } = useAuth();
@@ -12,6 +13,7 @@ export function Brokers() {
   const [reconnectingBrokerId, setReconnectingBrokerId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [editingBroker, setEditingBroker] = useState<any>(null);
+  const [filteringBroker, setFilteringBroker] = useState<any>(null);
   const [formData, setFormData] = useState({
     broker_name: 'zerodha',
     api_key: '',
@@ -683,6 +685,21 @@ export function Brokers() {
                   </button>
                 </div>
               )}
+
+              <div className="mt-4">
+                <button
+                  onClick={() => setFilteringBroker(broker)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+                >
+                  <Filter className="w-4 h-4" />
+                  Signal Filters
+                  {broker.signal_filters_enabled && (
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                      Active
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
           );
         })}
@@ -702,6 +719,14 @@ export function Brokers() {
           </div>
         )}
       </div>
+
+      {filteringBroker && (
+        <SignalFiltersModal
+          broker={filteringBroker}
+          onClose={() => setFilteringBroker(null)}
+          onSave={() => loadBrokers()}
+        />
+      )}
     </div>
   );
 }

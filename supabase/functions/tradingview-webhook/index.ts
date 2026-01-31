@@ -78,6 +78,114 @@ function isWithinTradingWindow(): { allowed: boolean; currentTime: string; reaso
   return { allowed: true, currentTime: currentTimeIST };
 }
 
+function evaluateSignalFilters(
+  filters: any,
+  payload: any,
+  symbol: string,
+  tradeType: string
+): { passed: boolean; reason?: string } {
+  if (!filters) {
+    return { passed: true };
+  }
+
+  // Symbol filter
+  if (filters.symbols?.list && Array.isArray(filters.symbols.list) && filters.symbols.list.length > 0) {
+    const mode = filters.symbols.mode || 'whitelist';
+    const symbolInList = filters.symbols.list.includes(symbol);
+
+    if (mode === 'whitelist' && !symbolInList) {
+      return { passed: false, reason: `Symbol ${symbol} not in whitelist` };
+    }
+    if (mode === 'blacklist' && symbolInList) {
+      return { passed: false, reason: `Symbol ${symbol} is blacklisted` };
+    }
+  }
+
+  // Trade type filter
+  if (filters.trade_types) {
+    if (tradeType === 'BUY' && filters.trade_types.allow_buy === false) {
+      return { passed: false, reason: 'BUY trades not allowed' };
+    }
+    if (tradeType === 'SELL' && filters.trade_types.allow_sell === false) {
+      return { passed: false, reason: 'SELL trades not allowed' };
+    }
+  }
+
+  // Time filter
+  if (filters.time_filters?.enabled) {
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istTime = new Date(now.getTime() + istOffset);
+    const hours = istTime.getUTCHours();
+    const minutes = istTime.getUTCMinutes();
+    const currentMinutes = hours * 60 + minutes;
+
+    const [startHour, startMin] = (filters.time_filters.start_time || '09:15').split(':').map(Number);
+    const [endHour, endMin] = (filters.time_filters.end_time || '15:15').split(':').map(Number);
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+
+    if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
+      return { passed: false, reason: `Outside allowed time window (${filters.time_filters.start_time}-${filters.time_filters.end_time})` };
+    }
+  }
+
+  // Trade grade filter
+  if (filters.trade_grade?.enabled && payload.trade_grade) {
+    const gradeOrder = { 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
+    const minGrade = filters.trade_grade.min_grade || 'C';
+    const signalGrade = payload.trade_grade;
+
+    if (gradeOrder[signalGrade] > gradeOrder[minGrade]) {
+      return { passed: false, reason: `Trade grade ${signalGrade} below minimum ${minGrade}` };
+    }
+  }
+
+  // Trade score filter
+  if (filters.trade_score?.enabled && payload.trade_score !== undefined) {
+    const minScore = filters.trade_score.min_score || 5.0;
+    if (payload.trade_score < minScore) {
+      return { passed: false, reason: `Trade score ${payload.trade_score} below minimum ${minScore}` };
+    }
+  }
+
+  // Entry phase filter
+  if (filters.entry_phase?.enabled && payload.entry_phase) {
+    const allowedPhases = filters.entry_phase.allowed_phases || ['EARLY', 'OPTIMAL', 'LATE'];
+    if (!allowedPhases.includes(payload.entry_phase)) {
+      return { passed: false, reason: `Entry phase ${payload.entry_phase} not in allowed list` };
+    }
+  }
+
+  // ADX filter
+  if (filters.adx?.enabled && payload.adx !== undefined) {
+    const minValue = filters.adx.min_value || 0;
+    const maxValue = filters.adx.max_value || 100;
+    if (payload.adx < minValue || payload.adx > maxValue) {
+      return { passed: false, reason: `ADX ${payload.adx} outside range ${minValue}-${maxValue}` };
+    }
+  }
+
+  // Volume filter
+  if (filters.volume?.enabled && payload.vol_avg_5d !== undefined) {
+    const minVolume = filters.volume.min_avg_volume_5d || 0;
+    if (payload.vol_avg_5d < minVolume) {
+      return { passed: false, reason: `Volume ${payload.vol_avg_5d} below minimum ${minVolume}` };
+    }
+  }
+
+  // Price range filter
+  if (filters.price_range?.enabled && payload.price !== undefined) {
+    const minPrice = filters.price_range.min_price || 0;
+    const maxPrice = filters.price_range.max_price || 1000000;
+    if (payload.price < minPrice || payload.price > maxPrice) {
+      return { passed: false, reason: `Price ${payload.price} outside range ${minPrice}-${maxPrice}` };
+    }
+  }
+
+  return { passed: true };
+}
+
 interface NormalizedPayload {
   symbol: string;
   exchange: string;
@@ -422,9 +530,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: brokerAccounts, error: brokerError } = await supabase
+    const { data: brokerAccounts, error: brokerError} = await supabase
       .from('broker_connections')
-      .select('id, account_name, account_holder_name, broker_name, api_key, access_token, is_active')
+      .select('id, account_name, account_holder_name, broker_name, api_key, access_token, is_active, signal_filters_enabled, signal_filters')
       .in('id', accountIds)
       .eq('is_active', true);
 
@@ -510,10 +618,51 @@ Deno.serve(async (req: Request) => {
         account_name: account.account_name || account.account_holder_name || 'Unknown Account',
         broker_name: account.broker_name,
         order_placed: false,
-        hmt_gtt_created: false
+        hmt_gtt_created: false,
+        filter_passed: true
       };
 
       try {
+        // Evaluate signal filters if enabled
+        if (account.signal_filters_enabled && account.signal_filters) {
+          const filterResult = evaluateSignalFilters(
+            account.signal_filters,
+            rawPayload,
+            normalized.symbol,
+            normalized.trade_type
+          );
+
+          accountResult.filter_passed = filterResult.passed;
+
+          if (!filterResult.passed) {
+            accountResult.filter_reason = filterResult.reason;
+            accountResult.error = `Signal filtered: ${filterResult.reason}`;
+
+            console.log(`[TradingView Webhook] Signal filtered for account ${account.id}:`, filterResult.reason);
+
+            // Send notification about filtered signal
+            await supabase.from('notifications').insert({
+              user_id: keyData.user_id,
+              broker_account_id: account.id,
+              type: 'trade_blocked',
+              title: 'Signal Filtered',
+              message: `TradingView signal filtered for ${normalized.symbol}.\n\nReason: ${filterResult.reason}\nTrade Type: ${normalized.trade_type}\nPrice: ₹${normalized.price}\nATR: ${normalized.atr}`,
+              metadata: {
+                source: 'tradingview_webhook',
+                webhook_key_name: keyData.name,
+                blocked_reason: 'signal_filtered',
+                filter_reason: filterResult.reason,
+                symbol: normalized.symbol,
+                trade_type: normalized.trade_type,
+                price: normalized.price,
+                atr: normalized.atr
+              }
+            });
+
+            executionResults.push(accountResult);
+            continue;
+          }
+        }
         const { data: symbolSettings } = await supabase
           .from('nfo_symbol_settings')
           .select('*')
