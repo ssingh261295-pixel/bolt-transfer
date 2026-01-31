@@ -132,12 +132,11 @@ function evaluateSignalFilters(
 
   // Trade grade filter
   if (filters.trade_grade?.enabled && payload.trade_grade) {
-    const gradeOrder = { 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
-    const minGrade = filters.trade_grade.min_grade || 'C';
+    const allowedGrades = filters.trade_grade.allowed_grades || ['A', 'B', 'C', 'D'];
     const signalGrade = payload.trade_grade;
 
-    if (gradeOrder[signalGrade] > gradeOrder[minGrade]) {
-      return { passed: false, reason: `Trade grade ${signalGrade} below minimum ${minGrade}` };
+    if (!allowedGrades.includes(signalGrade)) {
+      return { passed: false, reason: `Trade grade ${signalGrade} not in allowed list` };
     }
   }
 

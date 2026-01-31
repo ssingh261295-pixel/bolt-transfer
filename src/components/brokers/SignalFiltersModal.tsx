@@ -14,7 +14,7 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     symbols: { mode: 'whitelist', list: [] },
     trade_types: { allow_buy: true, allow_sell: true },
     time_filters: { enabled: false, start_time: '09:15', end_time: '15:15', timezone: 'Asia/Kolkata' },
-    trade_grade: { enabled: false, min_grade: 'C' },
+    trade_grade: { enabled: false, allowed_grades: ['A', 'B', 'C', 'D'] },
     trade_score: { enabled: false, min_score: 5.0 },
     entry_phase: { enabled: false, allowed_phases: ['EARLY', 'OPTIMAL', 'LATE'] },
     adx: { enabled: false, min_value: 0, max_value: 100 },
@@ -259,18 +259,26 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                   <span className="text-sm text-gray-700">Enabled</span>
                 </label>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Grade</label>
-                <select
-                  value={filters.trade_grade.min_grade}
-                  onChange={(e) => setFilters({ ...filters, trade_grade: { ...filters.trade_grade, min_grade: e.target.value } })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="A">A (Highest)</option>
-                  <option value="B">B (High)</option>
-                  <option value="C">C (Medium)</option>
-                  <option value="D">D (Low)</option>
-                </select>
+              <div className="space-y-2">
+                {['A', 'B', 'C', 'D', 'F'].map((grade) => (
+                  <label key={grade} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={filters.trade_grade.allowed_grades?.includes(grade) ?? false}
+                      onChange={(e) => {
+                        const currentGrades = filters.trade_grade.allowed_grades || [];
+                        const newGrades = e.target.checked
+                          ? [...currentGrades, grade]
+                          : currentGrades.filter((g: string) => g !== grade);
+                        setFilters({ ...filters, trade_grade: { ...filters.trade_grade, allowed_grades: newGrades } });
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">
+                      Grade {grade} {grade === 'A' && '(Highest)'} {grade === 'B' && '(High)'} {grade === 'C' && '(Medium)'} {grade === 'D' && '(Low)'} {grade === 'F' && '(Fail)'}
+                    </span>
+                  </label>
+                ))}
               </div>
             </div>
 
