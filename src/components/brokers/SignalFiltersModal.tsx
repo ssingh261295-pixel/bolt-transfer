@@ -16,10 +16,11 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     time_filters: { enabled: false, start_time: '09:15', end_time: '15:15', timezone: 'Asia/Kolkata' },
     trade_grade: { enabled: false, allowed_grades: ['A', 'B', 'C', 'D'] },
     trade_score: { enabled: false, min_score: 5.0 },
-    entry_phase: { enabled: false, allowed_phases: ['EARLY', 'OPTIMAL', 'LATE'] },
+    entry_phase: { enabled: false, allowed_phases: ['EARLY', 'MID', 'OPTIMAL', 'LATE'] },
     adx: { enabled: false, min_value: 0, max_value: 100 },
     volume: { enabled: false, min_avg_volume_5d: 0 },
-    price_range: { enabled: false, min_price: 0, max_price: 1000000 }
+    price_range: { enabled: false, min_price: 0, max_price: 1000000 },
+    dist_ema21_atr: { enabled: false, min_value: -10.0, max_value: 10.0 }
   });
   const [symbolInput, setSymbolInput] = useState('');
   const [saving, setSaving] = useState(false);
@@ -321,15 +322,16 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                 </label>
               </div>
               <div className="space-y-2">
-                {['EARLY', 'OPTIMAL', 'LATE'].map((phase) => (
+                {['EARLY', 'MID', 'OPTIMAL', 'LATE'].map((phase) => (
                   <label key={phase} className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={filters.entry_phase.allowed_phases.includes(phase)}
+                      checked={filters.entry_phase.allowed_phases?.includes(phase) ?? false}
                       onChange={(e) => {
+                        const currentPhases = filters.entry_phase.allowed_phases || [];
                         const newPhases = e.target.checked
-                          ? [...filters.entry_phase.allowed_phases, phase]
-                          : filters.entry_phase.allowed_phases.filter((p: string) => p !== phase);
+                          ? [...currentPhases, phase]
+                          : currentPhases.filter((p: string) => p !== phase);
                         setFilters({ ...filters, entry_phase: { ...filters.entry_phase, allowed_phases: newPhases } });
                       }}
                       className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
@@ -430,6 +432,43 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                     type="number"
                     value={filters.price_range.max_price}
                     onChange={(e) => setFilters({ ...filters, price_range: { ...filters.price_range, max_price: parseFloat(e.target.value) } })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-900">Distance from EMA21 (ATR) Filter</h3>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={filters.dist_ema21_atr?.enabled ?? false}
+                    onChange={(e) => setFilters({ ...filters, dist_ema21_atr: { ...filters.dist_ema21_atr, enabled: e.target.checked } })}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">Enabled</span>
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Min Value (ATR)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={filters.dist_ema21_atr?.min_value ?? -10.0}
+                    onChange={(e) => setFilters({ ...filters, dist_ema21_atr: { ...filters.dist_ema21_atr, min_value: parseFloat(e.target.value) } })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Value (ATR)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={filters.dist_ema21_atr?.max_value ?? 10.0}
+                    onChange={(e) => setFilters({ ...filters, dist_ema21_atr: { ...filters.dist_ema21_atr, max_value: parseFloat(e.target.value) } })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>

@@ -150,7 +150,7 @@ function evaluateSignalFilters(
 
   // Entry phase filter
   if (filters.entry_phase?.enabled && payload.entry_phase) {
-    const allowedPhases = filters.entry_phase.allowed_phases || ['EARLY', 'OPTIMAL', 'LATE'];
+    const allowedPhases = filters.entry_phase.allowed_phases || ['EARLY', 'MID', 'OPTIMAL', 'LATE'];
     if (!allowedPhases.includes(payload.entry_phase)) {
       return { passed: false, reason: `Entry phase ${payload.entry_phase} not in allowed list` };
     }
@@ -179,6 +179,15 @@ function evaluateSignalFilters(
     const maxPrice = filters.price_range.max_price || 1000000;
     if (payload.price < minPrice || payload.price > maxPrice) {
       return { passed: false, reason: `Price ${payload.price} outside range ${minPrice}-${maxPrice}` };
+    }
+  }
+
+  // Distance from EMA21 in ATR units filter
+  if (filters.dist_ema21_atr?.enabled && payload.dist_ema21_atr !== undefined) {
+    const minValue = filters.dist_ema21_atr.min_value ?? -10.0;
+    const maxValue = filters.dist_ema21_atr.max_value ?? 10.0;
+    if (payload.dist_ema21_atr < minValue || payload.dist_ema21_atr > maxValue) {
+      return { passed: false, reason: `Distance from EMA21 ${payload.dist_ema21_atr.toFixed(2)} ATR outside range ${minValue}-${maxValue}` };
     }
   }
 
