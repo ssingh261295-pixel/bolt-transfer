@@ -20,7 +20,9 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     adx: { enabled: false, min_value: 0, max_value: 100 },
     volume: { enabled: false, min_avg_volume_5d: 0 },
     price_range: { enabled: false, min_price: 0, max_price: 1000000 },
-    dist_ema21_atr: { enabled: false, min_value: -10.0, max_value: 10.0 }
+    dist_ema21_atr: { enabled: false, min_value: -10.0, max_value: 10.0 },
+    volume_ratio: { enabled: false, min_value: 0.0, max_value: 10.0 },
+    di_spread: { enabled: false, min_value: 0, max_value: 100 }
   });
   const [symbolInput, setSymbolInput] = useState('');
   const [saving, setSaving] = useState(false);
@@ -469,6 +471,82 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                     step="0.1"
                     value={filters.dist_ema21_atr?.max_value ?? 10.0}
                     onChange={(e) => setFilters({ ...filters, dist_ema21_atr: { ...filters.dist_ema21_atr, max_value: parseFloat(e.target.value) } })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-900">Volume Ratio Filter</h3>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={filters.volume_ratio?.enabled ?? false}
+                    onChange={(e) => setFilters({ ...filters, volume_ratio: { ...filters.volume_ratio, enabled: e.target.checked } })}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">Enabled</span>
+                </label>
+              </div>
+              <p className="text-xs text-gray-600 mb-3">Ratio of current volume to 5-day average (volume/vol_avg_5d)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Min Ratio</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={filters.volume_ratio?.min_value ?? 0.0}
+                    onChange={(e) => setFilters({ ...filters, volume_ratio: { ...filters.volume_ratio, min_value: parseFloat(e.target.value) } })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Ratio</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={filters.volume_ratio?.max_value ?? 10.0}
+                    onChange={(e) => setFilters({ ...filters, volume_ratio: { ...filters.volume_ratio, max_value: parseFloat(e.target.value) } })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-900">DI Spread Filter</h3>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={filters.di_spread?.enabled ?? false}
+                    onChange={(e) => setFilters({ ...filters, di_spread: { ...filters.di_spread, enabled: e.target.checked } })}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">Enabled</span>
+                </label>
+              </div>
+              <p className="text-xs text-gray-600 mb-3">Absolute difference between DI+ and DI- (trend strength indicator)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Min Spread</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={filters.di_spread?.min_value ?? 0}
+                    onChange={(e) => setFilters({ ...filters, di_spread: { ...filters.di_spread, min_value: parseFloat(e.target.value) } })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Spread</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={filters.di_spread?.max_value ?? 100}
+                    onChange={(e) => setFilters({ ...filters, di_spread: { ...filters.di_spread, max_value: parseFloat(e.target.value) } })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>

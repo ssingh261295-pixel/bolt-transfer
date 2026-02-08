@@ -191,6 +191,28 @@ function evaluateSignalFilters(
     }
   }
 
+  // Volume Ratio filter (volume / vol_avg_5d)
+  if (filters.volume_ratio?.enabled && payload.volume !== undefined && payload.vol_avg_5d !== undefined) {
+    if (payload.vol_avg_5d > 0) {
+      const volumeRatio = payload.volume / payload.vol_avg_5d;
+      const minValue = filters.volume_ratio.min_value ?? 0.0;
+      const maxValue = filters.volume_ratio.max_value ?? 10.0;
+      if (volumeRatio < minValue || volumeRatio > maxValue) {
+        return { passed: false, reason: `Volume ratio ${volumeRatio.toFixed(2)} outside range ${minValue}-${maxValue}` };
+      }
+    }
+  }
+
+  // DI Spread filter (absolute difference between di_plus and di_minus)
+  if (filters.di_spread?.enabled && payload.di_plus !== undefined && payload.di_minus !== undefined) {
+    const diSpread = Math.abs(payload.di_plus - payload.di_minus);
+    const minValue = filters.di_spread.min_value ?? 0;
+    const maxValue = filters.di_spread.max_value ?? 100;
+    if (diSpread < minValue || diSpread > maxValue) {
+      return { passed: false, reason: `DI Spread ${diSpread.toFixed(2)} outside range ${minValue}-${maxValue}` };
+    }
+  }
+
   return { passed: true };
 }
 
