@@ -716,8 +716,41 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
+        // Check for Rocket Rule
+        let rocketRuleTriggered = false;
+        let finalLotMultiplier = lotMultiplier;
+        let finalTargetMultiplier = targetMultiplier;
+
+        if (account.signal_filters?.rocket_rule?.enabled && symbolSettings) {
+          const volumeRatioThreshold = account.signal_filters.rocket_rule.volume_ratio_threshold ?? 0.70;
+
+          if (rawPayload.volume !== undefined && rawPayload.vol_avg_5d !== undefined && rawPayload.vol_avg_5d > 0) {
+            const volumeRatio = rawPayload.volume / rawPayload.vol_avg_5d;
+
+            if (volumeRatio >= volumeRatioThreshold) {
+              rocketRuleTriggered = true;
+
+              if (account.signal_filters.rocket_rule.use_nfo_lot_size && symbolSettings.lot_size) {
+                finalLotMultiplier = symbolSettings.lot_size;
+              }
+
+              if (account.signal_filters.rocket_rule.use_nfo_multiplier && symbolSettings.reward_multiplier) {
+                finalTargetMultiplier = symbolSettings.reward_multiplier;
+              }
+
+              console.log('[TradingView Webhook] ROCKET RULE TRIGGERED:', {
+                symbol: normalized.symbol,
+                volume_ratio: volumeRatio.toFixed(2),
+                threshold: volumeRatioThreshold,
+                lot_multiplier: finalLotMultiplier,
+                target_multiplier: finalTargetMultiplier
+              });
+            }
+          }
+        }
+
         const adjustedATR = normalized.atr * atrMultiplier;
-        const quantity = instrument.lot_size * lotMultiplier;
+        const quantity = instrument.lot_size * finalLotMultiplier;
 
         console.log('[TradingView Webhook] Using settings:', {
           account_id: account.id,
@@ -877,10 +910,10 @@ Deno.serve(async (req: Request) => {
 
             if (normalized.trade_type === 'BUY') {
               stopLossPrice = executedPrice - (adjustedATR * slMultiplier);
-              targetPrice = executedPrice + (adjustedATR * targetMultiplier);
+              targetPrice = executedPrice + (adjustedATR * finalTargetMultiplier);
             } else {
               stopLossPrice = executedPrice + (adjustedATR * slMultiplier);
-              targetPrice = executedPrice - (adjustedATR * targetMultiplier);
+              targetPrice = executedPrice - (adjustedATR * finalTargetMultiplier);
             }
 
             const { data: hmtGtt, error: hmtError } = await supabase
@@ -908,7 +941,11 @@ Deno.serve(async (req: Request) => {
                   entry_price: executedPrice,
                   cash_price: normalized.price,
                   atr: normalized.atr,
-                  timeframe: rawPayload.timeframe || null
+                  timeframe: rawPayload.timeframe || null,
+                  rocket_rule_triggered: rocketRuleTriggered,
+                  volume_ratio: rocketRuleTriggered && rawPayload.volume && rawPayload.vol_avg_5d
+                    ? (rawPayload.volume / rawPayload.vol_avg_5d).toFixed(2)
+                    : null
                 }
               })
               .select()

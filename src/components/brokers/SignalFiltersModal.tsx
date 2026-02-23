@@ -22,7 +22,8 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     price_range: { enabled: false, min_price: 0, max_price: 1000000 },
     dist_ema21_atr: { enabled: false, min_value: -10.0, max_value: 10.0 },
     volume_ratio: { enabled: false, min_value: 0.0, max_value: 10.0 },
-    di_spread: { enabled: false, min_value: 0, max_value: 100 }
+    di_spread: { enabled: false, min_value: 0, max_value: 100 },
+    rocket_rule: { enabled: false, volume_ratio_threshold: 0.70, use_nfo_lot_size: true, use_nfo_multiplier: true }
   });
   const [symbolInput, setSymbolInput] = useState('');
   const [saving, setSaving] = useState(false);
@@ -549,6 +550,70 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                     onChange={(e) => setFilters({ ...filters, di_spread: { ...filters.di_spread, max_value: parseFloat(e.target.value) } })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                </div>
+              </div>
+            </div>
+
+            <div className="border border-green-200 bg-green-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-green-900">Rocket Rule</h3>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={filters.rocket_rule?.enabled ?? false}
+                    onChange={(e) => setFilters({ ...filters, rocket_rule: { ...filters.rocket_rule, enabled: e.target.checked } })}
+                    className="w-4 h-4 text-green-600 rounded focus:ring-2 focus:ring-green-500"
+                  />
+                  <span className="text-sm text-green-700 font-medium">Enabled</span>
+                </label>
+              </div>
+              <p className="text-xs text-green-700 mb-4 font-medium">
+                High-conviction trade trigger: When volume ratio exceeds threshold, uses NFO symbol settings for lot size and reward multiplier
+              </p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-green-900 mb-1">Volume Ratio Threshold</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={filters.rocket_rule?.volume_ratio_threshold ?? 0.70}
+                    onChange={(e) => setFilters({ ...filters, rocket_rule: { ...filters.rocket_rule, volume_ratio_threshold: parseFloat(e.target.value) } })}
+                    className="w-full px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-green-600 mt-1">Trigger when volume/vol_avg_5d &gt;= this value (e.g., 0.70 = 70% of avg volume)</p>
+                </div>
+
+                <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-green-200">
+                  <input
+                    type="checkbox"
+                    id="use_nfo_lot"
+                    checked={filters.rocket_rule?.use_nfo_lot_size ?? true}
+                    onChange={(e) => setFilters({ ...filters, rocket_rule: { ...filters.rocket_rule, use_nfo_lot_size: e.target.checked } })}
+                    className="w-4 h-4 text-green-600 rounded focus:ring-2 focus:ring-green-500"
+                  />
+                  <label htmlFor="use_nfo_lot" className="flex-1 text-sm text-green-900">
+                    Use lot_size from NFO Symbol Settings
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-green-200">
+                  <input
+                    type="checkbox"
+                    id="use_nfo_mult"
+                    checked={filters.rocket_rule?.use_nfo_multiplier ?? true}
+                    onChange={(e) => setFilters({ ...filters, rocket_rule: { ...filters.rocket_rule, use_nfo_multiplier: e.target.checked } })}
+                    className="w-4 h-4 text-green-600 rounded focus:ring-2 focus:ring-green-500"
+                  />
+                  <label htmlFor="use_nfo_mult" className="flex-1 text-sm text-green-900">
+                    Use reward_multiplier from NFO Symbol Settings
+                  </label>
+                </div>
+
+                <div className="p-3 bg-white rounded-lg border border-green-200">
+                  <p className="text-xs text-green-700">
+                    <strong>Note:</strong> Rocket Rule only applies to symbols with NFO Symbol Settings configured. Configure lot_size and reward_multiplier in NFO Settings page.
+                  </p>
                 </div>
               </div>
             </div>
