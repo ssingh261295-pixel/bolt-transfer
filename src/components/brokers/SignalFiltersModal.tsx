@@ -23,7 +23,7 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     dist_ema21_atr: { enabled: false, min_value: -10.0, max_value: 10.0 },
     volume_ratio: { enabled: false, min_value: 0.0, max_value: 10.0 },
     di_spread: { enabled: false, min_value: 0, max_value: 100 },
-    rocket_rule: { enabled: false, volume_ratio_threshold: 0.70, use_nfo_lot_size: true, use_nfo_multiplier: true }
+    rocket_rule: { enabled: false, volume_ratio_threshold: 0.70, lot_multiplier: 2, target_multiplier: 3.0 }
   });
   const [symbolInput, setSymbolInput] = useState('');
   const [saving, setSaving] = useState(false);
@@ -568,7 +568,7 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                 </label>
               </div>
               <p className="text-xs text-green-700 mb-4 font-medium">
-                High-conviction trade trigger: When volume ratio exceeds threshold, uses NFO symbol settings for lot size and reward multiplier
+                High-conviction trade trigger: When volume ratio exceeds threshold, uses custom multipliers below
               </p>
 
               <div className="space-y-3">
@@ -584,35 +584,36 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                   <p className="text-xs text-green-600 mt-1">Trigger when volume/vol_avg_5d &gt;= this value (e.g., 0.70 = 70% of avg volume)</p>
                 </div>
 
-                <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-green-200">
-                  <input
-                    type="checkbox"
-                    id="use_nfo_lot"
-                    checked={filters.rocket_rule?.use_nfo_lot_size ?? true}
-                    onChange={(e) => setFilters({ ...filters, rocket_rule: { ...filters.rocket_rule, use_nfo_lot_size: e.target.checked } })}
-                    className="w-4 h-4 text-green-600 rounded focus:ring-2 focus:ring-green-500"
-                  />
-                  <label htmlFor="use_nfo_lot" className="flex-1 text-sm text-green-900">
-                    Use lot_size from NFO Symbol Settings
-                  </label>
-                </div>
-
-                <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-green-200">
-                  <input
-                    type="checkbox"
-                    id="use_nfo_mult"
-                    checked={filters.rocket_rule?.use_nfo_multiplier ?? true}
-                    onChange={(e) => setFilters({ ...filters, rocket_rule: { ...filters.rocket_rule, use_nfo_multiplier: e.target.checked } })}
-                    className="w-4 h-4 text-green-600 rounded focus:ring-2 focus:ring-green-500"
-                  />
-                  <label htmlFor="use_nfo_mult" className="flex-1 text-sm text-green-900">
-                    Use reward_multiplier from NFO Symbol Settings
-                  </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-green-900 mb-1">Lot Multiplier</label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      value={filters.rocket_rule?.lot_multiplier ?? 2}
+                      onChange={(e) => setFilters({ ...filters, rocket_rule: { ...filters.rocket_rule, lot_multiplier: parseInt(e.target.value) } })}
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    />
+                    <p className="text-xs text-green-600 mt-1">Number of lots to trade</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-green-900 mb-1">Target Multiplier</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      value={filters.rocket_rule?.target_multiplier ?? 3.0}
+                      onChange={(e) => setFilters({ ...filters, rocket_rule: { ...filters.rocket_rule, target_multiplier: parseFloat(e.target.value) } })}
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    />
+                    <p className="text-xs text-green-600 mt-1">Target reward multiplier</p>
+                  </div>
                 </div>
 
                 <div className="p-3 bg-white rounded-lg border border-green-200">
                   <p className="text-xs text-green-700">
-                    <strong>Note:</strong> Rocket Rule only applies to symbols with NFO Symbol Settings configured. Configure lot_size and reward_multiplier in NFO Settings page.
+                    <strong>Example:</strong> If volume ratio &gt;= 0.70, order will use lot_multiplier=2 and target_multiplier=3.0 instead of NFO settings
                   </p>
                 </div>
               </div>

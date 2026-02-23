@@ -721,7 +721,7 @@ Deno.serve(async (req: Request) => {
         let finalLotMultiplier = lotMultiplier;
         let finalTargetMultiplier = targetMultiplier;
 
-        if (account.signal_filters?.rocket_rule?.enabled && symbolSettings) {
+        if (account.signal_filters?.rocket_rule?.enabled) {
           const volumeRatioThreshold = account.signal_filters.rocket_rule.volume_ratio_threshold ?? 0.70;
 
           if (rawPayload.volume !== undefined && rawPayload.vol_avg_5d !== undefined && rawPayload.vol_avg_5d > 0) {
@@ -730,20 +730,21 @@ Deno.serve(async (req: Request) => {
             if (volumeRatio >= volumeRatioThreshold) {
               rocketRuleTriggered = true;
 
-              if (account.signal_filters.rocket_rule.use_nfo_lot_size && symbolSettings.lot_size) {
-                finalLotMultiplier = symbolSettings.lot_size;
-              }
+              // Use rocket rule multipliers (configured in signal filters)
+              const rocketLotMultiplier = account.signal_filters.rocket_rule.lot_multiplier ?? 2;
+              const rocketTargetMultiplier = account.signal_filters.rocket_rule.target_multiplier ?? 3.0;
 
-              if (account.signal_filters.rocket_rule.use_nfo_multiplier && symbolSettings.reward_multiplier) {
-                finalTargetMultiplier = symbolSettings.reward_multiplier;
-              }
+              finalLotMultiplier = rocketLotMultiplier;
+              finalTargetMultiplier = rocketTargetMultiplier;
 
               console.log('[TradingView Webhook] ROCKET RULE TRIGGERED:', {
                 symbol: normalized.symbol,
                 volume_ratio: volumeRatio.toFixed(2),
                 threshold: volumeRatioThreshold,
-                lot_multiplier: finalLotMultiplier,
-                target_multiplier: finalTargetMultiplier
+                rocket_lot_multiplier: rocketLotMultiplier,
+                rocket_target_multiplier: rocketTargetMultiplier,
+                original_lot_multiplier: lotMultiplier,
+                original_target_multiplier: targetMultiplier
               });
             }
           }
