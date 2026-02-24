@@ -88,7 +88,7 @@ function evaluateSignalFilters(
     return { passed: true };
   }
 
-  // Symbol filter
+  // Symbol filter (global)
   if (filters.symbols?.list && Array.isArray(filters.symbols.list) && filters.symbols.list.length > 0) {
     const mode = filters.symbols.mode || 'whitelist';
     const symbolInList = filters.symbols.list.includes(symbol);
@@ -101,7 +101,7 @@ function evaluateSignalFilters(
     }
   }
 
-  // Trade type filter
+  // Trade type filter (global)
   if (filters.trade_types) {
     if (tradeType === 'BUY' && filters.trade_types.allow_buy === false) {
       return { passed: false, reason: 'BUY trades not allowed' };
@@ -111,7 +111,7 @@ function evaluateSignalFilters(
     }
   }
 
-  // Time filter
+  // Time filter (global)
   if (filters.time_filters?.enabled) {
     const now = new Date();
     const istOffset = 5.5 * 60 * 60 * 1000;
@@ -130,86 +130,91 @@ function evaluateSignalFilters(
     }
   }
 
-  // Trade grade filter
-  if (filters.trade_grade?.enabled && payload.trade_grade) {
-    const allowedGrades = filters.trade_grade.allowed_grades || ['A', 'B', 'C', 'D'];
+  // Direction-specific filters: Use buy_filters for BUY, sell_filters for SELL
+  const directionFilters = tradeType === 'BUY' ?
+    (filters.buy_filters || filters) :
+    (filters.sell_filters || filters);
+
+  // Trade grade filter (direction-specific)
+  if (directionFilters.trade_grade?.enabled && payload.trade_grade) {
+    const allowedGrades = directionFilters.trade_grade.allowed_grades || ['A', 'B', 'C', 'D'];
     const signalGrade = payload.trade_grade;
 
     if (!allowedGrades.includes(signalGrade)) {
-      return { passed: false, reason: `Trade grade ${signalGrade} not in allowed list` };
+      return { passed: false, reason: `${tradeType}: Trade grade ${signalGrade} not in allowed list` };
     }
   }
 
-  // Trade score filter
-  if (filters.trade_score?.enabled && payload.trade_score !== undefined) {
-    const minScore = filters.trade_score.min_score || 5.0;
+  // Trade score filter (direction-specific)
+  if (directionFilters.trade_score?.enabled && payload.trade_score !== undefined) {
+    const minScore = directionFilters.trade_score.min_score || 5.0;
     if (payload.trade_score < minScore) {
-      return { passed: false, reason: `Trade score ${payload.trade_score} below minimum ${minScore}` };
+      return { passed: false, reason: `${tradeType}: Trade score ${payload.trade_score} below minimum ${minScore}` };
     }
   }
 
-  // Entry phase filter
-  if (filters.entry_phase?.enabled && payload.entry_phase) {
-    const allowedPhases = filters.entry_phase.allowed_phases || ['EARLY', 'MID', 'OPTIMAL', 'LATE'];
+  // Entry phase filter (direction-specific)
+  if (directionFilters.entry_phase?.enabled && payload.entry_phase) {
+    const allowedPhases = directionFilters.entry_phase.allowed_phases || ['EARLY', 'MID', 'OPTIMAL', 'LATE'];
     if (!allowedPhases.includes(payload.entry_phase)) {
-      return { passed: false, reason: `Entry phase ${payload.entry_phase} not in allowed list` };
+      return { passed: false, reason: `${tradeType}: Entry phase ${payload.entry_phase} not in allowed list` };
     }
   }
 
-  // ADX filter
-  if (filters.adx?.enabled && payload.adx !== undefined) {
-    const minValue = filters.adx.min_value || 0;
-    const maxValue = filters.adx.max_value || 100;
+  // ADX filter (direction-specific)
+  if (directionFilters.adx?.enabled && payload.adx !== undefined) {
+    const minValue = directionFilters.adx.min_value || 0;
+    const maxValue = directionFilters.adx.max_value || 100;
     if (payload.adx < minValue || payload.adx > maxValue) {
-      return { passed: false, reason: `ADX ${payload.adx} outside range ${minValue}-${maxValue}` };
+      return { passed: false, reason: `${tradeType}: ADX ${payload.adx} outside range ${minValue}-${maxValue}` };
     }
   }
 
-  // Volume filter
-  if (filters.volume?.enabled && payload.vol_avg_5d !== undefined) {
-    const minVolume = filters.volume.min_avg_volume_5d || 0;
+  // Volume filter (direction-specific)
+  if (directionFilters.volume?.enabled && payload.vol_avg_5d !== undefined) {
+    const minVolume = directionFilters.volume.min_avg_volume_5d || 0;
     if (payload.vol_avg_5d < minVolume) {
-      return { passed: false, reason: `Volume ${payload.vol_avg_5d} below minimum ${minVolume}` };
+      return { passed: false, reason: `${tradeType}: Volume ${payload.vol_avg_5d} below minimum ${minVolume}` };
     }
   }
 
-  // Price range filter
-  if (filters.price_range?.enabled && payload.price !== undefined) {
-    const minPrice = filters.price_range.min_price || 0;
-    const maxPrice = filters.price_range.max_price || 1000000;
+  // Price range filter (direction-specific)
+  if (directionFilters.price_range?.enabled && payload.price !== undefined) {
+    const minPrice = directionFilters.price_range.min_price || 0;
+    const maxPrice = directionFilters.price_range.max_price || 1000000;
     if (payload.price < minPrice || payload.price > maxPrice) {
-      return { passed: false, reason: `Price ${payload.price} outside range ${minPrice}-${maxPrice}` };
+      return { passed: false, reason: `${tradeType}: Price ${payload.price} outside range ${minPrice}-${maxPrice}` };
     }
   }
 
-  // Distance from EMA21 in ATR units filter
-  if (filters.dist_ema21_atr?.enabled && payload.dist_ema21_atr !== undefined) {
-    const minValue = filters.dist_ema21_atr.min_value ?? -10.0;
-    const maxValue = filters.dist_ema21_atr.max_value ?? 10.0;
+  // Distance from EMA21 in ATR units filter (direction-specific)
+  if (directionFilters.dist_ema21_atr?.enabled && payload.dist_ema21_atr !== undefined) {
+    const minValue = directionFilters.dist_ema21_atr.min_value ?? -10.0;
+    const maxValue = directionFilters.dist_ema21_atr.max_value ?? 10.0;
     if (payload.dist_ema21_atr < minValue || payload.dist_ema21_atr > maxValue) {
-      return { passed: false, reason: `Distance from EMA21 ${payload.dist_ema21_atr.toFixed(2)} ATR outside range ${minValue}-${maxValue}` };
+      return { passed: false, reason: `${tradeType}: Distance from EMA21 ${payload.dist_ema21_atr.toFixed(2)} ATR outside range ${minValue}-${maxValue}` };
     }
   }
 
-  // Volume Ratio filter (volume / vol_avg_5d)
-  if (filters.volume_ratio?.enabled && payload.volume !== undefined && payload.vol_avg_5d !== undefined) {
+  // Volume Ratio filter (direction-specific)
+  if (directionFilters.volume_ratio?.enabled && payload.volume !== undefined && payload.vol_avg_5d !== undefined) {
     if (payload.vol_avg_5d > 0) {
       const volumeRatio = payload.volume / payload.vol_avg_5d;
-      const minValue = filters.volume_ratio.min_value ?? 0.0;
-      const maxValue = filters.volume_ratio.max_value ?? 10.0;
+      const minValue = directionFilters.volume_ratio.min_value ?? 0.0;
+      const maxValue = directionFilters.volume_ratio.max_value ?? 10.0;
       if (volumeRatio < minValue || volumeRatio > maxValue) {
-        return { passed: false, reason: `Volume ratio ${volumeRatio.toFixed(2)} outside range ${minValue}-${maxValue}` };
+        return { passed: false, reason: `${tradeType}: Volume ratio ${volumeRatio.toFixed(2)} outside range ${minValue}-${maxValue}` };
       }
     }
   }
 
-  // DI Spread filter (absolute difference between di_plus and di_minus)
-  if (filters.di_spread?.enabled && payload.di_plus !== undefined && payload.di_minus !== undefined) {
+  // DI Spread filter (direction-specific)
+  if (directionFilters.di_spread?.enabled && payload.di_plus !== undefined && payload.di_minus !== undefined) {
     const diSpread = Math.abs(payload.di_plus - payload.di_minus);
-    const minValue = filters.di_spread.min_value ?? 0;
-    const maxValue = filters.di_spread.max_value ?? 100;
+    const minValue = directionFilters.di_spread.min_value ?? 0;
+    const maxValue = directionFilters.di_spread.max_value ?? 100;
     if (diSpread < minValue || diSpread > maxValue) {
-      return { passed: false, reason: `DI Spread ${diSpread.toFixed(2)} outside range ${minValue}-${maxValue}` };
+      return { passed: false, reason: `${tradeType}: DI Spread ${diSpread.toFixed(2)} outside range ${minValue}-${maxValue}` };
     }
   }
 
@@ -716,13 +721,21 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Check for Rocket Rule
+        // Check for Rocket Rule (direction-specific)
         let rocketRuleTriggered = false;
         let finalLotMultiplier = lotMultiplier;
         let finalTargetMultiplier = targetMultiplier;
 
-        if (account.signal_filters?.rocket_rule?.enabled) {
-          const volumeRatioThreshold = account.signal_filters.rocket_rule.volume_ratio_threshold ?? 0.70;
+        // Get direction-specific filters
+        const directionFilters = normalized.trade_type === 'BUY' ?
+          account.signal_filters?.buy_filters :
+          account.signal_filters?.sell_filters;
+
+        // Check rocket rule in direction-specific filters, fallback to global for backward compatibility
+        const rocketRule = directionFilters?.rocket_rule || account.signal_filters?.rocket_rule;
+
+        if (rocketRule?.enabled) {
+          const volumeRatioThreshold = rocketRule.volume_ratio_threshold ?? 0.70;
 
           if (rawPayload.volume !== undefined && rawPayload.vol_avg_5d !== undefined && rawPayload.vol_avg_5d > 0) {
             const volumeRatio = rawPayload.volume / rawPayload.vol_avg_5d;
@@ -731,14 +744,15 @@ Deno.serve(async (req: Request) => {
               rocketRuleTriggered = true;
 
               // Use rocket rule multipliers (configured in signal filters)
-              const rocketLotMultiplier = account.signal_filters.rocket_rule.lot_multiplier ?? 2;
-              const rocketTargetMultiplier = account.signal_filters.rocket_rule.target_multiplier ?? 3.0;
+              const rocketLotMultiplier = rocketRule.lot_multiplier ?? 2;
+              const rocketTargetMultiplier = rocketRule.target_multiplier ?? 3.0;
 
               finalLotMultiplier = rocketLotMultiplier;
               finalTargetMultiplier = rocketTargetMultiplier;
 
               console.log('[TradingView Webhook] ROCKET RULE TRIGGERED:', {
                 symbol: normalized.symbol,
+                trade_type: normalized.trade_type,
                 volume_ratio: volumeRatio.toFixed(2),
                 threshold: volumeRatioThreshold,
                 rocket_lot_multiplier: rocketLotMultiplier,
