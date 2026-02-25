@@ -218,6 +218,90 @@ function evaluateSignalFilters(
     }
   }
 
+  // Dynamic Condition Sets (OR logic)
+  const conditionSets = directionFilters.condition_sets || [];
+  const enabledConditionSets = conditionSets.filter((cs: any) => cs.enabled);
+
+  if (enabledConditionSets.length > 0) {
+    let anyConditionSetPassed = false;
+    const failedReasons: string[] = [];
+
+    for (const conditionSet of enabledConditionSets) {
+      let conditionPassed = true;
+      const reasons: string[] = [];
+
+      // Check volume ratio
+      if (payload.volume !== undefined && payload.vol_avg_5d !== undefined && payload.vol_avg_5d > 0) {
+        const volumeRatio = payload.volume / payload.vol_avg_5d;
+        const minVR = conditionSet.volume_ratio?.min ?? 0;
+        const maxVR = conditionSet.volume_ratio?.max ?? 100;
+        if (volumeRatio < minVR || volumeRatio > maxVR) {
+          conditionPassed = false;
+          reasons.push(`VR=${volumeRatio.toFixed(2)} not in [${minVR}, ${maxVR}]`);
+        }
+      } else {
+        conditionPassed = false;
+        reasons.push('volume data missing');
+      }
+
+      // Check DI spread
+      if (payload.di_plus !== undefined && payload.di_minus !== undefined) {
+        const diSpread = Math.abs(payload.di_plus - payload.di_minus);
+        const minDI = conditionSet.di_spread?.min ?? 0;
+        const maxDI = conditionSet.di_spread?.max ?? 100;
+        if (diSpread < minDI || diSpread > maxDI) {
+          conditionPassed = false;
+          reasons.push(`DI=${diSpread.toFixed(2)} not in [${minDI}, ${maxDI}]`);
+        }
+      } else {
+        conditionPassed = false;
+        reasons.push('DI data missing');
+      }
+
+      // Check ADX
+      if (payload.adx !== undefined) {
+        const minADX = conditionSet.adx?.min ?? 0;
+        const maxADX = conditionSet.adx?.max ?? 100;
+        if (payload.adx < minADX || payload.adx > maxADX) {
+          conditionPassed = false;
+          reasons.push(`ADX=${payload.adx} not in [${minADX}, ${maxADX}]`);
+        }
+      } else {
+        conditionPassed = false;
+        reasons.push('ADX missing');
+      }
+
+      // Check EMA distance (use dist_ema21_atr from payload)
+      if (payload.dist_ema21_atr !== undefined) {
+        const emaDistance = Math.abs(payload.dist_ema21_atr);
+        const minEMA = conditionSet.ema_distance?.min ?? 0;
+        const maxEMA = conditionSet.ema_distance?.max ?? 100;
+        if (emaDistance < minEMA || emaDistance > maxEMA) {
+          conditionPassed = false;
+          reasons.push(`EMA_dist=${emaDistance.toFixed(2)} not in [${minEMA}, ${maxEMA}]`);
+        }
+      } else {
+        conditionPassed = false;
+        reasons.push('EMA distance missing');
+      }
+
+      if (conditionPassed) {
+        anyConditionSetPassed = true;
+        console.log(`[Signal Filter] ${tradeType} passed condition set: ${conditionSet.name}`);
+        break;
+      } else {
+        failedReasons.push(`${conditionSet.name}: ${reasons.join(', ')}`);
+      }
+    }
+
+    if (!anyConditionSetPassed) {
+      return {
+        passed: false,
+        reason: `${tradeType}: Failed all condition sets. ${failedReasons.join(' | ')}`
+      };
+    }
+  }
+
   return { passed: true };
 }
 

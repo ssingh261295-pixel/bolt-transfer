@@ -13,6 +13,44 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
   const [filtersEnabled, setFiltersEnabled] = useState(broker.signal_filters_enabled || false);
   const [activeTab, setActiveTab] = useState<'global' | 'buy' | 'sell'>('global');
 
+  const defaultBuyConditionSets = [
+    {
+      name: 'Option A',
+      enabled: false,
+      volume_ratio: { min: 0.40, max: 100 },
+      di_spread: { min: 15, max: 100 },
+      adx: { min: 0, max: 28 },
+      ema_distance: { min: 3.0, max: 100 }
+    },
+    {
+      name: 'Option B',
+      enabled: false,
+      volume_ratio: { min: 0.39, max: 100 },
+      di_spread: { min: 20, max: 100 },
+      adx: { min: 0, max: 35 },
+      ema_distance: { min: 1.2, max: 2.3 }
+    }
+  ];
+
+  const defaultSellConditionSets = [
+    {
+      name: 'Option C',
+      enabled: false,
+      volume_ratio: { min: 0.39, max: 100 },
+      di_spread: { min: 16.5, max: 100 },
+      adx: { min: 0, max: 35 },
+      ema_distance: { min: 1.2, max: 2.3 }
+    },
+    {
+      name: 'Option D',
+      enabled: false,
+      volume_ratio: { min: 0.40, max: 100 },
+      di_spread: { min: 15, max: 100 },
+      adx: { min: 0, max: 35 },
+      ema_distance: { min: 3.0, max: 100 }
+    }
+  ];
+
   const defaultDirectionFilters = {
     trade_grade: { enabled: false, allowed_grades: ['A', 'B', 'C', 'D'] },
     trade_score: { enabled: false, min_score: 5.0 },
@@ -23,7 +61,8 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     dist_ema21_atr: { enabled: false, min_value: -10.0, max_value: 10.0 },
     volume_ratio: { enabled: false, min_value: 0.0, max_value: 10.0 },
     di_spread: { enabled: false, min_value: 0, max_value: 100 },
-    rocket_rule: { enabled: false, volume_ratio_threshold: 0.70, lot_multiplier: 2, target_multiplier: 3.0 }
+    rocket_rule: { enabled: false, volume_ratio_threshold: 0.70, lot_multiplier: 2, target_multiplier: 3.0 },
+    condition_sets: []
   };
 
   const [filters, setFilters] = useState<any>({
@@ -42,12 +81,22 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     if (broker.signal_filters && Object.keys(broker.signal_filters).length > 0) {
       const brokerFilters = broker.signal_filters;
 
+      const buyFilters = brokerFilters.buy_filters || defaultDirectionFilters;
+      const sellFilters = brokerFilters.sell_filters || defaultDirectionFilters;
+
+      if (!buyFilters.condition_sets || buyFilters.condition_sets.length === 0) {
+        buyFilters.condition_sets = defaultBuyConditionSets;
+      }
+      if (!sellFilters.condition_sets || sellFilters.condition_sets.length === 0) {
+        sellFilters.condition_sets = defaultSellConditionSets;
+      }
+
       setFilters({
         symbols: brokerFilters.symbols || filters.symbols,
         trade_types: brokerFilters.trade_types || filters.trade_types,
         time_filters: brokerFilters.time_filters || filters.time_filters,
-        buy_filters: brokerFilters.buy_filters || defaultDirectionFilters,
-        sell_filters: brokerFilters.sell_filters || defaultDirectionFilters
+        buy_filters: buyFilters,
+        sell_filters: sellFilters
       });
     }
   }, [broker]);
@@ -110,12 +159,164 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     });
   };
 
+  const updateConditionSet = (direction: 'buy' | 'sell', index: number, field: string, value: any) => {
+    const directionFilters = filters[`${direction}_filters`];
+    const conditionSets = [...(directionFilters.condition_sets || [])];
+
+    if (field === 'enabled') {
+      conditionSets[index] = { ...conditionSets[index], enabled: value };
+    } else {
+      conditionSets[index] = {
+        ...conditionSets[index],
+        [field]: value
+      };
+    }
+
+    updateDirectionFilter(direction, 'condition_sets', conditionSets);
+  };
+
   const renderDirectionFilters = (direction: 'buy' | 'sell') => {
     const directionFilters = filters[`${direction}_filters`];
     const color = direction === 'buy' ? 'green' : 'red';
+    const conditionSets = directionFilters.condition_sets || [];
 
     return (
       <div className="space-y-4">
+        <div className={`border-2 border-${color}-300 bg-${color}-50 rounded-lg p-4`}>
+          <h3 className={`font-bold text-${color}-900 mb-2 text-lg`}>Dynamic Condition Sets (OR Logic)</h3>
+          <p className={`text-sm text-${color}-700 mb-4`}>
+            Enable one or more condition sets. Signal passes if it matches ANY enabled set.
+          </p>
+
+          <div className="space-y-4">
+            {conditionSets.map((conditionSet: any, index: number) => (
+              <div key={index} className={`bg-white border border-${color}-200 rounded-lg p-4`}>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className={`font-semibold text-${color}-900`}>{conditionSet.name}</h4>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={conditionSet.enabled}
+                      onChange={(e) => updateConditionSet(direction, index, 'enabled', e.target.checked)}
+                      className={`w-4 h-4 text-${color}-600 rounded focus:ring-2 focus:ring-${color}-500`}
+                    />
+                    <span className={`text-sm font-medium text-${color}-700`}>Enabled</span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Volume Ratio Min</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={conditionSet.volume_ratio?.min ?? 0}
+                      onChange={(e) => updateConditionSet(direction, index, 'volume_ratio', {
+                        ...conditionSet.volume_ratio,
+                        min: parseFloat(e.target.value)
+                      })}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Volume Ratio Max</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={conditionSet.volume_ratio?.max ?? 100}
+                      onChange={(e) => updateConditionSet(direction, index, 'volume_ratio', {
+                        ...conditionSet.volume_ratio,
+                        max: parseFloat(e.target.value)
+                      })}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">DI Spread Min</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={conditionSet.di_spread?.min ?? 0}
+                      onChange={(e) => updateConditionSet(direction, index, 'di_spread', {
+                        ...conditionSet.di_spread,
+                        min: parseFloat(e.target.value)
+                      })}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">DI Spread Max</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={conditionSet.di_spread?.max ?? 100}
+                      onChange={(e) => updateConditionSet(direction, index, 'di_spread', {
+                        ...conditionSet.di_spread,
+                        max: parseFloat(e.target.value)
+                      })}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">ADX Min</label>
+                    <input
+                      type="number"
+                      step="1"
+                      value={conditionSet.adx?.min ?? 0}
+                      onChange={(e) => updateConditionSet(direction, index, 'adx', {
+                        ...conditionSet.adx,
+                        min: parseInt(e.target.value)
+                      })}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">ADX Max</label>
+                    <input
+                      type="number"
+                      step="1"
+                      value={conditionSet.adx?.max ?? 100}
+                      onChange={(e) => updateConditionSet(direction, index, 'adx', {
+                        ...conditionSet.adx,
+                        max: parseInt(e.target.value)
+                      })}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">EMA Distance Min</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={conditionSet.ema_distance?.min ?? 0}
+                      onChange={(e) => updateConditionSet(direction, index, 'ema_distance', {
+                        ...conditionSet.ema_distance,
+                        min: parseFloat(e.target.value)
+                      })}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">EMA Distance Max</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={conditionSet.ema_distance?.max ?? 100}
+                      onChange={(e) => updateConditionSet(direction, index, 'ema_distance', {
+                        ...conditionSet.ema_distance,
+                        max: parseFloat(e.target.value)
+                      })}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className={`border border-${color}-200 rounded-lg p-4`}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-gray-900">Trade Grade</h3>
