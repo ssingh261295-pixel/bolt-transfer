@@ -701,21 +701,7 @@ Deno.serve(async (req: Request) => {
     if (day <= 15) {
       instrument = futInstruments[0];
     } else {
-      if (futInstruments.length < 2) {
-        await supabase.from('tradingview_webhook_logs').insert({
-          webhook_key_id: keyData.id,
-          source_ip: sourceIp,
-          payload: rawPayload,
-          status: 'failed',
-          error_message: `Second nearest FUT expiry not found for ${normalized.symbol} (day > 15)`
-        });
-
-        return new Response(
-          JSON.stringify({ error: `Second nearest FUT expiry not found for ${normalized.symbol}` }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      instrument = futInstruments[1];
+      instrument = futInstruments.length >= 2 ? futInstruments[1] : futInstruments[0];
     }
 
     console.log('[TradingView Webhook] Resolved FUT instrument:', {
