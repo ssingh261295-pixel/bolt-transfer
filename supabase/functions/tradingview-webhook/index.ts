@@ -9,28 +9,12 @@
  * 2. Normalize and validate payload
  * 3. Resolve accounts mapped to key
  * 4. Resolve NFO FUT symbol + lot size
- * 5. Place MARKET order (MANDATORY FIRST)
- * 6. Fetch executed price from Zerodha API
- * 7. Calculate SL/Target based on EXECUTED price (not CASH price)
- * 8. Create HMT GTT (SL + Target) after order success
- * 9. Notify user in real-time
- *
- * REQUIRED payload fields:
- * {
- *   "webhook_key": "wk_...",
- *   "symbol": "NIFTY", // CASH symbol
- *   "trade_type": "BUY" | "SELL", // or "action"
- *   "price": 24500.50,
- *   "atr": 120.75
- * }
- *
- * OPTIONAL fields:
- * {
- *   "exchange": "NSE", // defaults to NSE
- *   "timeframe": "60",
- *   "event_time": 1710000000000,
- *   ... any other fields (ignored but logged)
- * }
+ * 5. Respond 200 OK to TradingView immediately (prevents timeouts)
+ * 6. In background: Place MARKET order (MANDATORY FIRST)
+ * 7. In background: Fetch executed price from Zerodha API
+ * 8. In background: Calculate SL/Target based on EXECUTED price
+ * 9. In background: Create HMT GTT (SL + Target) after order success
+ * 10. In background: Notify user in real-time
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -60,19 +44,11 @@ function isWithinTradingWindow(): { allowed: boolean; currentTime: string; reaso
   const endMinutes = endHour * 60 + endMinute;
 
   if (currentMinutes < startMinutes) {
-    return {
-      allowed: false,
-      currentTime: currentTimeIST,
-      reason: 'BEFORE_09_30_IST'
-    };
+    return { allowed: false, currentTime: currentTimeIST, reason: 'BEFORE_09_30_IST' };
   }
 
   if (currentMinutes > endMinutes) {
-    return {
-      allowed: false,
-      currentTime: currentTimeIST,
-      reason: 'AFTER_15_00_IST'
-    };
+    return { allowed: false, currentTime: currentTimeIST, reason: 'AFTER_15_00_IST' };
   }
 
   return { allowed: true, currentTime: currentTimeIST };
@@ -88,7 +64,6 @@ function evaluateSignalFilters(
     return { passed: true };
   }
 
-  // Symbol filter (global)
   if (filters.symbols?.list && Array.isArray(filters.symbols.list) && filters.symbols.list.length > 0) {
     const mode = filters.symbols.mode || 'whitelist';
     const symbolInList = filters.symbols.list.includes(symbol);
@@ -101,7 +76,6 @@ function evaluateSignalFilters(
     }
   }
 
-  // Trade type filter (global)
   if (filters.trade_types) {
     if (tradeType === 'BUY' && filters.trade_types.allow_buy === false) {
       return { passed: false, reason: 'BUY trades not allowed' };
@@ -111,7 +85,6 @@ function evaluateSignalFilters(
     }
   }
 
-  // Time filter (global)
   if (filters.time_filters?.enabled) {
     const now = new Date();
     const istOffset = 5.5 * 60 * 60 * 1000;
@@ -130,22 +103,17 @@ function evaluateSignalFilters(
     }
   }
 
-  // Direction-specific filters: Use buy_filters for BUY, sell_filters for SELL
   const directionFilters = tradeType === 'BUY' ?
     (filters.buy_filters || filters) :
     (filters.sell_filters || filters);
 
-  // Trade grade filter (direction-specific)
   if (directionFilters.trade_grade?.enabled && payload.trade_grade) {
     const allowedGrades = directionFilters.trade_grade.allowed_grades || ['A', 'B', 'C', 'D'];
-    const signalGrade = payload.trade_grade;
-
-    if (!allowedGrades.includes(signalGrade)) {
-      return { passed: false, reason: `${tradeType}: Trade grade ${signalGrade} not in allowed list` };
+    if (!allowedGrades.includes(payload.trade_grade)) {
+      return { passed: false, reason: `${tradeType}: Trade grade ${payload.trade_grade} not in allowed list` };
     }
   }
 
-  // Trade score filter (direction-specific)
   if (directionFilters.trade_score?.enabled && payload.trade_score !== undefined) {
     const minScore = directionFilters.trade_score.min_score || 5.0;
     if (payload.trade_score < minScore) {
@@ -153,7 +121,6 @@ function evaluateSignalFilters(
     }
   }
 
-  // Entry phase filter (direction-specific)
   if (directionFilters.entry_phase?.enabled && payload.entry_phase) {
     const allowedPhases = directionFilters.entry_phase.allowed_phases || ['EARLY', 'MID', 'OPTIMAL', 'LATE'];
     if (!allowedPhases.includes(payload.entry_phase)) {
@@ -161,7 +128,6 @@ function evaluateSignalFilters(
     }
   }
 
-  // ADX filter (direction-specific)
   if (directionFilters.adx?.enabled && payload.adx !== undefined) {
     const minValue = directionFilters.adx.min_value || 0;
     const maxValue = directionFilters.adx.max_value || 100;
@@ -170,7 +136,6 @@ function evaluateSignalFilters(
     }
   }
 
-  // Volume filter (direction-specific)
   if (directionFilters.volume?.enabled && payload.vol_avg_5d !== undefined) {
     const minVolume = directionFilters.volume.min_avg_volume_5d || 0;
     if (payload.vol_avg_5d < minVolume) {
@@ -178,7 +143,6 @@ function evaluateSignalFilters(
     }
   }
 
-  // Price range filter (direction-specific)
   if (directionFilters.price_range?.enabled && payload.price !== undefined) {
     const minPrice = directionFilters.price_range.min_price || 0;
     const maxPrice = directionFilters.price_range.max_price || 1000000;
@@ -187,7 +151,6 @@ function evaluateSignalFilters(
     }
   }
 
-  // Distance from EMA21 in ATR units filter (direction-specific)
   if (directionFilters.dist_ema21_atr?.enabled && payload.dist_ema21_atr !== undefined) {
     const minValue = directionFilters.dist_ema21_atr.min_value ?? -10.0;
     const maxValue = directionFilters.dist_ema21_atr.max_value ?? 10.0;
@@ -196,7 +159,6 @@ function evaluateSignalFilters(
     }
   }
 
-  // Volume Ratio filter (direction-specific)
   if (directionFilters.volume_ratio?.enabled && payload.volume !== undefined && payload.vol_avg_5d !== undefined) {
     if (payload.vol_avg_5d > 0) {
       const volumeRatio = payload.volume / payload.vol_avg_5d;
@@ -208,7 +170,6 @@ function evaluateSignalFilters(
     }
   }
 
-  // DI Spread filter (direction-specific)
   if (directionFilters.di_spread?.enabled && payload.di_plus !== undefined && payload.di_minus !== undefined) {
     const diSpread = Math.abs(payload.di_plus - payload.di_minus);
     const minValue = directionFilters.di_spread.min_value ?? 0;
@@ -218,7 +179,6 @@ function evaluateSignalFilters(
     }
   }
 
-  // Dynamic Condition Sets (OR logic)
   const conditionSets = directionFilters.condition_sets || [];
   const enabledConditionSets = conditionSets.filter((cs: any) => cs.enabled);
 
@@ -230,7 +190,6 @@ function evaluateSignalFilters(
       let conditionPassed = true;
       const reasons: string[] = [];
 
-      // Check volume ratio
       if (payload.volume !== undefined && payload.vol_avg_5d !== undefined && payload.vol_avg_5d > 0) {
         const volumeRatio = payload.volume / payload.vol_avg_5d;
         const minVR = conditionSet.volume_ratio?.min ?? 0;
@@ -244,7 +203,6 @@ function evaluateSignalFilters(
         reasons.push('volume data missing');
       }
 
-      // Check DI spread
       if (payload.di_plus !== undefined && payload.di_minus !== undefined) {
         const diSpread = Math.abs(payload.di_plus - payload.di_minus);
         const minDI = conditionSet.di_spread?.min ?? 0;
@@ -258,7 +216,6 @@ function evaluateSignalFilters(
         reasons.push('DI data missing');
       }
 
-      // Check ADX
       if (payload.adx !== undefined) {
         const minADX = conditionSet.adx?.min ?? 0;
         const maxADX = conditionSet.adx?.max ?? 100;
@@ -271,7 +228,6 @@ function evaluateSignalFilters(
         reasons.push('ADX missing');
       }
 
-      // Check EMA distance (use dist_ema21_atr from payload)
       if (payload.dist_ema21_atr !== undefined) {
         const emaDistance = Math.abs(payload.dist_ema21_atr);
         const minEMA = conditionSet.ema_distance?.min ?? 0;
@@ -287,7 +243,6 @@ function evaluateSignalFilters(
 
       if (conditionPassed) {
         anyConditionSetPassed = true;
-        console.log(`[Signal Filter] ${tradeType} passed condition set: ${conditionSet.name}`);
         break;
       } else {
         failedReasons.push(`${conditionSet.name}: ${reasons.join(', ')}`);
@@ -314,6 +269,363 @@ interface NormalizedPayload {
   webhook_key: string;
   raw_payload: any;
   is_exit_signal?: boolean;
+}
+
+async function executeOrdersInBackground(
+  supabase: any,
+  normalized: NormalizedPayload,
+  keyData: any,
+  brokerAccounts: any[],
+  instrument: any,
+  sourceIp: string,
+  rawPayload: any,
+  executionMode: string
+) {
+  const executionResults = [];
+
+  for (const account of brokerAccounts) {
+    const accountResult: any = {
+      account_id: account.id,
+      account_name: account.account_name || account.account_holder_name || 'Unknown Account',
+      broker_name: account.broker_name,
+      order_placed: false,
+      hmt_gtt_created: false,
+      filter_passed: true
+    };
+
+    try {
+      if (account.signal_filters_enabled && account.signal_filters) {
+        const filterResult = evaluateSignalFilters(
+          account.signal_filters,
+          rawPayload,
+          normalized.symbol,
+          normalized.trade_type
+        );
+
+        accountResult.filter_passed = filterResult.passed;
+
+        if (!filterResult.passed) {
+          accountResult.filter_reason = filterResult.reason;
+          accountResult.error = `Signal filtered: ${filterResult.reason}`;
+
+          await supabase.from('notifications').insert({
+            user_id: keyData.user_id,
+            broker_account_id: account.id,
+            type: 'trade_blocked',
+            title: 'Signal Filtered',
+            message: `TradingView signal filtered for ${normalized.symbol}.\n\nReason: ${filterResult.reason}\nTrade Type: ${normalized.trade_type}\nPrice: ₹${normalized.price}\nATR: ${normalized.atr}`,
+            metadata: {
+              source: 'tradingview_webhook',
+              webhook_key_name: keyData.name,
+              blocked_reason: 'signal_filtered',
+              filter_reason: filterResult.reason,
+              symbol: normalized.symbol,
+              trade_type: normalized.trade_type,
+              price: normalized.price,
+              atr: normalized.atr
+            }
+          });
+
+          executionResults.push(accountResult);
+          continue;
+        }
+      }
+
+      const { data: symbolSettings } = await supabase
+        .from('nfo_symbol_settings')
+        .select('*')
+        .eq('user_id', keyData.user_id)
+        .eq('symbol', normalized.symbol)
+        .or(`broker_connection_id.eq.${account.id},broker_connection_id.is.null`)
+        .order('broker_connection_id', { ascending: false, nullsLast: true })
+        .limit(1)
+        .maybeSingle();
+
+      const atrMultiplier = symbolSettings?.atr_multiplier ?? 1.5;
+      const slMultiplier = symbolSettings?.sl_multiplier ?? (keyData.sl_multiplier || 1.0);
+      const targetMultiplier = symbolSettings?.target_multiplier ?? (keyData.target_multiplier || 2.0);
+      const lotMultiplier = symbolSettings?.lot_multiplier ?? (keyData.lot_multiplier || 1);
+      const isEnabled = symbolSettings?.is_enabled ?? true;
+
+      if (!isEnabled) {
+        accountResult.error = `Symbol ${normalized.symbol} trading is disabled`;
+        executionResults.push(accountResult);
+        continue;
+      }
+
+      let rocketRuleTriggered = false;
+      let finalLotMultiplier = lotMultiplier;
+      let finalTargetMultiplier = targetMultiplier;
+
+      const directionFilters = normalized.trade_type === 'BUY' ?
+        account.signal_filters?.buy_filters :
+        account.signal_filters?.sell_filters;
+
+      const rocketRule = directionFilters?.rocket_rule || account.signal_filters?.rocket_rule;
+
+      if (rocketRule?.enabled) {
+        const volumeRatioThreshold = rocketRule.volume_ratio_threshold ?? 0.70;
+
+        if (rawPayload.volume !== undefined && rawPayload.vol_avg_5d !== undefined && rawPayload.vol_avg_5d > 0) {
+          const volumeRatio = rawPayload.volume / rawPayload.vol_avg_5d;
+
+          if (volumeRatio >= volumeRatioThreshold) {
+            rocketRuleTriggered = true;
+            finalLotMultiplier = rocketRule.lot_multiplier ?? 2;
+            finalTargetMultiplier = rocketRule.target_multiplier ?? 3.0;
+          }
+        }
+      }
+
+      const adjustedATR = normalized.atr * atrMultiplier;
+      const quantity = instrument.lot_size * finalLotMultiplier;
+
+      const positionsResponse = await fetch('https://api.kite.trade/portfolio/positions', {
+        method: 'GET',
+        headers: {
+          'Authorization': `token ${account.api_key}:${account.access_token}`,
+          'X-Kite-Version': '3',
+        },
+      });
+
+      const positionsResult = await positionsResponse.json();
+
+      if (positionsResult.status === 'success' && positionsResult.data) {
+        const existingPosition = positionsResult.data.net?.find((pos: any) =>
+          pos.tradingsymbol === instrument.tradingsymbol &&
+          pos.quantity !== 0
+        );
+
+        if (existingPosition) {
+          const positionDirection = existingPosition.quantity > 0 ? 'LONG' : 'SHORT';
+          const signalDirection = normalized.trade_type === 'BUY' ? 'LONG' : 'SHORT';
+
+          if (positionDirection === signalDirection) {
+            await supabase.from('notifications').insert({
+              user_id: keyData.user_id,
+              broker_account_id: account.id,
+              type: 'trade_blocked',
+              title: 'Position Already Exists',
+              message: `TradingView ${normalized.trade_type} signal blocked for ${instrument.tradingsymbol}.\n\nReason: You already have a ${positionDirection} position\nExisting Quantity: ${Math.abs(existingPosition.quantity)}\nAverage Price: ₹${existingPosition.average_price}\n\nClose existing position before entering new one.`,
+              metadata: {
+                source: 'tradingview_webhook',
+                webhook_key_name: keyData.name,
+                blocked_reason: 'existing_position',
+                symbol: instrument.tradingsymbol,
+                trade_type: normalized.trade_type,
+                existing_quantity: existingPosition.quantity,
+                existing_avg_price: existingPosition.average_price
+              }
+            });
+
+            accountResult.error = `Position already exists: ${positionDirection} ${Math.abs(existingPosition.quantity)}`;
+            executionResults.push(accountResult);
+            continue;
+          }
+        }
+      }
+
+      const orderParams: any = {
+        tradingsymbol: instrument.tradingsymbol,
+        exchange: instrument.exchange,
+        transaction_type: normalized.trade_type,
+        quantity: quantity.toString(),
+        order_type: 'MARKET',
+        product: 'NRML',
+        validity: 'DAY',
+      };
+
+      const orderResponse = await fetch('https://api.kite.trade/orders/regular', {
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${account.api_key}:${account.access_token}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Kite-Version': '3',
+        },
+        body: new URLSearchParams(orderParams),
+      });
+
+      const orderResult = await orderResponse.json();
+
+      if (orderResult.status === 'success' && orderResult.data?.order_id) {
+        accountResult.order_placed = true;
+        accountResult.order_id = orderResult.data.order_id;
+
+        await supabase.from('orders').insert({
+          user_id: keyData.user_id,
+          broker_connection_id: account.id,
+          symbol: instrument.tradingsymbol,
+          exchange: instrument.exchange,
+          order_type: 'MARKET',
+          transaction_type: normalized.trade_type,
+          quantity: quantity,
+          status: 'OPEN',
+          order_id: orderResult.data.order_id,
+          variety: 'regular',
+          product: 'NRML',
+        });
+
+        let executedPrice = normalized.price;
+        let orderCompleted = false;
+        let orderRejected = false;
+        let orderStatus = 'UNKNOWN';
+        const maxRetries = 10;
+        let retryCount = 0;
+
+        while (retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          const orderDetailsResponse = await fetch('https://api.kite.trade/orders', {
+            method: 'GET',
+            headers: {
+              'Authorization': `token ${account.api_key}:${account.access_token}`,
+              'X-Kite-Version': '3',
+            },
+          });
+
+          const orderDetailsResult = await orderDetailsResponse.json();
+
+          if (orderDetailsResult.status === 'success' && orderDetailsResult.data) {
+            const placedOrder = orderDetailsResult.data.find((o: any) => o.order_id === orderResult.data.order_id);
+
+            if (placedOrder) {
+              orderStatus = placedOrder.status;
+
+              if (placedOrder.status === 'COMPLETE' && placedOrder.average_price > 0) {
+                executedPrice = placedOrder.average_price;
+                orderCompleted = true;
+                break;
+              } else if (placedOrder.status === 'REJECTED') {
+                orderRejected = true;
+                accountResult.order_error = placedOrder.status_message || 'Order rejected by broker';
+                break;
+              }
+            }
+          }
+
+          retryCount++;
+        }
+
+        if (retryCount === maxRetries && !orderCompleted && !orderRejected) {
+          console.warn(`[TradingView Webhook] Failed to fetch order status after ${maxRetries} attempts, last status: ${orderStatus}`);
+        }
+
+        if (orderCompleted) {
+          let stopLossPrice: number;
+          let targetPrice: number;
+
+          if (normalized.trade_type === 'BUY') {
+            stopLossPrice = executedPrice - (adjustedATR * slMultiplier);
+            targetPrice = executedPrice + (adjustedATR * finalTargetMultiplier);
+          } else {
+            stopLossPrice = executedPrice + (adjustedATR * slMultiplier);
+            targetPrice = executedPrice - (adjustedATR * finalTargetMultiplier);
+          }
+
+          const { data: hmtGtt, error: hmtError } = await supabase
+            .from('hmt_gtt_orders')
+            .insert({
+              user_id: keyData.user_id,
+              broker_connection_id: account.id,
+              trading_symbol: instrument.tradingsymbol,
+              exchange: instrument.exchange,
+              instrument_token: instrument.instrument_token,
+              condition_type: 'two-leg',
+              transaction_type: normalized.trade_type === 'BUY' ? 'SELL' : 'BUY',
+              product_type_1: 'NRML',
+              trigger_price_1: stopLossPrice,
+              order_price_1: stopLossPrice,
+              quantity_1: quantity,
+              product_type_2: 'NRML',
+              trigger_price_2: targetPrice,
+              order_price_2: targetPrice,
+              quantity_2: quantity,
+              status: 'active',
+              metadata: {
+                source: 'tradingview_webhook',
+                webhook_key_name: keyData.name,
+                entry_price: executedPrice,
+                cash_price: normalized.price,
+                atr: normalized.atr,
+                timeframe: rawPayload.timeframe || null,
+                rocket_rule_triggered: rocketRuleTriggered,
+                volume_ratio: rocketRuleTriggered && rawPayload.volume && rawPayload.vol_avg_5d
+                  ? (rawPayload.volume / rawPayload.vol_avg_5d).toFixed(2)
+                  : null
+              }
+            })
+            .select()
+            .single();
+
+          if (!hmtError && hmtGtt) {
+            accountResult.hmt_gtt_created = true;
+            accountResult.hmt_gtt_id = hmtGtt.id;
+            accountResult.stop_loss = stopLossPrice;
+            accountResult.target = targetPrice;
+            accountResult.executed_price = executedPrice;
+          } else {
+            accountResult.hmt_gtt_error = hmtError?.message || 'Unknown error';
+          }
+
+          await supabase.from('notifications').insert({
+            user_id: keyData.user_id,
+            broker_account_id: account.id,
+            type: 'trade',
+            title: `TradingView: ${normalized.trade_type} ${instrument.tradingsymbol}`,
+            message: `Order placed: ${normalized.trade_type} ${quantity} @ ₹${executedPrice.toFixed(2)}\nSL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}\nATR: ${normalized.atr.toFixed(2)} | Timeframe: ${rawPayload.timeframe || 'N/A'}`,
+            metadata: {
+              source: 'tradingview',
+              trade_type: normalized.trade_type,
+              symbol: instrument.tradingsymbol,
+              entry_price: executedPrice,
+              cash_price: normalized.price,
+              quantity,
+              stop_loss: stopLossPrice,
+              target: targetPrice,
+              atr: normalized.atr,
+              order_id: orderResult.data.order_id
+            }
+          });
+        } else if (orderRejected) {
+          await supabase.from('notifications').insert({
+            user_id: keyData.user_id,
+            broker_account_id: account.id,
+            type: 'trade_blocked',
+            title: `TradingView: Order Rejected for ${instrument.tradingsymbol}`,
+            message: `Order rejected by broker.\n\nReason: ${accountResult.order_error}\nSymbol: ${instrument.tradingsymbol}\nTrade Type: ${normalized.trade_type}\nQuantity: ${quantity}\n\nPlease check your account balance and margin requirements.`,
+            metadata: {
+              source: 'tradingview',
+              blocked_reason: 'order_rejected',
+              trade_type: normalized.trade_type,
+              symbol: instrument.tradingsymbol,
+              quantity,
+              order_id: orderResult.data.order_id
+            }
+          });
+        }
+
+      } else {
+        accountResult.order_error = orderResult.message || 'Order placement failed';
+      }
+
+    } catch (error: any) {
+      accountResult.error = error.message;
+    }
+
+    executionResults.push(accountResult);
+  }
+
+  const successCount = executionResults.filter(r => r.order_placed).length;
+  const responseMessage = `Executed on ${successCount}/${brokerAccounts.length} account(s)`;
+
+  await supabase.from('tradingview_webhook_logs').insert({
+    webhook_key_id: keyData.id,
+    source_ip: sourceIp,
+    payload: { ...rawPayload, _execution_mode: executionMode },
+    status: successCount > 0 ? 'success' : 'failed',
+    accounts_executed: executionResults,
+    response_message: responseMessage
+  });
 }
 
 Deno.serve(async (req: Request) => {
@@ -404,16 +716,6 @@ Deno.serve(async (req: Request) => {
       is_exit_signal: isExitSignal
     };
 
-    console.log('[TradingView Webhook] Normalized:', {
-      symbol: normalized.symbol,
-      trade_type: normalized.trade_type,
-      price: normalized.price,
-      exchange: normalized.exchange,
-      is_exit_signal: normalized.is_exit_signal,
-      ip: sourceIp
-    });
-
-    // If this is an EXIT signal, log it and return immediately without executing
     if (normalized.is_exit_signal) {
       const { data: keyData } = await supabase
         .from('webhook_keys')
@@ -432,12 +734,6 @@ Deno.serve(async (req: Request) => {
           error_message: `Exit signal logged: ${normalized.trade_type} - No action taken`,
           response_message: exitMessage
         });
-
-        console.log('[TradingView Webhook] EXIT signal logged (no action taken):', {
-          trade_type: normalized.trade_type,
-          symbol: normalized.symbol,
-          webhook_key: keyData.name
-        });
       } else {
         await supabase.from('tradingview_webhook_logs').insert({
           source_ip: sourceIp,
@@ -452,11 +748,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           success: true,
           message: exitMessage,
-          signal: {
-            trade_type: normalized.trade_type,
-            symbol: normalized.symbol,
-            price: normalized.price
-          }
+          signal: { trade_type: normalized.trade_type, symbol: normalized.symbol, price: normalized.price }
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -464,13 +756,6 @@ Deno.serve(async (req: Request) => {
 
     const tradingWindow = isWithinTradingWindow();
     if (!tradingWindow.allowed) {
-      console.log('[TradingView Webhook] REJECTED - Outside trading window:', {
-        current_time_ist: tradingWindow.currentTime,
-        reason: tradingWindow.reason,
-        symbol: normalized.symbol,
-        trade_type: normalized.trade_type
-      });
-
       const { data: keyData } = await supabase
         .from('webhook_keys')
         .select('id, user_id, name, account_mappings')
@@ -508,7 +793,6 @@ Deno.serve(async (req: Request) => {
               }
             })
           );
-
           await Promise.all(notificationPromises);
         }
       } else {
@@ -532,8 +816,6 @@ Deno.serve(async (req: Request) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    console.log('[TradingView Webhook] Trading window check passed:', tradingWindow.currentTime, 'IST');
 
     const { data: keyData, error: keyError } = await supabase
       .from('webhook_keys')
@@ -572,24 +854,16 @@ Deno.serve(async (req: Request) => {
 
     webhookKeyId = keyData.id;
 
-    // Extract execution mode (MANUAL from UI, AUTOMATED from TradingView)
     const executionMode = rawPayload._execution_mode ?? 'AUTOMATED';
 
-    console.log('[TradingView Webhook] Execution mode:', executionMode);
-
-    // CRITICAL: Check for duplicate ONLY for AUTOMATED TradingView webhooks
-    // This prevents duplicate webhooks from TradingView from being logged multiple times
-    // MANUAL execution from UI is ALWAYS allowed (operator override)
     if (executionMode === 'AUTOMATED') {
       const now = new Date();
       const istOffset = 5.5 * 60 * 60 * 1000;
       const istTime = new Date(now.getTime() + istOffset);
       const executionDate = istTime.toISOString().split('T')[0];
 
-      // Enhanced payload hash with ATR and more precise price to better identify unique signals
       const payloadHash = `${normalized.symbol}_${normalized.trade_type}_${normalized.price.toFixed(2)}_${normalized.atr.toFixed(2)}`;
 
-      // First check: Try to insert into tracker (handles race conditions at DB level)
       const trackerInsertResult = await supabase.rpc('try_insert_execution_tracker', {
         p_webhook_key_id: keyData.id,
         p_symbol: normalized.symbol,
@@ -600,16 +874,6 @@ Deno.serve(async (req: Request) => {
       });
 
       if (trackerInsertResult.error || !trackerInsertResult.data) {
-        console.log('[TradingView Webhook] DUPLICATE SIGNAL BLOCKED (TradingView retry detected):', {
-          symbol: normalized.symbol,
-          trade_type: normalized.trade_type,
-          execution_date: executionDate,
-          webhook_key: keyData.name,
-          payload_hash: payloadHash
-        });
-
-        // Return immediately WITHOUT logging to avoid duplicate log entries
-        // The original webhook was already logged with status 'success'
         return new Response(
           JSON.stringify({
             success: false,
@@ -620,13 +884,7 @@ Deno.serve(async (req: Request) => {
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-    } else {
-      console.log('[TradingView Webhook] MANUAL execution - duplicate detection SKIPPED');
     }
-
-    // Note: 60-second duplicate check removed to allow quick successive signals
-    // The payload hash check above is sufficient for preventing true duplicates
-    // This allows legitimate rapid signals (e.g., quick reversals, multiple strategies)
 
     await supabase
       .from('webhook_keys')
@@ -649,7 +907,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: brokerAccounts, error: brokerError} = await supabase
+    const { data: brokerAccounts, error: brokerError } = await supabase
       .from('broker_connections')
       .select('id, account_name, account_holder_name, broker_name, api_key, access_token, is_active, signal_filters_enabled, signal_filters')
       .in('id', accountIds)
@@ -704,430 +962,31 @@ Deno.serve(async (req: Request) => {
       instrument = futInstruments.length >= 2 ? futInstruments[1] : futInstruments[0];
     }
 
-    console.log('[TradingView Webhook] Resolved FUT instrument:', {
-      symbol: normalized.symbol,
-      tradingsymbol: instrument.tradingsymbol,
-      expiry: instrument.expiry,
-      lot_size: instrument.lot_size,
-      day_of_month: day
-    });
+    // Respond to TradingView IMMEDIATELY to prevent timeout
+    // All order execution happens in the background via EdgeRuntime.waitUntil
+    const backgroundTask = executeOrdersInBackground(
+      supabase,
+      normalized,
+      keyData,
+      brokerAccounts,
+      instrument,
+      sourceIp,
+      rawPayload,
+      executionMode
+    );
 
-    // Duplicate detection already performed earlier after webhook key validation
-    // No need to check again here
-
-    const executionResults = [];
-
-    for (const account of brokerAccounts) {
-      const accountResult: any = {
-        account_id: account.id,
-        account_name: account.account_name || account.account_holder_name || 'Unknown Account',
-        broker_name: account.broker_name,
-        order_placed: false,
-        hmt_gtt_created: false,
-        filter_passed: true
-      };
-
-      try {
-        // Evaluate signal filters if enabled
-        if (account.signal_filters_enabled && account.signal_filters) {
-          const filterResult = evaluateSignalFilters(
-            account.signal_filters,
-            rawPayload,
-            normalized.symbol,
-            normalized.trade_type
-          );
-
-          accountResult.filter_passed = filterResult.passed;
-
-          if (!filterResult.passed) {
-            accountResult.filter_reason = filterResult.reason;
-            accountResult.error = `Signal filtered: ${filterResult.reason}`;
-
-            console.log(`[TradingView Webhook] Signal filtered for account ${account.id}:`, filterResult.reason);
-
-            // Send notification about filtered signal
-            await supabase.from('notifications').insert({
-              user_id: keyData.user_id,
-              broker_account_id: account.id,
-              type: 'trade_blocked',
-              title: 'Signal Filtered',
-              message: `TradingView signal filtered for ${normalized.symbol}.\n\nReason: ${filterResult.reason}\nTrade Type: ${normalized.trade_type}\nPrice: ₹${normalized.price}\nATR: ${normalized.atr}`,
-              metadata: {
-                source: 'tradingview_webhook',
-                webhook_key_name: keyData.name,
-                blocked_reason: 'signal_filtered',
-                filter_reason: filterResult.reason,
-                symbol: normalized.symbol,
-                trade_type: normalized.trade_type,
-                price: normalized.price,
-                atr: normalized.atr
-              }
-            });
-
-            executionResults.push(accountResult);
-            continue;
-          }
-        }
-        const { data: symbolSettings } = await supabase
-          .from('nfo_symbol_settings')
-          .select('*')
-          .eq('user_id', keyData.user_id)
-          .eq('symbol', normalized.symbol)
-          .or(`broker_connection_id.eq.${account.id},broker_connection_id.is.null`)
-          .order('broker_connection_id', { ascending: false, nullsLast: true })
-          .limit(1)
-          .maybeSingle();
-
-        const atrMultiplier = symbolSettings?.atr_multiplier ?? 1.5;
-        const slMultiplier = symbolSettings?.sl_multiplier ?? (keyData.sl_multiplier || 1.0);
-        const targetMultiplier = symbolSettings?.target_multiplier ?? (keyData.target_multiplier || 2.0);
-        const lotMultiplier = symbolSettings?.lot_multiplier ?? (keyData.lot_multiplier || 1);
-        const isEnabled = symbolSettings?.is_enabled ?? true;
-
-        if (!isEnabled) {
-          console.log(`[TradingView Webhook] Symbol ${normalized.symbol} is disabled for account ${account.id}`);
-          accountResult.error = `Symbol ${normalized.symbol} trading is disabled`;
-          executionResults.push(accountResult);
-          continue;
-        }
-
-        // Check for Rocket Rule (direction-specific)
-        let rocketRuleTriggered = false;
-        let finalLotMultiplier = lotMultiplier;
-        let finalTargetMultiplier = targetMultiplier;
-
-        // Get direction-specific filters
-        const directionFilters = normalized.trade_type === 'BUY' ?
-          account.signal_filters?.buy_filters :
-          account.signal_filters?.sell_filters;
-
-        // Check rocket rule in direction-specific filters, fallback to global for backward compatibility
-        const rocketRule = directionFilters?.rocket_rule || account.signal_filters?.rocket_rule;
-
-        if (rocketRule?.enabled) {
-          const volumeRatioThreshold = rocketRule.volume_ratio_threshold ?? 0.70;
-
-          if (rawPayload.volume !== undefined && rawPayload.vol_avg_5d !== undefined && rawPayload.vol_avg_5d > 0) {
-            const volumeRatio = rawPayload.volume / rawPayload.vol_avg_5d;
-
-            if (volumeRatio >= volumeRatioThreshold) {
-              rocketRuleTriggered = true;
-
-              // Use rocket rule multipliers (configured in signal filters)
-              const rocketLotMultiplier = rocketRule.lot_multiplier ?? 2;
-              const rocketTargetMultiplier = rocketRule.target_multiplier ?? 3.0;
-
-              finalLotMultiplier = rocketLotMultiplier;
-              finalTargetMultiplier = rocketTargetMultiplier;
-
-              console.log('[TradingView Webhook] ROCKET RULE TRIGGERED:', {
-                symbol: normalized.symbol,
-                trade_type: normalized.trade_type,
-                volume_ratio: volumeRatio.toFixed(2),
-                threshold: volumeRatioThreshold,
-                rocket_lot_multiplier: rocketLotMultiplier,
-                rocket_target_multiplier: rocketTargetMultiplier,
-                original_lot_multiplier: lotMultiplier,
-                original_target_multiplier: targetMultiplier
-              });
-            }
-          }
-        }
-
-        const adjustedATR = normalized.atr * atrMultiplier;
-        const quantity = instrument.lot_size * finalLotMultiplier;
-
-        console.log('[TradingView Webhook] Using settings:', {
-          account_id: account.id,
-          symbol: normalized.symbol,
-          atr_multiplier: atrMultiplier,
-          sl_multiplier: slMultiplier,
-          target_multiplier: targetMultiplier,
-          lot_multiplier: lotMultiplier,
-          quantity,
-          adjusted_atr: adjustedATR,
-          is_account_specific: symbolSettings?.broker_connection_id === account.id
-        });
-
-        const positionsResponse = await fetch('https://api.kite.trade/portfolio/positions', {
-          method: 'GET',
-          headers: {
-            'Authorization': `token ${account.api_key}:${account.access_token}`,
-            'X-Kite-Version': '3',
-          },
-        });
-
-        const positionsResult = await positionsResponse.json();
-
-        if (positionsResult.status === 'success' && positionsResult.data) {
-          const existingPosition = positionsResult.data.net?.find((pos: any) =>
-            pos.tradingsymbol === instrument.tradingsymbol &&
-            pos.quantity !== 0
-          );
-
-          if (existingPosition) {
-            const positionDirection = existingPosition.quantity > 0 ? 'LONG' : 'SHORT';
-            const signalDirection = normalized.trade_type === 'BUY' ? 'LONG' : 'SHORT';
-
-            if (positionDirection === signalDirection) {
-              console.log('[TradingView Webhook] POSITION ALREADY EXISTS:', {
-                symbol: instrument.tradingsymbol,
-                existing_position: existingPosition.quantity,
-                signal_type: normalized.trade_type
-              });
-
-              await supabase.from('notifications').insert({
-                user_id: keyData.user_id,
-                broker_account_id: account.id,
-                type: 'trade_blocked',
-                title: 'Position Already Exists',
-                message: `TradingView ${normalized.trade_type} signal blocked for ${instrument.tradingsymbol}.\n\nReason: You already have a ${positionDirection} position\nExisting Quantity: ${Math.abs(existingPosition.quantity)}\nAverage Price: ₹${existingPosition.average_price}\n\nClose existing position before entering new one.`,
-                metadata: {
-                  source: 'tradingview_webhook',
-                  webhook_key_name: keyData.name,
-                  blocked_reason: 'existing_position',
-                  symbol: instrument.tradingsymbol,
-                  trade_type: normalized.trade_type,
-                  existing_quantity: existingPosition.quantity,
-                  existing_avg_price: existingPosition.average_price
-                }
-              });
-
-              accountResult.error = `Position already exists: ${positionDirection} ${Math.abs(existingPosition.quantity)}`;
-              executionResults.push(accountResult);
-              continue;
-            }
-          }
-        }
-
-        const orderParams: any = {
-          tradingsymbol: instrument.tradingsymbol,
-          exchange: instrument.exchange,
-          transaction_type: normalized.trade_type,
-          quantity: quantity.toString(),
-          order_type: 'MARKET',
-          product: 'NRML',
-          validity: 'DAY',
-        };
-
-        const orderResponse = await fetch('https://api.kite.trade/orders/regular', {
-          method: 'POST',
-          headers: {
-            'Authorization': `token ${account.api_key}:${account.access_token}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-Kite-Version': '3',
-          },
-          body: new URLSearchParams(orderParams),
-        });
-
-        const orderResult = await orderResponse.json();
-
-        if (orderResult.status === 'success' && orderResult.data?.order_id) {
-          accountResult.order_placed = true;
-          accountResult.order_id = orderResult.data.order_id;
-
-          await supabase.from('orders').insert({
-            user_id: keyData.user_id,
-            broker_connection_id: account.id,
-            symbol: instrument.tradingsymbol,
-            exchange: instrument.exchange,
-            order_type: 'MARKET',
-            transaction_type: normalized.trade_type,
-            quantity: quantity,
-            status: 'OPEN',
-            order_id: orderResult.data.order_id,
-            variety: 'regular',
-            product: 'NRML',
-          });
-
-          let executedPrice = normalized.price;
-          let orderCompleted = false;
-          let orderRejected = false;
-          let orderStatus = 'UNKNOWN';
-          let maxRetries = 10;
-          let retryCount = 0;
-
-          while (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            const orderDetailsResponse = await fetch(`https://api.kite.trade/orders`, {
-              method: 'GET',
-              headers: {
-                'Authorization': `token ${account.api_key}:${account.access_token}`,
-                'X-Kite-Version': '3',
-              },
-            });
-
-            const orderDetailsResult = await orderDetailsResponse.json();
-
-            if (orderDetailsResult.status === 'success' && orderDetailsResult.data) {
-              const placedOrder = orderDetailsResult.data.find((o: any) => o.order_id === orderResult.data.order_id);
-
-              if (placedOrder) {
-                orderStatus = placedOrder.status;
-
-                if (placedOrder.status === 'COMPLETE' && placedOrder.average_price > 0) {
-                  executedPrice = placedOrder.average_price;
-                  orderCompleted = true;
-                  console.log(`[TradingView Webhook] Order executed at: ${executedPrice} (attempt ${retryCount + 1})`);
-                  break;
-                } else if (placedOrder.status === 'REJECTED') {
-                  orderRejected = true;
-                  accountResult.order_error = placedOrder.status_message || 'Order rejected by broker';
-                  console.log(`[TradingView Webhook] Order rejected: ${placedOrder.status_message}`);
-                  break;
-                }
-              }
-            }
-
-            retryCount++;
-          }
-
-          if (retryCount === maxRetries && !orderCompleted && !orderRejected) {
-            console.warn(`[TradingView Webhook] Failed to fetch order status for ${orderResult.data.order_id} after ${maxRetries} attempts, last status: ${orderStatus}`);
-          }
-
-          // CRITICAL: Only create HMT GTT if order was successfully COMPLETED
-          // Do NOT create HMT GTT if order was rejected (e.g., insufficient balance)
-          if (orderCompleted) {
-            let stopLossPrice: number;
-            let targetPrice: number;
-
-            if (normalized.trade_type === 'BUY') {
-              stopLossPrice = executedPrice - (adjustedATR * slMultiplier);
-              targetPrice = executedPrice + (adjustedATR * finalTargetMultiplier);
-            } else {
-              stopLossPrice = executedPrice + (adjustedATR * slMultiplier);
-              targetPrice = executedPrice - (adjustedATR * finalTargetMultiplier);
-            }
-
-            const { data: hmtGtt, error: hmtError } = await supabase
-              .from('hmt_gtt_orders')
-              .insert({
-                user_id: keyData.user_id,
-                broker_connection_id: account.id,
-                trading_symbol: instrument.tradingsymbol,
-                exchange: instrument.exchange,
-                instrument_token: instrument.instrument_token,
-                condition_type: 'two-leg',
-                transaction_type: normalized.trade_type === 'BUY' ? 'SELL' : 'BUY',
-                product_type_1: 'NRML',
-                trigger_price_1: stopLossPrice,
-                order_price_1: stopLossPrice,
-                quantity_1: quantity,
-                product_type_2: 'NRML',
-                trigger_price_2: targetPrice,
-                order_price_2: targetPrice,
-                quantity_2: quantity,
-                status: 'active',
-                metadata: {
-                  source: 'tradingview_webhook',
-                  webhook_key_name: keyData.name,
-                  entry_price: executedPrice,
-                  cash_price: normalized.price,
-                  atr: normalized.atr,
-                  timeframe: rawPayload.timeframe || null,
-                  rocket_rule_triggered: rocketRuleTriggered,
-                  volume_ratio: rocketRuleTriggered && rawPayload.volume && rawPayload.vol_avg_5d
-                    ? (rawPayload.volume / rawPayload.vol_avg_5d).toFixed(2)
-                    : null
-                }
-              })
-              .select()
-              .single();
-
-            if (!hmtError && hmtGtt) {
-              accountResult.hmt_gtt_created = true;
-              accountResult.hmt_gtt_id = hmtGtt.id;
-              accountResult.stop_loss = stopLossPrice;
-              accountResult.target = targetPrice;
-              accountResult.executed_price = executedPrice;
-            } else {
-              accountResult.hmt_gtt_error = hmtError?.message || 'Unknown error';
-            }
-
-            await supabase.from('notifications').insert({
-              user_id: keyData.user_id,
-              broker_account_id: account.id,
-              type: 'trade',
-              title: `TradingView: ${normalized.trade_type} ${instrument.tradingsymbol}`,
-              message: `Order placed: ${normalized.trade_type} ${quantity} @ ₹${executedPrice.toFixed(2)}\nSL: ₹${stopLossPrice.toFixed(2)} | Target: ₹${targetPrice.toFixed(2)}\nATR: ${normalized.atr.toFixed(2)} | Timeframe: ${rawPayload.timeframe || 'N/A'}`,
-              metadata: {
-                source: 'tradingview',
-                trade_type: normalized.trade_type,
-                symbol: instrument.tradingsymbol,
-                entry_price: executedPrice,
-                cash_price: normalized.price,
-                quantity,
-                stop_loss: stopLossPrice,
-                target: targetPrice,
-                atr: normalized.atr,
-                order_id: orderResult.data.order_id
-              }
-            });
-          } else if (orderRejected) {
-            // Send notification for rejected order (insufficient balance, margin issue, etc.)
-            await supabase.from('notifications').insert({
-              user_id: keyData.user_id,
-              broker_account_id: account.id,
-              type: 'trade_blocked',
-              title: `TradingView: Order Rejected for ${instrument.tradingsymbol}`,
-              message: `Order rejected by broker.\n\nReason: ${accountResult.order_error}\nSymbol: ${instrument.tradingsymbol}\nTrade Type: ${normalized.trade_type}\nQuantity: ${quantity}\n\nPlease check your account balance and margin requirements.`,
-              metadata: {
-                source: 'tradingview',
-                blocked_reason: 'order_rejected',
-                trade_type: normalized.trade_type,
-                symbol: instrument.tradingsymbol,
-                quantity,
-                order_id: orderResult.data.order_id
-              }
-            });
-          }
-
-        } else {
-          accountResult.order_error = orderResult.message || 'Order placement failed';
-        }
-
-      } catch (error: any) {
-        accountResult.error = error.message;
-      }
-
-      executionResults.push(accountResult);
-    }
-
-    const successCount = executionResults.filter(r => r.order_placed).length;
-    const responseMessage = `Executed on ${successCount}/${brokerAccounts.length} account(s)`;
-
-    await supabase.from('tradingview_webhook_logs').insert({
-      webhook_key_id: keyData.id,
-      source_ip: sourceIp,
-      payload: { ...rawPayload, _execution_mode: executionMode },
-      status: successCount > 0 ? 'success' : 'failed',
-      accounts_executed: executionResults,
-      response_message: responseMessage
-    });
-
-    const firstSuccessfulExecution = executionResults.find(r => r.order_placed);
-    const responseSignal: any = {
-      trade_type: normalized.trade_type,
-      symbol: instrument.tradingsymbol,
-      cash_price: normalized.price,
-      quantity,
-      atr: normalized.atr
-    };
-
-    if (firstSuccessfulExecution) {
-      responseSignal.executed_price = firstSuccessfulExecution.executed_price;
-      responseSignal.stop_loss = firstSuccessfulExecution.stop_loss;
-      responseSignal.target = firstSuccessfulExecution.target;
-    }
+    EdgeRuntime.waitUntil(backgroundTask);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: responseMessage,
-        signal: responseSignal,
-        accounts: executionResults
+        message: `Signal accepted for ${normalized.symbol} ${normalized.trade_type} - executing on ${brokerAccounts.length} account(s)`,
+        signal: {
+          trade_type: normalized.trade_type,
+          symbol: instrument.tradingsymbol,
+          cash_price: normalized.price,
+          atr: normalized.atr
+        }
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
