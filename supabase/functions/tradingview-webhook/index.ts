@@ -359,15 +359,38 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
         let finalLotMultiplier = lotMultiplier;
         let finalTargetMultiplier = targetMultiplier;
 
-        const directionFilters = tradeType === 'BUY' ? account.signal_filters?.buy_filters : account.signal_filters?.sell_filters;
-        const rocketRule = directionFilters?.rocket_rule || account.signal_filters?.rocket_rule;
+        // Fetch fresh signal_filters for this account (needed even when signal_filters_enabled=false
+        // because rocket rule is a position-sizing feature, not just a filter gate)
+        const { data: freshAccount } = await supabase
+          .from('broker_connections')
+          .select('signal_filters')
+          .eq('id', account.id)
+          .maybeSingle();
+
+        const sf = freshAccount?.signal_filters ?? account.signal_filters;
+        const directionFilters = tradeType === 'BUY' ? sf?.buy_filters : sf?.sell_filters;
+        // Rocket rule lives inside direction-specific filters (buy_filters/sell_filters)
+        const rocketRule = directionFilters?.rocket_rule;
+
+        console.log('[Webhook] Rocket rule check:', {
+          account_id: account.id,
+          trade_type: tradeType,
+          has_signal_filters: !!sf,
+          has_direction_filters: !!directionFilters,
+          rocket_rule: rocketRule,
+          volume: rawPayload.volume,
+          vol_avg_5d: rawPayload.vol_avg_5d
+        });
 
         if (rocketRule?.enabled && rawPayload.volume !== undefined && rawPayload.vol_avg_5d !== undefined && rawPayload.vol_avg_5d > 0) {
           const volumeRatio = rawPayload.volume / rawPayload.vol_avg_5d;
-          if (volumeRatio >= (rocketRule.volume_ratio_threshold ?? 0.70)) {
+          const threshold = rocketRule.volume_ratio_threshold ?? 0.70;
+          console.log('[Webhook] Rocket rule volume check:', { volumeRatio, threshold, triggered: volumeRatio >= threshold });
+          if (volumeRatio >= threshold) {
             rocketRuleTriggered = true;
             finalLotMultiplier = rocketRule.lot_multiplier ?? 2;
             finalTargetMultiplier = rocketRule.target_multiplier ?? 3.0;
+            console.log('[Webhook] ROCKET RULE TRIGGERED:', { finalLotMultiplier, finalTargetMultiplier, volumeRatio });
           }
         }
 
