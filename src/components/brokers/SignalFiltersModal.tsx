@@ -242,18 +242,18 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">ADX Min</label>
                     <input
-                      type="number" step="1"
+                      type="number" step="0.01"
                       value={conditionSet.adx?.min ?? 0}
-                      onChange={(e) => updateConditionSet(direction, index, 'adx', { ...conditionSet.adx, min: parseInt(e.target.value) })}
+                      onChange={(e) => updateConditionSet(direction, index, 'adx', { ...conditionSet.adx, min: parseFloat(e.target.value) })}
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">ADX Max</label>
                     <input
-                      type="number" step="1"
+                      type="number" step="0.01"
                       value={conditionSet.adx?.max ?? 100}
-                      onChange={(e) => updateConditionSet(direction, index, 'adx', { ...conditionSet.adx, max: parseInt(e.target.value) })}
+                      onChange={(e) => updateConditionSet(direction, index, 'adx', { ...conditionSet.adx, max: parseFloat(e.target.value) })}
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
@@ -374,14 +374,14 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Min Value</label>
-              <input type="number" value={directionFilters.adx?.min_value ?? 0}
-                onChange={(e) => updateDirectionFilter(direction, 'adx', { ...directionFilters.adx, min_value: parseInt(e.target.value) })}
+              <input type="number" step="0.01" value={directionFilters.adx?.min_value ?? 0}
+                onChange={(e) => updateDirectionFilter(direction, 'adx', { ...directionFilters.adx, min_value: parseFloat(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Max Value</label>
-              <input type="number" value={directionFilters.adx?.max_value ?? 100}
-                onChange={(e) => updateDirectionFilter(direction, 'adx', { ...directionFilters.adx, max_value: parseInt(e.target.value) })}
+              <input type="number" step="0.01" value={directionFilters.adx?.max_value ?? 100}
+                onChange={(e) => updateDirectionFilter(direction, 'adx', { ...directionFilters.adx, max_value: parseFloat(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
             </div>
           </div>
