@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Bell, Shield, AlertTriangle } from 'lucide-react';
+import { User, Bell, Shield, AlertTriangle, Calendar } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -62,6 +62,7 @@ export function Settings() {
           max_loss_per_day: riskLimits.max_loss_per_day,
           auto_square_off_time: riskLimits.auto_square_off_time,
           kill_switch_enabled: riskLimits.kill_switch_enabled,
+          next_month_day_threshold: riskLimits.next_month_day_threshold ?? 15,
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', profile?.id);
@@ -266,7 +267,7 @@ export function Settings() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Max Trades Per Day
@@ -323,6 +324,39 @@ export function Settings() {
                           <p className="text-xs text-gray-600 mt-1">
                             No new trades after this time
                           </p>
+                        </div>
+                      </div>
+
+                      <div className="border border-gray-200 rounded-lg p-4 col-span-1 md:col-span-2">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Calendar className="w-4 h-4 text-blue-600" />
+                          <h4 className="font-medium text-gray-900">Next-Month Futures Rollover Threshold</h4>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-4">
+                          When the current calendar day exceeds this value, TradingView webhook signals will automatically use the <strong>next month's futures contract</strong> instead of the current month.
+                        </p>
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Rollover Day (1–28)
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="28"
+                              value={riskLimits.next_month_day_threshold ?? 15}
+                              onChange={(e) => setRiskLimits({
+                                ...riskLimits,
+                                next_month_day_threshold: Math.min(28, Math.max(1, parseInt(e.target.value) || 15))
+                              })}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                            />
+                          </div>
+                          <div className="flex-1 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <p className="text-sm text-blue-800">
+                              <strong>Current setting:</strong> On day {(riskLimits.next_month_day_threshold ?? 15) + 1} and beyond, next-month contract is used. Days 1–{riskLimits.next_month_day_threshold ?? 15} use the current month.
+                            </p>
+                          </div>
                         </div>
                       </div>
 

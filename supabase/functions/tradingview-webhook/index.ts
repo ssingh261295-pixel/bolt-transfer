@@ -273,7 +273,7 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
     const todayDate = new Date().toISOString().split('T')[0];
     const day = new Date().getDate();
 
-    const [brokerResult, instrumentResult] = await Promise.all([
+    const [brokerResult, instrumentResult, riskLimitsResult] = await Promise.all([
       supabase.from('broker_connections')
         .select('id, account_name, account_holder_name, broker_name, api_key, access_token, is_active, signal_filters_enabled, signal_filters')
         .in('id', accountIds)
@@ -285,8 +285,14 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
         .gte('expiry', todayDate)
         .order('expiry', { ascending: true })
         .limit(2),
+      supabase.from('risk_limits')
+        .select('next_month_day_threshold')
+        .eq('user_id', keyData.user_id)
+        .maybeSingle(),
       supabase.from('webhook_keys').update({ last_used_at: new Date().toISOString() }).eq('id', keyData.id)
     ]);
+
+    const nextMonthDayThreshold: number = riskLimitsResult.data?.next_month_day_threshold ?? 15;
 
     const brokerAccounts = brokerResult.data;
     const brokerError = brokerResult.error;
@@ -303,7 +309,7 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
       return;
     }
 
-    const instrument = (day <= 15 || futInstruments.length < 2) ? futInstruments[0] : futInstruments[1];
+    const instrument = (day <= nextMonthDayThreshold || futInstruments.length < 2) ? futInstruments[0] : futInstruments[1];
 
     const executionResults = [];
 
