@@ -156,6 +156,7 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
   allowedEngineNames?: string[];
   rocketRuleEnabled?: boolean;
   adxOverrides?: Record<string, { min?: number; max?: number }>;
+  directionOverrides?: any;
   blockedReason?: string;
 } {
   const regimes: any[] = filters.regimes || [];
@@ -189,6 +190,27 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
       };
     }
 
+    const buyOverrides = regime.buy_overrides || {};
+    const sellOverrides = regime.sell_overrides || {};
+
+    if (tradeType === 'BUY' && buyOverrides.allow_buy === false) {
+      return {
+        matched: true,
+        regime,
+        regimeName: regime.name,
+        blockedReason: `Regime "${regime.name}": BUY signals are disabled for this VIX regime (VIX ${vix !== undefined ? vix.toFixed(2) : 'unknown'})`
+      };
+    }
+
+    if (tradeType === 'SELL' && sellOverrides.allow_sell === false) {
+      return {
+        matched: true,
+        regime,
+        regimeName: regime.name,
+        blockedReason: `Regime "${regime.name}": SELL signals are disabled for this VIX regime (VIX ${vix !== undefined ? vix.toFixed(2) : 'unknown'})`
+      };
+    }
+
     const isWednesday = ist.dayOfWeek === 3;
     let allowedEngineNames: string[];
     let adxOverrides: Record<string, { min?: number; max?: number }> = {};
@@ -197,26 +219,32 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
       if (isWednesday && regime.wednesday_only_buy_engines !== null && regime.wednesday_only_buy_engines !== undefined) {
         allowedEngineNames = regime.wednesday_only_buy_engines;
       } else {
-        allowedEngineNames = regime.allowed_buy_engines || [];
+        allowedEngineNames = buyOverrides.allowed_buy_engines || regime.allowed_buy_engines || [];
       }
     } else {
       if (isWednesday && regime.wednesday_only_sell_engines !== null && regime.wednesday_only_sell_engines !== undefined) {
         allowedEngineNames = regime.wednesday_only_sell_engines;
       } else {
-        allowedEngineNames = regime.allowed_sell_engines || [];
+        allowedEngineNames = sellOverrides.allowed_sell_engines || regime.allowed_sell_engines || [];
       }
       if (regime.sell_adx_override) {
         adxOverrides = regime.sell_adx_override;
       }
     }
 
+    const directionOverrides = tradeType === 'BUY' ? buyOverrides : sellOverrides;
+
+    const rocketRuleFromOverride = directionOverrides?.rocket_rule?.enabled === true ? directionOverrides.rocket_rule : null;
+    const rocketRuleEnabled = rocketRuleFromOverride !== null ? true : (regime.rocket_rule_enabled ?? false);
+
     return {
       matched: true,
       regime,
       regimeName: regime.name,
       allowedEngineNames,
-      rocketRuleEnabled: regime.rocket_rule_enabled ?? false,
-      adxOverrides
+      rocketRuleEnabled,
+      adxOverrides,
+      directionOverrides
     };
   }
 
@@ -262,6 +290,7 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     const allowedEngineNames = regimeResult.allowedEngineNames || [];
     const adxOverrides = regimeResult.adxOverrides || {};
     const regimeName = regimeResult.regimeName || 'Unknown Regime';
+    const dirOverrides = regimeResult.directionOverrides || {};
 
     const directionFilters = tradeType === 'BUY' ? (filters.buy_filters || {}) : (filters.sell_filters || {});
     const allConditionSets: any[] = directionFilters.condition_sets || [];
@@ -270,6 +299,41 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
 
     if (eligibleSets.length === 0) {
       return { passed: false, reason: `Regime "${regimeName}": No engines allowed for ${tradeType} on this day/VIX condition` };
+    }
+
+    if (dirOverrides.adx?.enabled && payload.adx !== undefined) {
+      const minVal = dirOverrides.adx.min_value ?? 0;
+      const maxVal = dirOverrides.adx.max_value ?? 100;
+      if (payload.adx < minVal || payload.adx > maxVal) {
+        return { passed: false, reason: `Regime "${regimeName}": ${tradeType} ADX ${payload.adx} outside regime override range ${minVal}-${maxVal}` };
+      }
+    }
+
+    if (dirOverrides.volume_ratio?.enabled && payload.volume !== undefined && payload.vol_avg_5d !== undefined && payload.vol_avg_5d > 0) {
+      const vr = payload.volume / payload.vol_avg_5d;
+      const minVal = dirOverrides.volume_ratio.min_value ?? 0;
+      const maxVal = dirOverrides.volume_ratio.max_value ?? 10;
+      if (vr < minVal || vr > maxVal) {
+        return { passed: false, reason: `Regime "${regimeName}": ${tradeType} Volume ratio ${vr.toFixed(2)} outside regime override range ${minVal}-${maxVal}` };
+      }
+    }
+
+    if (dirOverrides.di_spread?.enabled && payload.di_plus !== undefined && payload.di_minus !== undefined) {
+      const diSpread = Math.abs(payload.di_plus - payload.di_minus);
+      const minVal = dirOverrides.di_spread.min_value ?? 0;
+      const maxVal = dirOverrides.di_spread.max_value ?? 100;
+      if (diSpread < minVal || diSpread > maxVal) {
+        return { passed: false, reason: `Regime "${regimeName}": ${tradeType} DI Spread ${diSpread.toFixed(2)} outside regime override range ${minVal}-${maxVal}` };
+      }
+    }
+
+    if (dirOverrides.dist_ema21_atr?.enabled && payload.dist_ema21_atr !== undefined) {
+      const emaD = Math.abs(payload.dist_ema21_atr);
+      const minVal = dirOverrides.dist_ema21_atr.min_value ?? -10;
+      const maxVal = dirOverrides.dist_ema21_atr.max_value ?? 10;
+      if (emaD < minVal || emaD > maxVal) {
+        return { passed: false, reason: `Regime "${regimeName}": ${tradeType} EMA distance ${emaD.toFixed(2)} outside regime override range ${minVal}-${maxVal}` };
+      }
     }
 
     let anyPassed = false;
@@ -541,6 +605,7 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
 
       try {
         let regimeRocketRuleEnabled: boolean | undefined = undefined;
+        let regimeRocketRuleConfig: any = null;
 
         if (account.signal_filters_enabled && account.signal_filters) {
           const filterResult = evaluateSignalFilters(account.signal_filters, enrichedPayload, symbol, tradeType);
@@ -564,6 +629,13 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
           if (filterResult.regimeInfo) {
             accountResult.regime_matched = filterResult.regimeInfo;
             regimeRocketRuleEnabled = filterResult.rocketRuleOverride;
+            if (filterResult.rocketRuleOverride) {
+              const matchedRegime = (account.signal_filters?.regimes || []).find((r: any) => r.name === filterResult.regimeInfo);
+              if (matchedRegime) {
+                const dirOv = tradeType === 'BUY' ? matchedRegime.buy_overrides : matchedRegime.sell_overrides;
+                if (dirOv?.rocket_rule?.enabled) regimeRocketRuleConfig = dirOv.rocket_rule;
+              }
+            }
           }
         }
 
@@ -614,16 +686,17 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
         });
 
         const rocketRuleActive = regimeRocketRuleEnabled !== undefined ? regimeRocketRuleEnabled : (rocketRule?.enabled ?? false);
+        const effectiveRocketRule = regimeRocketRuleConfig ?? rocketRule;
 
-        if (rocketRuleActive && rocketRule && enrichedPayload.volume !== undefined && enrichedPayload.vol_avg_5d !== undefined && enrichedPayload.vol_avg_5d > 0) {
+        if (rocketRuleActive && effectiveRocketRule && enrichedPayload.volume !== undefined && enrichedPayload.vol_avg_5d !== undefined && enrichedPayload.vol_avg_5d > 0) {
           const volumeRatio = enrichedPayload.volume / enrichedPayload.vol_avg_5d;
-          const threshold = rocketRule.volume_ratio_threshold ?? 0.70;
-          console.log('[Webhook] Rocket rule volume check:', { volumeRatio, threshold, triggered: volumeRatio >= threshold });
+          const threshold = effectiveRocketRule.volume_ratio_threshold ?? 0.70;
+          console.log('[Webhook] Rocket rule volume check:', { volumeRatio, threshold, triggered: volumeRatio >= threshold, source: regimeRocketRuleConfig ? 'regime_override' : 'global' });
           if (volumeRatio >= threshold) {
             rocketRuleTriggered = true;
-            finalLotMultiplier = rocketRule.lot_multiplier ?? 2;
-            finalTargetMultiplier = rocketRule.target_multiplier ?? 3.0;
-            console.log('[Webhook] ROCKET RULE TRIGGERED:', { finalLotMultiplier, finalTargetMultiplier, volumeRatio });
+            finalLotMultiplier = effectiveRocketRule.lot_multiplier ?? 2;
+            finalTargetMultiplier = effectiveRocketRule.target_multiplier ?? 3.0;
+            console.log('[Webhook] ROCKET RULE TRIGGERED:', { finalLotMultiplier, finalTargetMultiplier, volumeRatio, source: regimeRocketRuleConfig ? 'regime_override' : 'global' });
           }
         }
 

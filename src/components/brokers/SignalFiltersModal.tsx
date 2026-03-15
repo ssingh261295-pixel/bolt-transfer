@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, Filter, Save, Plus, Trash2, ChevronDown, ChevronUp, Activity } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, Filter, Save, Plus, Trash2, ChevronDown, ChevronUp, Activity, AlertTriangle, ShieldCheck, TrendingUp, TrendingDown, Zap } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { MultiSelectFilter } from '../common/MultiSelectFilter';
 
@@ -10,6 +10,50 @@ interface SignalFiltersModalProps {
 }
 
 const DAY_LABELS: Record<number, string> = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri' };
+
+function rangesOverlap(minA: number | null, maxA: number | null, minB: number | null, maxB: number | null): boolean {
+  const lo1 = minA ?? -Infinity;
+  const hi1 = maxA ?? Infinity;
+  const lo2 = minB ?? -Infinity;
+  const hi2 = maxB ?? Infinity;
+  return lo1 <= hi2 && lo2 <= hi1;
+}
+
+function detectVixConflicts(regimes: any[]): string[] {
+  const warnings: string[] = [];
+  const enabled = regimes.map((r: any, i: number) => ({ ...r, _idx: i })).filter((r: any) => r.enabled);
+  for (let i = 0; i < enabled.length; i++) {
+    for (let j = i + 1; j < enabled.length; j++) {
+      const a = enabled[i];
+      const b = enabled[j];
+      if (rangesOverlap(a.vix_min, a.vix_max, b.vix_min, b.vix_max)) {
+        const fmt = (min: any, max: any) => `${min ?? '—'} to ${max ?? '—'}`;
+        warnings.push(`"${a.name}" (VIX ${fmt(a.vix_min, a.vix_max)}) and "${b.name}" (VIX ${fmt(b.vix_min, b.vix_max)}) have overlapping VIX ranges — only the first matching regime will execute.`);
+      }
+    }
+  }
+  return warnings;
+}
+
+const DEFAULT_REGIME_BUY_OVERRIDES = {
+  allow_buy: true,
+  condition_sets_override: [],
+  adx: { enabled: false, min_value: 0, max_value: 100 },
+  volume_ratio: { enabled: false, min_value: 0.0, max_value: 10.0 },
+  di_spread: { enabled: false, min_value: 0, max_value: 100 },
+  dist_ema21_atr: { enabled: false, min_value: -10.0, max_value: 10.0 },
+  rocket_rule: { enabled: false, volume_ratio_threshold: 0.70, lot_multiplier: 2, target_multiplier: 3.0 }
+};
+
+const DEFAULT_REGIME_SELL_OVERRIDES = {
+  allow_sell: true,
+  condition_sets_override: [],
+  adx: { enabled: false, min_value: 0, max_value: 100 },
+  volume_ratio: { enabled: false, min_value: 0.0, max_value: 10.0 },
+  di_spread: { enabled: false, min_value: 0, max_value: 100 },
+  dist_ema21_atr: { enabled: false, min_value: -10.0, max_value: 10.0 },
+  rocket_rule: { enabled: false, volume_ratio_threshold: 0.70, lot_multiplier: 2, target_multiplier: 3.0 }
+};
 
 const DEFAULT_REGIMES = [
   {
@@ -24,7 +68,9 @@ const DEFAULT_REGIMES = [
     allowed_sell_engines: ['Option D', 'Option E', 'Option F', 'Option G'],
     wednesday_only_buy_engines: ['Option A', 'Option C'],
     wednesday_only_sell_engines: ['Option E'],
-    rocket_rule_enabled: true
+    rocket_rule_enabled: true,
+    buy_overrides: { ...DEFAULT_REGIME_BUY_OVERRIDES, allow_buy: true },
+    sell_overrides: { ...DEFAULT_REGIME_SELL_OVERRIDES, allow_sell: true }
   },
   {
     name: 'Regime 2 — Mid VIX (18–20)',
@@ -39,7 +85,9 @@ const DEFAULT_REGIMES = [
     wednesday_only_buy_engines: null,
     wednesday_only_sell_engines: null,
     rocket_rule_enabled: false,
-    sell_adx_override: { 'Option D': { max: 40 } }
+    sell_adx_override: { 'Option D': { max: 40 } },
+    buy_overrides: { ...DEFAULT_REGIME_BUY_OVERRIDES, allow_buy: false },
+    sell_overrides: { ...DEFAULT_REGIME_SELL_OVERRIDES, allow_sell: true }
   },
   {
     name: 'Regime 3 — High VIX (>20)',
@@ -54,7 +102,9 @@ const DEFAULT_REGIMES = [
     wednesday_only_buy_engines: null,
     wednesday_only_sell_engines: null,
     rocket_rule_enabled: false,
-    sell_adx_override: { 'Option D': { max: 25 } }
+    sell_adx_override: { 'Option D': { max: 25 } },
+    buy_overrides: { ...DEFAULT_REGIME_BUY_OVERRIDES, allow_buy: false },
+    sell_overrides: { ...DEFAULT_REGIME_SELL_OVERRIDES, allow_sell: true }
   }
 ];
 
@@ -62,6 +112,7 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
   const [filtersEnabled, setFiltersEnabled] = useState(broker.signal_filters_enabled || false);
   const [activeTab, setActiveTab] = useState<'global' | 'buy' | 'sell' | 'regimes'>('global');
   const [expandedRegimes, setExpandedRegimes] = useState<Record<number, boolean>>({});
+  const [expandedRegimeSections, setExpandedRegimeSections] = useState<Record<string, boolean>>({});
 
   const newConditionSet = (name: string) => ({
     name,
@@ -125,18 +176,30 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
         sellFilters.condition_sets = defaultSellConditionSets;
       }
 
+      const regimes = (brokerFilters.regimes || DEFAULT_REGIMES).map((r: any) => ({
+        ...r,
+        buy_overrides: r.buy_overrides || { ...DEFAULT_REGIME_BUY_OVERRIDES, allow_buy: true },
+        sell_overrides: r.sell_overrides || { ...DEFAULT_REGIME_SELL_OVERRIDES, allow_sell: true }
+      }));
+
       setFilters({
         symbols: brokerFilters.symbols || filters.symbols,
         trade_types: brokerFilters.trade_types || filters.trade_types,
         time_filters: brokerFilters.time_filters || filters.time_filters,
         buy_filters: buyFilters,
         sell_filters: sellFilters,
-        regimes: brokerFilters.regimes || DEFAULT_REGIMES
+        regimes
       });
     }
   }, [broker]);
 
+  const vixConflicts = useMemo(() => detectVixConflicts(filters.regimes || []), [filters.regimes]);
+
   const handleSave = async () => {
+    if (vixConflicts.length > 0) {
+      setError(`Cannot save: Fix VIX range conflicts first.\n${vixConflicts.join('\n')}`);
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -202,6 +265,24 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     setFilters({ ...filters, regimes });
   };
 
+  const updateRegimeBuyOverride = (regimeIndex: number, field: string, value: any) => {
+    const regimes = [...(filters.regimes || [])];
+    regimes[regimeIndex] = {
+      ...regimes[regimeIndex],
+      buy_overrides: { ...(regimes[regimeIndex].buy_overrides || DEFAULT_REGIME_BUY_OVERRIDES), [field]: value }
+    };
+    setFilters({ ...filters, regimes });
+  };
+
+  const updateRegimeSellOverride = (regimeIndex: number, field: string, value: any) => {
+    const regimes = [...(filters.regimes || [])];
+    regimes[regimeIndex] = {
+      ...regimes[regimeIndex],
+      sell_overrides: { ...(regimes[regimeIndex].sell_overrides || DEFAULT_REGIME_SELL_OVERRIDES), [field]: value }
+    };
+    setFilters({ ...filters, regimes });
+  };
+
   const addRegime = () => {
     const regimes = [...(filters.regimes || [])];
     regimes.push({
@@ -216,7 +297,9 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
       allowed_sell_engines: [],
       wednesday_only_buy_engines: null,
       wednesday_only_sell_engines: null,
-      rocket_rule_enabled: false
+      rocket_rule_enabled: false,
+      buy_overrides: { ...DEFAULT_REGIME_BUY_OVERRIDES, allow_buy: true },
+      sell_overrides: { ...DEFAULT_REGIME_SELL_OVERRIDES, allow_sell: true }
     });
     setFilters({ ...filters, regimes });
     setExpandedRegimes({ ...expandedRegimes, [regimes.length - 1]: true });
@@ -239,6 +322,10 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
 
   const getBuyEngineNames = () => (filters.buy_filters?.condition_sets || []).map((cs: any) => cs.name).filter(Boolean);
   const getSellEngineNames = () => (filters.sell_filters?.condition_sets || []).map((cs: any) => cs.name).filter(Boolean);
+
+  const toggleRegimeSection = (key: string) => {
+    setExpandedRegimeSections(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const renderEngineToggleList = (regimeIndex: number, field: string, engineNames: string[], color: 'green' | 'red') => {
     const regime = filters.regimes[regimeIndex];
@@ -308,10 +395,266 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     );
   };
 
+  const renderRegimeDirectionOverrides = (regimeIndex: number, direction: 'buy' | 'sell') => {
+    const regime = filters.regimes[regimeIndex];
+    const overrides = direction === 'buy'
+      ? (regime.buy_overrides || DEFAULT_REGIME_BUY_OVERRIDES)
+      : (regime.sell_overrides || DEFAULT_REGIME_SELL_OVERRIDES);
+    const updateOverride = direction === 'buy' ? updateRegimeBuyOverride : updateRegimeSellOverride;
+    const allowKey = direction === 'buy' ? 'allow_buy' : 'allow_sell';
+    const isAllowed: boolean = overrides[allowKey] !== false;
+    const color = direction === 'buy' ? 'green' : 'red';
+    const Icon = direction === 'buy' ? TrendingUp : TrendingDown;
+    const engineNames = direction === 'buy' ? getBuyEngineNames() : getSellEngineNames();
+    const engineField = direction === 'buy' ? 'allowed_buy_engines' : 'allowed_sell_engines';
+    const wedEngineField = direction === 'buy' ? 'wednesday_only_buy_engines' : 'wednesday_only_sell_engines';
+    const sectionKey = `${regimeIndex}_${direction}`;
+    const isExpanded = expandedRegimeSections[sectionKey] ?? false;
+
+    return (
+      <div className={`border-2 rounded-xl overflow-hidden ${isAllowed ? `border-${color}-300` : 'border-gray-200'}`}>
+        <div
+          className={`flex items-center gap-3 px-4 py-3 cursor-pointer select-none ${isAllowed ? `bg-${color}-50` : 'bg-gray-50'}`}
+          onClick={() => toggleRegimeSection(sectionKey)}
+        >
+          <Icon className={`w-4 h-4 ${isAllowed ? `text-${color}-600` : 'text-gray-400'}`} />
+          <span className={`font-semibold text-sm flex-1 ${isAllowed ? `text-${color}-900` : 'text-gray-500'}`}>
+            {direction.toUpperCase()} Signals
+          </span>
+          <label className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <span className="text-xs text-gray-600">Allow {direction.toUpperCase()}</span>
+            <input
+              type="checkbox"
+              checked={isAllowed}
+              onChange={(e) => updateOverride(regimeIndex, allowKey, e.target.checked)}
+              className={`w-4 h-4 text-${color}-600 rounded`}
+            />
+          </label>
+          {isAllowed
+            ? <span className={`text-xs font-semibold px-2 py-0.5 bg-${color}-600 text-white rounded-full`}>ON</span>
+            : <span className="text-xs font-semibold px-2 py-0.5 bg-gray-300 text-gray-600 rounded-full">OFF</span>
+          }
+          {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+        </div>
+
+        {isExpanded && isAllowed && (
+          <div className="p-4 space-y-4 border-t border-gray-100 bg-white">
+            <div className={`border border-${color}-200 rounded-lg p-3`}>
+              <h5 className={`text-sm font-semibold text-${color}-800 mb-2`}>Allowed Engines (all days)</h5>
+              {renderEngineToggleList(regimeIndex, engineField, engineNames, color)}
+              {direction === 'sell' && (regime[engineField] || []).map((engineName: string) => (
+                <div key={engineName} className="mt-2">
+                  {renderRegimeAdxOverride(regimeIndex, engineName)}
+                </div>
+              ))}
+            </div>
+
+            <div className={`border border-${color}-100 bg-${color}-50 rounded-lg p-3`}>
+              <div className="flex items-center justify-between mb-2">
+                <h5 className={`text-sm font-semibold text-${color}-800`}>Wednesday Override</h5>
+                <label className={`flex items-center gap-1.5 text-xs text-${color}-700`}>
+                  <input
+                    type="checkbox"
+                    checked={regime[wedEngineField] !== null && regime[wedEngineField] !== undefined}
+                    onChange={(e) => updateRegime(regimeIndex, wedEngineField, e.target.checked ? [] : null)}
+                    className="w-3.5 h-3.5"
+                  />
+                  Enable Wed override
+                </label>
+              </div>
+              {regime[wedEngineField] !== null && regime[wedEngineField] !== undefined
+                ? renderEngineToggleList(regimeIndex, wedEngineField, engineNames, color)
+                : <p className="text-xs text-gray-400 italic">Not set — uses all-days list on Wednesdays.</p>
+              }
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className={`border border-${color}-200 rounded-lg p-3`}>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700">ADX Range Override</label>
+                  <input
+                    type="checkbox"
+                    checked={overrides.adx?.enabled ?? false}
+                    onChange={(e) => updateOverride(regimeIndex, 'adx', { ...overrides.adx, enabled: e.target.checked })}
+                    className="w-3.5 h-3.5"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Min</label>
+                    <input type="number" step="0.1"
+                      value={overrides.adx?.min_value ?? 0}
+                      onChange={(e) => updateOverride(regimeIndex, 'adx', { ...overrides.adx, min_value: parseFloat(e.target.value) })}
+                      disabled={!overrides.adx?.enabled}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Max</label>
+                    <input type="number" step="0.1"
+                      value={overrides.adx?.max_value ?? 100}
+                      onChange={(e) => updateOverride(regimeIndex, 'adx', { ...overrides.adx, max_value: parseFloat(e.target.value) })}
+                      disabled={!overrides.adx?.enabled}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className={`border border-${color}-200 rounded-lg p-3`}>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700">Volume Ratio Override</label>
+                  <input
+                    type="checkbox"
+                    checked={overrides.volume_ratio?.enabled ?? false}
+                    onChange={(e) => updateOverride(regimeIndex, 'volume_ratio', { ...overrides.volume_ratio, enabled: e.target.checked })}
+                    className="w-3.5 h-3.5"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Min</label>
+                    <input type="number" step="0.01"
+                      value={overrides.volume_ratio?.min_value ?? 0}
+                      onChange={(e) => updateOverride(regimeIndex, 'volume_ratio', { ...overrides.volume_ratio, min_value: parseFloat(e.target.value) })}
+                      disabled={!overrides.volume_ratio?.enabled}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Max</label>
+                    <input type="number" step="0.01"
+                      value={overrides.volume_ratio?.max_value ?? 10}
+                      onChange={(e) => updateOverride(regimeIndex, 'volume_ratio', { ...overrides.volume_ratio, max_value: parseFloat(e.target.value) })}
+                      disabled={!overrides.volume_ratio?.enabled}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className={`border border-${color}-200 rounded-lg p-3`}>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700">DI Spread Override</label>
+                  <input
+                    type="checkbox"
+                    checked={overrides.di_spread?.enabled ?? false}
+                    onChange={(e) => updateOverride(regimeIndex, 'di_spread', { ...overrides.di_spread, enabled: e.target.checked })}
+                    className="w-3.5 h-3.5"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Min</label>
+                    <input type="number" step="0.1"
+                      value={overrides.di_spread?.min_value ?? 0}
+                      onChange={(e) => updateOverride(regimeIndex, 'di_spread', { ...overrides.di_spread, min_value: parseFloat(e.target.value) })}
+                      disabled={!overrides.di_spread?.enabled}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Max</label>
+                    <input type="number" step="0.1"
+                      value={overrides.di_spread?.max_value ?? 100}
+                      onChange={(e) => updateOverride(regimeIndex, 'di_spread', { ...overrides.di_spread, max_value: parseFloat(e.target.value) })}
+                      disabled={!overrides.di_spread?.enabled}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className={`border border-${color}-200 rounded-lg p-3`}>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700">EMA Dist Override</label>
+                  <input
+                    type="checkbox"
+                    checked={overrides.dist_ema21_atr?.enabled ?? false}
+                    onChange={(e) => updateOverride(regimeIndex, 'dist_ema21_atr', { ...overrides.dist_ema21_atr, enabled: e.target.checked })}
+                    className="w-3.5 h-3.5"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Min</label>
+                    <input type="number" step="0.1"
+                      value={overrides.dist_ema21_atr?.min_value ?? -10}
+                      onChange={(e) => updateOverride(regimeIndex, 'dist_ema21_atr', { ...overrides.dist_ema21_atr, min_value: parseFloat(e.target.value) })}
+                      disabled={!overrides.dist_ema21_atr?.enabled}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Max</label>
+                    <input type="number" step="0.1"
+                      value={overrides.dist_ema21_atr?.max_value ?? 10}
+                      onChange={(e) => updateOverride(regimeIndex, 'dist_ema21_atr', { ...overrides.dist_ema21_atr, max_value: parseFloat(e.target.value) })}
+                      disabled={!overrides.dist_ema21_atr?.enabled}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={`border border-amber-200 bg-amber-50 rounded-lg p-3`}>
+              <div className="flex items-center gap-2 mb-2">
+                <Zap className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-semibold text-amber-900">Rocket Rule</span>
+                <label className="flex items-center gap-1.5 ml-auto">
+                  <span className="text-xs text-amber-700">Enabled</span>
+                  <input
+                    type="checkbox"
+                    checked={overrides.rocket_rule?.enabled ?? false}
+                    onChange={(e) => updateOverride(regimeIndex, 'rocket_rule', { ...overrides.rocket_rule, enabled: e.target.checked })}
+                    className="w-4 h-4 text-amber-600 rounded"
+                  />
+                </label>
+              </div>
+              {overrides.rocket_rule?.enabled && (
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">VR Threshold</label>
+                    <input type="number" step="0.01"
+                      value={overrides.rocket_rule?.volume_ratio_threshold ?? 0.70}
+                      onChange={(e) => updateOverride(regimeIndex, 'rocket_rule', { ...overrides.rocket_rule, volume_ratio_threshold: parseFloat(e.target.value) })}
+                      className="w-full px-2 py-1 text-xs border border-amber-300 rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Lot Multiplier</label>
+                    <input type="number" step="1" min="1"
+                      value={overrides.rocket_rule?.lot_multiplier ?? 2}
+                      onChange={(e) => updateOverride(regimeIndex, 'rocket_rule', { ...overrides.rocket_rule, lot_multiplier: parseInt(e.target.value) })}
+                      className="w-full px-2 py-1 text-xs border border-amber-300 rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Target Multiplier</label>
+                    <input type="number" step="0.1" min="0.1"
+                      value={overrides.rocket_rule?.target_multiplier ?? 3.0}
+                      onChange={(e) => updateOverride(regimeIndex, 'rocket_rule', { ...overrides.rocket_rule, target_multiplier: parseFloat(e.target.value) })}
+                      className="w-full px-2 py-1 text-xs border border-amber-300 rounded"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isExpanded && !isAllowed && (
+          <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
+            <p className="text-xs text-gray-400 italic">{direction.toUpperCase()} signals are disabled for this regime. Enable to configure.</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderRegimes = () => {
     const regimes = filters.regimes || [];
-    const buyEngines = getBuyEngineNames();
-    const sellEngines = getSellEngineNames();
 
     return (
       <div className="space-y-4">
@@ -321,14 +664,26 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
             <div>
               <h3 className="font-semibold text-blue-900 mb-1">VIX-Based Market Regimes</h3>
               <p className="text-sm text-blue-700">
-                Regimes gate which engines are active based on VIX level, day of week, and time window.
-                The webhook payload must include a <code className="bg-blue-100 px-1 rounded">vix</code> field.
-                The <strong>first matching enabled regime</strong> controls execution. If no regime matches,
-                falls back to standard condition sets.
+                Each regime activates based on VIX level fetched live from Zerodha. Configure BUY/SELL enable,
+                allowed engines, and override filters per regime. The <strong>first matching enabled regime</strong> controls execution.
+                If no regime matches, falls back to standard condition sets.
               </p>
             </div>
           </div>
         </div>
+
+        {vixConflicts.length > 0 && (
+          <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <span className="font-semibold text-amber-900 text-sm">VIX Range Conflicts Detected</span>
+            </div>
+            {vixConflicts.map((w, i) => (
+              <p key={i} className="text-xs text-amber-800 pl-7">{w}</p>
+            ))}
+            <p className="text-xs text-amber-700 pl-7 font-medium">Fix overlapping VIX ranges before saving. You cannot save with conflicts.</p>
+          </div>
+        )}
 
         {regimes.length === 0 && (
           <div className="text-center py-10 border-2 border-dashed border-gray-300 rounded-lg">
@@ -339,12 +694,18 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
 
         {regimes.map((regime: any, idx: number) => {
           const isExpanded = expandedRegimes[idx] ?? false;
-          const activeEngineCount = (regime.allowed_buy_engines?.length || 0) + (regime.allowed_sell_engines?.length || 0);
+          const buyEnabled = regime.buy_overrides?.allow_buy !== false;
+          const sellEnabled = regime.sell_overrides?.allow_sell !== false;
+          const hasConflict = vixConflicts.some(w => w.includes(`"${regime.name}"`));
 
           return (
-            <div key={idx} className={`border-2 rounded-xl overflow-hidden ${regime.enabled ? 'border-blue-400' : 'border-gray-200'}`}>
+            <div key={idx} className={`border-2 rounded-xl overflow-hidden ${
+              hasConflict ? 'border-amber-400' : regime.enabled ? 'border-blue-400' : 'border-gray-200'
+            }`}>
               <div
-                className={`flex items-center gap-3 p-4 cursor-pointer select-none ${regime.enabled ? 'bg-blue-50' : 'bg-gray-50'}`}
+                className={`flex items-center gap-3 p-4 cursor-pointer select-none ${
+                  hasConflict ? 'bg-amber-50' : regime.enabled ? 'bg-blue-50' : 'bg-gray-50'
+                }`}
                 onClick={() => setExpandedRegimes({ ...expandedRegimes, [idx]: !isExpanded })}
               >
                 <label className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -363,15 +724,28 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                     onClick={(e) => e.stopPropagation()}
                     className={`font-semibold text-sm bg-transparent border-none outline-none w-full ${regime.enabled ? 'text-blue-900' : 'text-gray-700'}`}
                   />
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    VIX: {regime.vix_min ?? '—'} to {regime.vix_max ?? '—'} &nbsp;|&nbsp;
-                    Days: {(regime.allowed_days || []).map((d: number) => DAY_LABELS[d]).join(', ')} &nbsp;|&nbsp;
-                    {regime.time_start}–{regime.time_end} &nbsp;|&nbsp;
-                    {activeEngineCount} engine(s) active
-                  </p>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <span className="text-xs text-gray-500">
+                      VIX: {regime.vix_min ?? '—'} to {regime.vix_max ?? '—'}
+                    </span>
+                    <span className="text-gray-300">|</span>
+                    <span className="text-xs text-gray-500">
+                      {(regime.allowed_days || []).map((d: number) => DAY_LABELS[d]).join(', ')}
+                    </span>
+                    <span className="text-gray-300">|</span>
+                    <span className="text-xs text-gray-500">{regime.time_start}–{regime.time_end}</span>
+                    <span className="text-gray-300">|</span>
+                    <span className={`text-xs font-medium ${buyEnabled ? 'text-green-700' : 'text-gray-400'}`}>
+                      BUY: {buyEnabled ? 'ON' : 'OFF'}
+                    </span>
+                    <span className={`text-xs font-medium ${sellEnabled ? 'text-red-700' : 'text-gray-400'}`}>
+                      SELL: {sellEnabled ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {regime.enabled && (
+                  {hasConflict && <AlertTriangle className="w-4 h-4 text-amber-500" />}
+                  {regime.enabled && !hasConflict && (
                     <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">ACTIVE</span>
                   )}
                   <button
@@ -389,7 +763,7 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                 <div className="p-4 space-y-5 border-t border-gray-200 bg-white">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">VIX Min (inclusive)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">VIX Min (inclusive, empty = no lower bound)</label>
                       <input
                         type="number" step="0.01" placeholder="No lower bound"
                         value={regime.vix_min ?? ''}
@@ -398,7 +772,7 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">VIX Max (inclusive)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">VIX Max (inclusive, empty = no upper bound)</label>
                       <input
                         type="number" step="0.01" placeholder="No upper bound"
                         value={regime.vix_max ?? ''}
@@ -456,72 +830,13 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                     </div>
                   </div>
 
-                  <div className="border border-green-200 rounded-lg p-3">
-                    <h4 className="text-sm font-semibold text-green-800 mb-2">BUY Engines Allowed (all days)</h4>
-                    {renderEngineToggleList(idx, 'allowed_buy_engines', buyEngines, 'green')}
-                  </div>
-
-                  <div className="border border-green-100 bg-green-50 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-semibold text-green-800">Wednesday BUY Override</h4>
-                      <label className="flex items-center gap-1.5 text-xs text-green-700">
-                        <input
-                          type="checkbox"
-                          checked={regime.wednesday_only_buy_engines !== null && regime.wednesday_only_buy_engines !== undefined}
-                          onChange={(e) => updateRegime(idx, 'wednesday_only_buy_engines', e.target.checked ? [] : null)}
-                          className="w-3.5 h-3.5"
-                        />
-                        Enable Wed override
-                      </label>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-blue-500" />
+                      <h4 className="font-semibold text-gray-900 text-sm">Signal Direction Settings</h4>
                     </div>
-                    {regime.wednesday_only_buy_engines !== null && regime.wednesday_only_buy_engines !== undefined
-                      ? renderEngineToggleList(idx, 'wednesday_only_buy_engines', buyEngines, 'green')
-                      : <p className="text-xs text-gray-400 italic">Not set — uses "all days" list above on Wednesdays.</p>
-                    }
-                  </div>
-
-                  <div className="border border-red-200 rounded-lg p-3">
-                    <h4 className="text-sm font-semibold text-red-800 mb-2">SELL Engines Allowed (all days)</h4>
-                    {renderEngineToggleList(idx, 'allowed_sell_engines', sellEngines, 'red')}
-                    {(regime.allowed_sell_engines || []).map((engineName: string) => (
-                      <div key={engineName} className="mt-2">
-                        {renderRegimeAdxOverride(idx, engineName)}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="border border-red-100 bg-red-50 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-semibold text-red-800">Wednesday SELL Override</h4>
-                      <label className="flex items-center gap-1.5 text-xs text-red-700">
-                        <input
-                          type="checkbox"
-                          checked={regime.wednesday_only_sell_engines !== null && regime.wednesday_only_sell_engines !== undefined}
-                          onChange={(e) => updateRegime(idx, 'wednesday_only_sell_engines', e.target.checked ? [] : null)}
-                          className="w-3.5 h-3.5"
-                        />
-                        Enable Wed override
-                      </label>
-                    </div>
-                    {regime.wednesday_only_sell_engines !== null && regime.wednesday_only_sell_engines !== undefined
-                      ? renderEngineToggleList(idx, 'wednesday_only_sell_engines', sellEngines, 'red')
-                      : <p className="text-xs text-gray-400 italic">Not set — uses "all days" list above on Wednesdays.</p>
-                    }
-                  </div>
-
-                  <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={regime.rocket_rule_enabled ?? false}
-                        onChange={(e) => updateRegime(idx, 'rocket_rule_enabled', e.target.checked)}
-                        className="w-4 h-4 text-amber-600 rounded"
-                      />
-                      <div>
-                        <span className="text-sm font-semibold text-amber-900">Rocket Rule Active in this Regime</span>
-                        <p className="text-xs text-amber-700">When enabled, the Rocket Rule from direction filters is applied for position sizing.</p>
-                      </div>
-                    </label>
+                    {renderRegimeDirectionOverrides(idx, 'buy')}
+                    {renderRegimeDirectionOverrides(idx, 'sell')}
                   </div>
                 </div>
               )}
@@ -978,7 +1293,7 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm whitespace-pre-line">{error}</div>
           )}
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -987,6 +1302,7 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                 <h3 className="font-semibold text-blue-900 mb-1">Account-Level Signal Filters</h3>
                 <p className="text-sm text-blue-700">
                   Configure filters and VIX-based regimes. All webhooks are logged regardless of filter result.
+                  VIX is fetched live from Zerodha — no need to include it in the TradingView payload.
                 </p>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -1016,6 +1332,9 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                       Regimes
                       {regimeCount > 0 && (
                         <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full leading-none">{regimeCount}</span>
+                      )}
+                      {vixConflicts.length > 0 && (
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
                       )}
                     </span>
                   )}
@@ -1125,10 +1444,10 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
               className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition">
               Cancel
             </button>
-            <button onClick={handleSave} disabled={saving}
+            <button onClick={handleSave} disabled={saving || vixConflicts.length > 0}
               className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
               <Save className="w-4 h-4" />
-              {saving ? 'Saving...' : 'Save Filters'}
+              {saving ? 'Saving...' : vixConflicts.length > 0 ? 'Fix VIX Conflicts First' : 'Save Filters'}
             </button>
           </div>
         </div>
