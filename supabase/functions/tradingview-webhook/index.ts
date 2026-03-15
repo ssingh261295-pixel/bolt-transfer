@@ -14,6 +14,80 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const VIX_CACHE_TTL_SECONDS = 120;
+const INDIA_VIX_INSTRUMENT = 'NSE:INDIA VIX';
+
+async function fetchAndCacheVIX(supabase: any, brokerAccounts: any[]): Promise<{ vix: number | null; source: string; stale: boolean }> {
+  try {
+    const { data: cached } = await supabase
+      .from('vix_cache')
+      .select('vix_value, fetched_at, is_stale')
+      .eq('id', 1)
+      .maybeSingle();
+
+    if (cached?.vix_value !== null && cached?.vix_value !== undefined && cached?.fetched_at) {
+      const ageSeconds = (Date.now() - new Date(cached.fetched_at).getTime()) / 1000;
+      if (ageSeconds < VIX_CACHE_TTL_SECONDS) {
+        return { vix: parseFloat(cached.vix_value), source: 'cache', stale: false };
+      }
+    }
+
+    const activeBroker = brokerAccounts.find((b: any) => b.api_key && b.access_token);
+    if (!activeBroker) {
+      if (cached?.vix_value !== null && cached?.vix_value !== undefined) {
+        return { vix: parseFloat(cached.vix_value), source: 'stale_cache', stale: true };
+      }
+      return { vix: null, source: 'no_broker', stale: false };
+    }
+
+    const vixUrl = `https://api.kite.trade/quote/ltp?i=${encodeURIComponent(INDIA_VIX_INSTRUMENT)}`;
+    const vixResponse = await fetch(vixUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `token ${activeBroker.api_key}:${activeBroker.access_token}`,
+        'X-Kite-Version': '3'
+      }
+    });
+
+    if (!vixResponse.ok) {
+      console.error('[VIX] Zerodha API error:', vixResponse.status);
+      if (cached?.vix_value !== null && cached?.vix_value !== undefined) {
+        await supabase.from('vix_cache').upsert({ id: 1, is_stale: true }, { onConflict: 'id' });
+        return { vix: parseFloat(cached.vix_value), source: 'stale_cache', stale: true };
+      }
+      return { vix: null, source: 'fetch_failed', stale: false };
+    }
+
+    const vixData = await vixResponse.json();
+    const vixKey = Object.keys(vixData?.data || {})[0];
+    const vixValue: number | undefined = vixData?.data?.[vixKey]?.last_price;
+
+    if (vixValue === undefined || vixValue === null) {
+      console.error('[VIX] Could not parse VIX from response:', JSON.stringify(vixData));
+      if (cached?.vix_value !== null && cached?.vix_value !== undefined) {
+        return { vix: parseFloat(cached.vix_value), source: 'stale_cache', stale: true };
+      }
+      return { vix: null, source: 'parse_failed', stale: false };
+    }
+
+    await supabase.from('vix_cache').upsert({
+      id: 1,
+      vix_value: vixValue,
+      fetched_at: new Date().toISOString(),
+      source_broker_id: activeBroker.id,
+      raw_response: vixData?.data || {},
+      is_stale: false
+    }, { onConflict: 'id' });
+
+    console.log('[VIX] Fetched and cached VIX:', vixValue);
+    return { vix: vixValue, source: 'live', stale: false };
+
+  } catch (err: any) {
+    console.error('[VIX] Error fetching VIX:', err.message);
+    return { vix: null, source: 'error', stale: false };
+  }
+}
+
 function isWithinTradingWindow(): { allowed: boolean; currentTime: string; reason?: string } {
   const now = new Date();
   const istOffset = 5.5 * 60 * 60 * 1000;
@@ -438,6 +512,21 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
 
     const instrument = (day <= nextMonthDayThreshold || futInstruments.length < 2) ? futInstruments[0] : futInstruments[1];
 
+    const hasRegimesEnabled = brokerAccounts.some((b: any) =>
+      b.signal_filters_enabled && b.signal_filters?.regimes?.some((r: any) => r.enabled)
+    );
+
+    let liveVIX: number | null = null;
+    let vixSource = 'not_fetched';
+    if (hasRegimesEnabled) {
+      const vixResult = await fetchAndCacheVIX(supabase, brokerAccounts);
+      liveVIX = vixResult.vix;
+      vixSource = vixResult.source;
+      console.log('[Webhook] VIX for regime evaluation:', { liveVIX, vixSource, stale: vixResult.stale });
+    }
+
+    const enrichedPayload = liveVIX !== null ? { ...rawPayload, vix: liveVIX } : rawPayload;
+
     const executionResults = [];
 
     for (const account of brokerAccounts) {
@@ -454,7 +543,7 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
         let regimeRocketRuleEnabled: boolean | undefined = undefined;
 
         if (account.signal_filters_enabled && account.signal_filters) {
-          const filterResult = evaluateSignalFilters(account.signal_filters, rawPayload, symbol, tradeType);
+          const filterResult = evaluateSignalFilters(account.signal_filters, enrichedPayload, symbol, tradeType);
           accountResult.filter_passed = filterResult.passed;
 
           if (!filterResult.passed) {
@@ -518,14 +607,16 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
           has_signal_filters: !!sf,
           has_direction_filters: !!directionFilters,
           rocket_rule: rocketRule,
-          volume: rawPayload.volume,
-          vol_avg_5d: rawPayload.vol_avg_5d
+          volume: enrichedPayload.volume,
+          vol_avg_5d: enrichedPayload.vol_avg_5d,
+          vix: liveVIX,
+          vix_source: vixSource
         });
 
         const rocketRuleActive = regimeRocketRuleEnabled !== undefined ? regimeRocketRuleEnabled : (rocketRule?.enabled ?? false);
 
-        if (rocketRuleActive && rocketRule && rawPayload.volume !== undefined && rawPayload.vol_avg_5d !== undefined && rawPayload.vol_avg_5d > 0) {
-          const volumeRatio = rawPayload.volume / rawPayload.vol_avg_5d;
+        if (rocketRuleActive && rocketRule && enrichedPayload.volume !== undefined && enrichedPayload.vol_avg_5d !== undefined && enrichedPayload.vol_avg_5d > 0) {
+          const volumeRatio = enrichedPayload.volume / enrichedPayload.vol_avg_5d;
           const threshold = rocketRule.volume_ratio_threshold ?? 0.70;
           console.log('[Webhook] Rocket rule volume check:', { volumeRatio, threshold, triggered: volumeRatio >= threshold });
           if (volumeRatio >= threshold) {
@@ -628,7 +719,7 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
               product_type_1: 'NRML', trigger_price_1: stopLossPrice, order_price_1: stopLossPrice, quantity_1: quantity,
               product_type_2: 'NRML', trigger_price_2: targetPrice, order_price_2: targetPrice, quantity_2: quantity,
               status: 'active',
-              metadata: { source: 'tradingview_webhook', webhook_key_name: keyData.name, entry_price: executedPrice, cash_price: price, atr, timeframe: rawPayload.timeframe || null, rocket_rule_triggered: rocketRuleTriggered, volume_ratio: rocketRuleTriggered && rawPayload.volume && rawPayload.vol_avg_5d ? (rawPayload.volume / rawPayload.vol_avg_5d).toFixed(2) : null }
+              metadata: { source: 'tradingview_webhook', webhook_key_name: keyData.name, entry_price: executedPrice, cash_price: price, atr, timeframe: enrichedPayload.timeframe || null, rocket_rule_triggered: rocketRuleTriggered, volume_ratio: enrichedPayload.volume && enrichedPayload.vol_avg_5d ? (enrichedPayload.volume / enrichedPayload.vol_avg_5d).toFixed(2) : null, vix: liveVIX, vix_source: vixSource, regime_matched: accountResult.regime_matched || null }
             }).select().single();
 
             if (!hmtError && hmtGtt) {
