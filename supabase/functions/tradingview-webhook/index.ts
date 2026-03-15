@@ -30,7 +30,126 @@ function isWithinTradingWindow(): { allowed: boolean; currentTime: string; reaso
   return { allowed: true, currentTime: currentTimeIST };
 }
 
-function evaluateSignalFilters(filters: any, payload: any, symbol: string, tradeType: string): { passed: boolean; reason?: string } {
+function getISTTime(): { hours: number; minutes: number; dayOfWeek: number; currentMinutes: number } {
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istTime = new Date(now.getTime() + istOffset);
+  const hours = istTime.getUTCHours();
+  const minutes = istTime.getUTCMinutes();
+  const currentMinutes = hours * 60 + minutes;
+  const dayOfWeek = istTime.getUTCDay() === 0 ? 7 : istTime.getUTCDay();
+  return { hours, minutes, dayOfWeek, currentMinutes };
+}
+
+function evaluateConditionSet(conditionSet: any, payload: any, adxOverride?: { min?: number; max?: number }): { passed: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  let passed = true;
+
+  if (payload.volume !== undefined && payload.vol_avg_5d !== undefined && payload.vol_avg_5d > 0) {
+    const volumeRatio = payload.volume / payload.vol_avg_5d;
+    const minVR = conditionSet.volume_ratio?.min ?? 0;
+    const maxVR = conditionSet.volume_ratio?.max ?? 100;
+    if (volumeRatio < minVR || volumeRatio > maxVR) { passed = false; reasons.push(`VR=${volumeRatio.toFixed(2)} not in [${minVR}, ${maxVR}]`); }
+  } else { passed = false; reasons.push('volume data missing'); }
+
+  if (payload.di_plus !== undefined && payload.di_minus !== undefined) {
+    const diSpread = Math.abs(payload.di_plus - payload.di_minus);
+    const minDI = conditionSet.di_spread?.min ?? 0;
+    const maxDI = conditionSet.di_spread?.max ?? 100;
+    if (diSpread < minDI || diSpread > maxDI) { passed = false; reasons.push(`DI=${diSpread.toFixed(2)} not in [${minDI}, ${maxDI}]`); }
+  } else { passed = false; reasons.push('DI data missing'); }
+
+  if (payload.adx !== undefined) {
+    const minADX = adxOverride?.min !== undefined ? adxOverride.min : (conditionSet.adx?.min ?? 0);
+    const maxADX = adxOverride?.max !== undefined ? adxOverride.max : (conditionSet.adx?.max ?? 100);
+    if (payload.adx < minADX || payload.adx > maxADX) { passed = false; reasons.push(`ADX=${payload.adx} not in [${minADX}, ${maxADX}]`); }
+  } else { passed = false; reasons.push('ADX missing'); }
+
+  if (payload.dist_ema21_atr !== undefined) {
+    const emaDistance = Math.abs(payload.dist_ema21_atr);
+    const minEMA = conditionSet.ema_distance?.min ?? 0;
+    const maxEMA = conditionSet.ema_distance?.max ?? 100;
+    if (emaDistance < minEMA || emaDistance > maxEMA) { passed = false; reasons.push(`EMA_dist=${emaDistance.toFixed(2)} not in [${minEMA}, ${maxEMA}]`); }
+  } else { passed = false; reasons.push('EMA distance missing'); }
+
+  return { passed, reasons };
+}
+
+function evaluateRegimes(filters: any, payload: any, tradeType: string): {
+  matched: boolean;
+  regime?: any;
+  regimeName?: string;
+  allowedEngineNames?: string[];
+  rocketRuleEnabled?: boolean;
+  adxOverrides?: Record<string, { min?: number; max?: number }>;
+  blockedReason?: string;
+} {
+  const regimes: any[] = filters.regimes || [];
+  const enabledRegimes = regimes.filter((r: any) => r.enabled);
+  if (enabledRegimes.length === 0) return { matched: false };
+
+  const vix: number | undefined = payload.vix !== undefined ? parseFloat(payload.vix) : undefined;
+  const ist = getISTTime();
+
+  for (const regime of enabledRegimes) {
+    if (vix !== undefined) {
+      if (regime.vix_min !== null && regime.vix_min !== undefined && vix < regime.vix_min) continue;
+      if (regime.vix_max !== null && regime.vix_max !== undefined && vix > regime.vix_max) continue;
+    }
+
+    const allowedDays: number[] = regime.allowed_days || [];
+    if (allowedDays.length > 0 && !allowedDays.includes(ist.dayOfWeek)) {
+      continue;
+    }
+
+    const [startHour, startMin] = (regime.time_start || '09:15').split(':').map(Number);
+    const [endHour, endMin] = (regime.time_end || '15:15').split(':').map(Number);
+    const regimeStart = startHour * 60 + startMin;
+    const regimeEnd = endHour * 60 + endMin;
+    if (ist.currentMinutes < regimeStart || ist.currentMinutes > regimeEnd) {
+      return {
+        matched: true,
+        regime,
+        regimeName: regime.name,
+        blockedReason: `Regime "${regime.name}" matched but outside time window (${regime.time_start}–${regime.time_end} IST, current: ${ist.hours.toString().padStart(2,'0')}:${ist.minutes.toString().padStart(2,'0')} IST)`
+      };
+    }
+
+    const isWednesday = ist.dayOfWeek === 3;
+    let allowedEngineNames: string[];
+    let adxOverrides: Record<string, { min?: number; max?: number }> = {};
+
+    if (tradeType === 'BUY') {
+      if (isWednesday && regime.wednesday_only_buy_engines !== null && regime.wednesday_only_buy_engines !== undefined) {
+        allowedEngineNames = regime.wednesday_only_buy_engines;
+      } else {
+        allowedEngineNames = regime.allowed_buy_engines || [];
+      }
+    } else {
+      if (isWednesday && regime.wednesday_only_sell_engines !== null && regime.wednesday_only_sell_engines !== undefined) {
+        allowedEngineNames = regime.wednesday_only_sell_engines;
+      } else {
+        allowedEngineNames = regime.allowed_sell_engines || [];
+      }
+      if (regime.sell_adx_override) {
+        adxOverrides = regime.sell_adx_override;
+      }
+    }
+
+    return {
+      matched: true,
+      regime,
+      regimeName: regime.name,
+      allowedEngineNames,
+      rocketRuleEnabled: regime.rocket_rule_enabled ?? false,
+      adxOverrides
+    };
+  }
+
+  return { matched: false };
+}
+
+function evaluateSignalFilters(filters: any, payload: any, symbol: string, tradeType: string): { passed: boolean; reason?: string; regimeInfo?: string; rocketRuleOverride?: boolean } {
   if (!filters) return { passed: true };
 
   if (filters.symbols?.list && Array.isArray(filters.symbols.list) && filters.symbols.list.length > 0) {
@@ -57,6 +176,43 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     if (currentMinutes < startHour * 60 + startMin || currentMinutes > endHour * 60 + endMin) {
       return { passed: false, reason: `Outside allowed time window (${filters.time_filters.start_time}-${filters.time_filters.end_time})` };
     }
+  }
+
+  const regimeResult = evaluateRegimes(filters, payload, tradeType);
+
+  if (regimeResult.matched) {
+    if (regimeResult.blockedReason) {
+      return { passed: false, reason: regimeResult.blockedReason };
+    }
+
+    const allowedEngineNames = regimeResult.allowedEngineNames || [];
+    const adxOverrides = regimeResult.adxOverrides || {};
+    const regimeName = regimeResult.regimeName || 'Unknown Regime';
+
+    const directionFilters = tradeType === 'BUY' ? (filters.buy_filters || {}) : (filters.sell_filters || {});
+    const allConditionSets: any[] = directionFilters.condition_sets || [];
+
+    const eligibleSets = allConditionSets.filter((cs: any) => allowedEngineNames.includes(cs.name));
+
+    if (eligibleSets.length === 0) {
+      return { passed: false, reason: `Regime "${regimeName}": No engines allowed for ${tradeType} on this day/VIX condition` };
+    }
+
+    let anyPassed = false;
+    const failedReasons: string[] = [];
+
+    for (const cs of eligibleSets) {
+      const adxOverride = adxOverrides[cs.name];
+      const result = evaluateConditionSet(cs, payload, adxOverride);
+      if (result.passed) { anyPassed = true; break; }
+      failedReasons.push(`${cs.name}: ${result.reasons.join(', ')}`);
+    }
+
+    if (!anyPassed) {
+      return { passed: false, reason: `Regime "${regimeName}": ${tradeType} signal failed all allowed engines. ${failedReasons.join(' | ')}` };
+    }
+
+    return { passed: true, regimeInfo: regimeName, rocketRuleOverride: regimeResult.rocketRuleEnabled };
   }
 
   const directionFilters = tradeType === 'BUY' ? (filters.buy_filters || filters) : (filters.sell_filters || filters);
@@ -123,38 +279,9 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     const failedReasons: string[] = [];
 
     for (const conditionSet of enabledConditionSets) {
-      let conditionPassed = true;
-      const reasons: string[] = [];
-
-      if (payload.volume !== undefined && payload.vol_avg_5d !== undefined && payload.vol_avg_5d > 0) {
-        const volumeRatio = payload.volume / payload.vol_avg_5d;
-        const minVR = conditionSet.volume_ratio?.min ?? 0;
-        const maxVR = conditionSet.volume_ratio?.max ?? 100;
-        if (volumeRatio < minVR || volumeRatio > maxVR) { conditionPassed = false; reasons.push(`VR=${volumeRatio.toFixed(2)} not in [${minVR}, ${maxVR}]`); }
-      } else { conditionPassed = false; reasons.push('volume data missing'); }
-
-      if (payload.di_plus !== undefined && payload.di_minus !== undefined) {
-        const diSpread = Math.abs(payload.di_plus - payload.di_minus);
-        const minDI = conditionSet.di_spread?.min ?? 0;
-        const maxDI = conditionSet.di_spread?.max ?? 100;
-        if (diSpread < minDI || diSpread > maxDI) { conditionPassed = false; reasons.push(`DI=${diSpread.toFixed(2)} not in [${minDI}, ${maxDI}]`); }
-      } else { conditionPassed = false; reasons.push('DI data missing'); }
-
-      if (payload.adx !== undefined) {
-        const minADX = conditionSet.adx?.min ?? 0;
-        const maxADX = conditionSet.adx?.max ?? 100;
-        if (payload.adx < minADX || payload.adx > maxADX) { conditionPassed = false; reasons.push(`ADX=${payload.adx} not in [${minADX}, ${maxADX}]`); }
-      } else { conditionPassed = false; reasons.push('ADX missing'); }
-
-      if (payload.dist_ema21_atr !== undefined) {
-        const emaDistance = Math.abs(payload.dist_ema21_atr);
-        const minEMA = conditionSet.ema_distance?.min ?? 0;
-        const maxEMA = conditionSet.ema_distance?.max ?? 100;
-        if (emaDistance < minEMA || emaDistance > maxEMA) { conditionPassed = false; reasons.push(`EMA_dist=${emaDistance.toFixed(2)} not in [${minEMA}, ${maxEMA}]`); }
-      } else { conditionPassed = false; reasons.push('EMA distance missing'); }
-
-      if (conditionPassed) { anyConditionSetPassed = true; break; }
-      else { failedReasons.push(`${conditionSet.name}: ${reasons.join(', ')}`); }
+      const result = evaluateConditionSet(conditionSet, payload);
+      if (result.passed) { anyConditionSetPassed = true; break; }
+      failedReasons.push(`${conditionSet.name}: ${result.reasons.join(', ')}`);
     }
 
     if (!anyConditionSetPassed) return { passed: false, reason: `${tradeType}: Failed all condition sets. ${failedReasons.join(' | ')}` };
@@ -324,6 +451,8 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
       };
 
       try {
+        let regimeRocketRuleEnabled: boolean | undefined = undefined;
+
         if (account.signal_filters_enabled && account.signal_filters) {
           const filterResult = evaluateSignalFilters(account.signal_filters, rawPayload, symbol, tradeType);
           accountResult.filter_passed = filterResult.passed;
@@ -341,6 +470,11 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
             });
             executionResults.push(accountResult);
             continue;
+          }
+
+          if (filterResult.regimeInfo) {
+            accountResult.regime_matched = filterResult.regimeInfo;
+            regimeRocketRuleEnabled = filterResult.rocketRuleOverride;
           }
         }
 
@@ -388,7 +522,9 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
           vol_avg_5d: rawPayload.vol_avg_5d
         });
 
-        if (rocketRule?.enabled && rawPayload.volume !== undefined && rawPayload.vol_avg_5d !== undefined && rawPayload.vol_avg_5d > 0) {
+        const rocketRuleActive = regimeRocketRuleEnabled !== undefined ? regimeRocketRuleEnabled : (rocketRule?.enabled ?? false);
+
+        if (rocketRuleActive && rocketRule && rawPayload.volume !== undefined && rawPayload.vol_avg_5d !== undefined && rawPayload.vol_avg_5d > 0) {
           const volumeRatio = rawPayload.volume / rawPayload.vol_avg_5d;
           const threshold = rocketRule.volume_ratio_threshold ?? 0.70;
           console.log('[Webhook] Rocket rule volume check:', { volumeRatio, threshold, triggered: volumeRatio >= threshold });
