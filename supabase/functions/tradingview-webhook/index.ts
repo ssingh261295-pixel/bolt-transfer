@@ -21,9 +21,14 @@ async function fetchAndCacheVIX(supabase: any, brokerAccounts: any[]): Promise<{
   try {
     const { data: cached } = await supabase
       .from('vix_cache')
-      .select('vix_value, fetched_at, is_stale')
+      .select('vix_value, fetched_at, is_stale, manual_override, manual_vix_value, manual_set_at')
       .eq('id', 1)
       .maybeSingle();
+
+    if (cached?.manual_override === true && cached?.manual_vix_value !== null && cached?.manual_vix_value !== undefined) {
+      console.log('[VIX] Using manual override VIX:', cached.manual_vix_value);
+      return { vix: parseFloat(cached.manual_vix_value), source: 'manual_override', stale: false };
+    }
 
     if (cached?.vix_value !== null && cached?.vix_value !== undefined && cached?.fetched_at) {
       const ageSeconds = (Date.now() - new Date(cached.fetched_at).getTime()) / 1000;
@@ -50,7 +55,7 @@ async function fetchAndCacheVIX(supabase: any, brokerAccounts: any[]): Promise<{
     });
 
     if (!vixResponse.ok) {
-      console.error('[VIX] Zerodha API error:', vixResponse.status);
+      console.error('[VIX] Zerodha API error:', vixResponse.status, '— falling back to stale/manual cache');
       if (cached?.vix_value !== null && cached?.vix_value !== undefined) {
         await supabase.from('vix_cache').upsert({ id: 1, is_stale: true }, { onConflict: 'id' });
         return { vix: parseFloat(cached.vix_value), source: 'stale_cache', stale: true };
@@ -79,7 +84,7 @@ async function fetchAndCacheVIX(supabase: any, brokerAccounts: any[]): Promise<{
       is_stale: false
     }, { onConflict: 'id' });
 
-    console.log('[VIX] Fetched and cached VIX:', vixValue);
+    console.log('[VIX] Fetched and cached live VIX:', vixValue);
     return { vix: vixValue, source: 'live', stale: false };
 
   } catch (err: any) {
