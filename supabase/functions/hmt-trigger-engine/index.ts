@@ -25,6 +25,9 @@ import { OrderExecutor } from './order-executor.ts';
 import { WebSocketManager } from './websocket-manager.ts';
 import { HMTTrigger, BrokerConnection, EngineConfig, EngineStats, WebSocketTick } from './types.ts';
 
+// INDIA VIX instrument token (NSE:INDIA VIX)
+const INDIA_VIX_TOKEN = 264969;
+
 // Global engine state
 let triggerManager: TriggerManager | null = null;
 let wsManager: WebSocketManager | null = null;
@@ -32,6 +35,7 @@ let orderExecutor: OrderExecutor | null = null;
 let engineStartTime: Date | null = null;
 let isEngineRunning = false;
 let engineInstanceId: string = '';
+let lastVixUpdateTime: Date | null = null;
 
 // Stats tracking
 const stats: EngineStats = {
@@ -163,12 +167,13 @@ async function initializeEngine(): Promise<void> {
     stats.websocket_status = 'disconnected';
   }
 
-  // Subscribe to all instruments
+  // Subscribe to all instruments plus INDIA VIX for regime evaluation
   const instruments = triggerManager.getSubscribedInstruments();
-  if (instruments.length > 0) {
-    wsManager.subscribe(instruments);
-    stats.subscribed_instruments = instruments.length;
-  }
+  const allTokens = instruments.includes(INDIA_VIX_TOKEN)
+    ? instruments
+    : [...instruments, INDIA_VIX_TOKEN];
+  wsManager.subscribe(allTokens);
+  stats.subscribed_instruments = instruments.length;
 
   // Start health check monitor
   startHealthCheckMonitor();
@@ -236,6 +241,29 @@ function handleTick(tick: WebSocketTick): void {
   stats.processed_ticks++;
   stats.last_tick_time = tick.timestamp || new Date();
   stats.websocket_status = 'connected';
+
+  // Update VIX cache from live WebSocket stream (throttled to once per 30s)
+  if (tick.instrument_token === INDIA_VIX_TOKEN) {
+    const now = new Date();
+    const secondsSinceLastUpdate = lastVixUpdateTime
+      ? (now.getTime() - lastVixUpdateTime.getTime()) / 1000
+      : Infinity;
+    if (secondsSinceLastUpdate >= 30) {
+      lastVixUpdateTime = now;
+      getSupabase().from('vix_cache').upsert({
+        id: 1,
+        vix_value: tick.last_price,
+        fetched_at: now.toISOString(),
+        is_stale: false,
+        manual_override: false
+      }, { onConflict: 'id' }).then(() => {
+        console.log(`[Engine] VIX cache updated from WebSocket: ${tick.last_price}`);
+      }).catch((err: any) => {
+        console.error('[Engine] Failed to update VIX cache:', err.message);
+      });
+    }
+    return;
+  }
 
   const triggers = triggerManager.getTriggersForInstrument(tick.instrument_token);
   if (triggers.length === 0) return;

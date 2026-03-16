@@ -21,25 +21,24 @@ async function fetchAndCacheVIX(supabase: any, brokerAccounts: any[]): Promise<{
   try {
     const { data: cached } = await supabase
       .from('vix_cache')
-      .select('vix_value, fetched_at, is_stale, manual_override, manual_vix_value, manual_set_at')
+      .select('vix_value, fetched_at, is_stale')
       .eq('id', 1)
       .maybeSingle();
 
-    if (cached?.manual_override === true && cached?.manual_vix_value !== null && cached?.manual_vix_value !== undefined) {
-      console.log('[VIX] Using manual override VIX:', cached.manual_vix_value);
-      return { vix: parseFloat(cached.manual_vix_value), source: 'manual_override', stale: false };
-    }
-
+    // Primary: use cache written by HMT engine WebSocket (updated every 30s during market hours)
     if (cached?.vix_value !== null && cached?.vix_value !== undefined && cached?.fetched_at) {
       const ageSeconds = (Date.now() - new Date(cached.fetched_at).getTime()) / 1000;
       if (ageSeconds < VIX_CACHE_TTL_SECONDS) {
-        return { vix: parseFloat(cached.vix_value), source: 'cache', stale: false };
+        console.log(`[VIX] Using WebSocket cache: ${cached.vix_value} (age ${Math.round(ageSeconds)}s)`);
+        return { vix: parseFloat(cached.vix_value), source: 'websocket_cache', stale: false };
       }
     }
 
+    // Fallback: fetch live via REST if cache is stale (HMT engine not running)
     const activeBroker = brokerAccounts.find((b: any) => b.api_key && b.access_token);
     if (!activeBroker) {
       if (cached?.vix_value !== null && cached?.vix_value !== undefined) {
+        console.log('[VIX] No broker available, using stale cache:', cached.vix_value);
         return { vix: parseFloat(cached.vix_value), source: 'stale_cache', stale: true };
       }
       return { vix: null, source: 'no_broker', stale: false };
@@ -55,7 +54,7 @@ async function fetchAndCacheVIX(supabase: any, brokerAccounts: any[]): Promise<{
     });
 
     if (!vixResponse.ok) {
-      console.error('[VIX] Zerodha API error:', vixResponse.status, '— falling back to stale/manual cache');
+      console.error('[VIX] Zerodha REST API error:', vixResponse.status, '— using stale cache');
       if (cached?.vix_value !== null && cached?.vix_value !== undefined) {
         await supabase.from('vix_cache').upsert({ id: 1, is_stale: true }, { onConflict: 'id' });
         return { vix: parseFloat(cached.vix_value), source: 'stale_cache', stale: true };
@@ -68,7 +67,7 @@ async function fetchAndCacheVIX(supabase: any, brokerAccounts: any[]): Promise<{
     const vixValue: number | undefined = vixData?.data?.[vixKey]?.last_price;
 
     if (vixValue === undefined || vixValue === null) {
-      console.error('[VIX] Could not parse VIX from response:', JSON.stringify(vixData));
+      console.error('[VIX] Could not parse VIX from REST response:', JSON.stringify(vixData));
       if (cached?.vix_value !== null && cached?.vix_value !== undefined) {
         return { vix: parseFloat(cached.vix_value), source: 'stale_cache', stale: true };
       }
@@ -84,8 +83,8 @@ async function fetchAndCacheVIX(supabase: any, brokerAccounts: any[]): Promise<{
       is_stale: false
     }, { onConflict: 'id' });
 
-    console.log('[VIX] Fetched and cached live VIX:', vixValue);
-    return { vix: vixValue, source: 'live', stale: false };
+    console.log('[VIX] Fetched and cached via REST fallback:', vixValue);
+    return { vix: vixValue, source: 'rest_live', stale: false };
 
   } catch (err: any) {
     console.error('[VIX] Error fetching VIX:', err.message);
