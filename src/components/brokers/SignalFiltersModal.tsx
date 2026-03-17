@@ -151,8 +151,10 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
   };
 
   const [filters, setFilters] = useState<any>({
+    trade_enabled: true,
     symbols: { mode: 'whitelist', list: [] },
     trade_types: { allow_buy: true, allow_sell: true },
+    days_filter: { enabled: false, allowed_days: [1, 2, 3, 4, 5] },
     time_filters: { enabled: false, start_time: '09:15', end_time: '15:15', timezone: 'Asia/Kolkata' },
     buy_filters: { ...defaultDirectionFilters, condition_sets: defaultBuyConditionSets },
     sell_filters: { ...defaultDirectionFilters, condition_sets: defaultSellConditionSets },
@@ -183,8 +185,10 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
       }));
 
       setFilters({
+        trade_enabled: brokerFilters.trade_enabled !== undefined ? brokerFilters.trade_enabled : true,
         symbols: brokerFilters.symbols || filters.symbols,
         trade_types: brokerFilters.trade_types || filters.trade_types,
+        days_filter: brokerFilters.days_filter || { enabled: false, allowed_days: [1, 2, 3, 4, 5] },
         time_filters: brokerFilters.time_filters || filters.time_filters,
         buy_filters: buyFilters,
         sell_filters: sellFilters,
@@ -666,7 +670,7 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
               <p className="text-sm text-blue-700">
                 Each regime activates based on VIX level fetched live from Zerodha. Configure BUY/SELL enable,
                 allowed engines, and override filters per regime. The <strong>first matching enabled regime</strong> controls execution.
-                If no regime matches, falls back to standard condition sets.
+                <strong> If no regime matches, the trade is rejected.</strong> Regimes are required when configured — there is no fallback.
               </p>
             </div>
           </div>
@@ -1345,6 +1349,28 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
 
           {activeTab === 'global' && (
             <div className="space-y-4">
+              <div className={`border-2 rounded-lg p-4 ${filters.trade_enabled ? 'border-green-400 bg-green-50' : 'border-red-400 bg-red-50'}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className={`font-bold text-lg ${filters.trade_enabled ? 'text-green-900' : 'text-red-900'}`}>Master Toggle — Trading {filters.trade_enabled ? 'ENABLED' : 'DISABLED'}</h3>
+                    <p className={`text-sm mt-0.5 ${filters.trade_enabled ? 'text-green-700' : 'text-red-700'}`}>
+                      {filters.trade_enabled ? 'All webhooks will be processed normally.' : 'All webhook signals will be rejected. No trades will execute.'}
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={filters.trade_enabled !== false}
+                      onChange={(e) => setFilters({ ...filters, trade_enabled: e.target.checked })}
+                      className="w-5 h-5 text-green-600 rounded focus:ring-2 focus:ring-green-500"
+                    />
+                    <span className={`text-sm font-semibold ${filters.trade_enabled ? 'text-green-900' : 'text-red-900'}`}>
+                      {filters.trade_enabled ? 'ON' : 'OFF'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+
               <div className="border border-gray-200 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 mb-3">Symbol Filter</h3>
                 <div className="space-y-3">
@@ -1402,6 +1428,51 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                     <span className="text-sm text-gray-700">Allow SELL signals</span>
                   </label>
                 </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-gray-900">Days Filter</h3>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={filters.days_filter?.enabled ?? false}
+                      onChange={(e) => setFilters({ ...filters, days_filter: { ...filters.days_filter, enabled: e.target.checked } })}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Enabled</span>
+                  </label>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {([1, 2, 3, 4, 5, 6, 7] as const).map((day) => {
+                    const labels: Record<number, string> = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
+                    const isActive = (filters.days_filter?.allowed_days || [1, 2, 3, 4, 5]).includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        disabled={!filters.days_filter?.enabled}
+                        onClick={() => {
+                          const days = [...(filters.days_filter?.allowed_days || [1, 2, 3, 4, 5])];
+                          const di = days.indexOf(day);
+                          if (di >= 0) days.splice(di, 1); else days.push(day);
+                          days.sort();
+                          setFilters({ ...filters, days_filter: { ...filters.days_filter, allowed_days: days } });
+                        }}
+                        className={`px-3 py-1.5 text-sm font-semibold rounded-lg border transition disabled:opacity-40 ${
+                          isActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-300 hover:border-blue-400'
+                        }`}
+                      >
+                        {labels[day]}
+                      </button>
+                    );
+                  })}
+                </div>
+                {filters.days_filter?.enabled && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Trading allowed on: {(filters.days_filter?.allowed_days || []).map((d: number) => ({ 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' }[d])).join(', ') || 'No days selected'}
+                  </p>
+                )}
               </div>
 
               <div className="border border-gray-200 rounded-lg p-4">

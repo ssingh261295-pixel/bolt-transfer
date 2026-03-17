@@ -4,6 +4,12 @@
  * CRITICAL DESIGN: Respond to TradingView IMMEDIATELY after basic payload
  * validation (pure JS, no DB calls). All DB queries and order execution
  * happen in background via EdgeRuntime.waitUntil to prevent timeouts.
+ *
+ * EXECUTION FLOW (per spec):
+ * Step 1: Global Check — trade_enabled, symbol whitelist/blacklist, days filter, time window
+ * Step 2: Evaluate Regimes — active regimes, day/time/VIX match
+ * Step 3: Direction Logic — buy/sell engines inside matched regime
+ * Step 4: Final Decision — if NO regime matches → reject trade
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -25,7 +31,6 @@ async function fetchAndCacheVIX(supabase: any, brokerAccounts: any[]): Promise<{
       .eq('id', 1)
       .maybeSingle();
 
-    // Primary: use cache written by HMT engine WebSocket (updated every 30s during market hours)
     if (cached?.vix_value !== null && cached?.vix_value !== undefined && cached?.fetched_at) {
       const ageSeconds = (Date.now() - new Date(cached.fetched_at).getTime()) / 1000;
       if (ageSeconds < VIX_CACHE_TTL_SECONDS) {
@@ -34,7 +39,6 @@ async function fetchAndCacheVIX(supabase: any, brokerAccounts: any[]): Promise<{
       }
     }
 
-    // Fallback: fetch live via REST if cache is stale (HMT engine not running)
     const activeBroker = brokerAccounts.find((b: any) => b.api_key && b.access_token);
     if (!activeBroker) {
       if (cached?.vix_value !== null && cached?.vix_value !== undefined) {
@@ -115,10 +119,16 @@ function getISTTime(): { hours: number; minutes: number; dayOfWeek: number; curr
   const hours = istTime.getUTCHours();
   const minutes = istTime.getUTCMinutes();
   const currentMinutes = hours * 60 + minutes;
+  // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
   const dayOfWeek = istTime.getUTCDay() === 0 ? 7 : istTime.getUTCDay();
   return { hours, minutes, dayOfWeek, currentMinutes };
 }
 
+/**
+ * Evaluate a single buy/sell engine (condition set).
+ * All conditions inside one engine use AND logic.
+ * EMA distance in engines is absolute value (distance in ATR units, always positive).
+ */
 function evaluateConditionSet(conditionSet: any, payload: any, adxOverride?: { min?: number; max?: number }): { passed: boolean; reasons: string[] } {
   const reasons: string[] = [];
   let passed = true;
@@ -144,15 +154,28 @@ function evaluateConditionSet(conditionSet: any, payload: any, adxOverride?: { m
   } else { passed = false; reasons.push('ADX missing'); }
 
   if (payload.dist_ema21_atr !== undefined) {
+    // Inside engines, EMA distance is treated as absolute distance (always positive)
     const emaDistance = Math.abs(payload.dist_ema21_atr);
     const minEMA = conditionSet.ema_distance?.min ?? 0;
     const maxEMA = conditionSet.ema_distance?.max ?? 100;
     if (emaDistance < minEMA || emaDistance > maxEMA) { passed = false; reasons.push(`EMA_dist=${emaDistance.toFixed(2)} not in [${minEMA}, ${maxEMA}]`); }
   } else { passed = false; reasons.push('EMA distance missing'); }
 
+  if (conditionSet.trade_grade?.enabled && payload.trade_grade) {
+    const allowedGrades = conditionSet.trade_grade.allowed_grades || ['A', 'B', 'C', 'D'];
+    if (!allowedGrades.includes(payload.trade_grade)) { passed = false; reasons.push(`Grade ${payload.trade_grade} not in [${allowedGrades.join(',')}]`); }
+  }
+
   return { passed, reasons };
 }
 
+/**
+ * STEP 2 + 3: Evaluate regimes.
+ *
+ * FINAL RULE: If any regime is enabled, a trade is ONLY allowed if at least one regime matches
+ * the current signal (VIX, day, time) AND at least one engine inside that regime passes.
+ * If NO regime matches → reject. There is NO fallback to standard direction filters when regimes are active.
+ */
 function evaluateRegimes(filters: any, payload: any, tradeType: string): {
   matched: boolean;
   regime?: any;
@@ -162,16 +185,18 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
   adxOverrides?: Record<string, { min?: number; max?: number }>;
   directionOverrides?: any;
   blockedReason?: string;
+  noRegimeActive?: boolean;
 } {
   const regimes: any[] = filters.regimes || [];
   const enabledRegimes = regimes.filter((r: any) => r.enabled);
-  if (enabledRegimes.length === 0) return { matched: false };
+
+  // No regimes configured/enabled → no regime layer, fall through to direction filters
+  if (enabledRegimes.length === 0) return { matched: false, noRegimeActive: true };
 
   const vix: number | undefined = payload.vix !== undefined ? parseFloat(payload.vix) : undefined;
   const ist = getISTTime();
 
-  // If regimes are configured but VIX is unavailable, we cannot safely determine which regime applies.
-  // Block the trade rather than silently falling through to the wrong regime or standard filters.
+  // Regimes are enabled but VIX is unavailable → block trade (cannot determine regime)
   if (vix === undefined) {
     return {
       matched: true,
@@ -180,16 +205,22 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
   }
 
   let timeBlockedRegime: any = null;
+  let vixBlockedCount = 0;
+  let dayBlockedCount = 0;
 
   for (const regime of enabledRegimes) {
-    if (regime.vix_min !== null && regime.vix_min !== undefined && vix < regime.vix_min) continue;
-    if (regime.vix_max !== null && regime.vix_max !== undefined && vix > regime.vix_max) continue;
+    // VIX range check
+    if (regime.vix_min !== null && regime.vix_min !== undefined && vix < regime.vix_min) { vixBlockedCount++; continue; }
+    if (regime.vix_max !== null && regime.vix_max !== undefined && vix > regime.vix_max) { vixBlockedCount++; continue; }
 
+    // Day check
     const allowedDays: number[] = regime.allowed_days || [];
     if (allowedDays.length > 0 && !allowedDays.includes(ist.dayOfWeek)) {
+      dayBlockedCount++;
       continue;
     }
 
+    // Time check
     const [startHour, startMin] = (regime.time_start || '09:15').split(':').map(Number);
     const [endHour, endMin] = (regime.time_end || '15:15').split(':').map(Number);
     const regimeStart = startHour * 60 + startMin;
@@ -207,7 +238,7 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
         matched: true,
         regime,
         regimeName: regime.name,
-        blockedReason: `Regime "${regime.name}": BUY signals are disabled for this VIX regime (VIX ${vix !== undefined ? vix.toFixed(2) : 'unknown'})`
+        blockedReason: `Regime "${regime.name}": BUY signals are disabled for this VIX regime (VIX ${vix.toFixed(2)})`
       };
     }
 
@@ -216,10 +247,14 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
         matched: true,
         regime,
         regimeName: regime.name,
-        blockedReason: `Regime "${regime.name}": SELL signals are disabled for this VIX regime (VIX ${vix !== undefined ? vix.toFixed(2) : 'unknown'})`
+        blockedReason: `Regime "${regime.name}": SELL signals are disabled for this VIX regime (VIX ${vix.toFixed(2)})`
       };
     }
 
+    // Determine which engines are active for this day
+    // Wednesday override applies only to day 3 (Wednesday)
+    // Day override fields are named wednesday_only_* but the logic is:
+    // if today is Wednesday AND override is set → use override, else use all-days list
     const isWednesday = ist.dayOfWeek === 3;
     let allowedEngineNames: string[];
     let adxOverrides: Record<string, { min?: number; max?: number }> = {};
@@ -257,21 +292,54 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
     };
   }
 
+  // All enabled regimes were skipped due to VIX/day/time mismatch
+  // Per spec: if no regime matches → do not take trade
   if (timeBlockedRegime) {
     return {
       matched: true,
       regime: timeBlockedRegime.regime,
       regimeName: timeBlockedRegime.regimeName,
-      blockedReason: `Regime "${timeBlockedRegime.regimeName}" matched but outside time window (${timeBlockedRegime.time_start}–${timeBlockedRegime.time_end} IST, current: ${ist.hours.toString().padStart(2,'0')}:${ist.minutes.toString().padStart(2,'0')} IST)`
+      blockedReason: `Regime "${timeBlockedRegime.regimeName}" matched VIX/day but outside time window (${timeBlockedRegime.time_start}–${timeBlockedRegime.time_end} IST, current: ${ist.hours.toString().padStart(2,'0')}:${ist.minutes.toString().padStart(2,'0')} IST)`
     };
   }
 
-  return { matched: false };
+  const vixStr = vix !== undefined ? vix.toFixed(2) : 'unknown';
+  const dayNames = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const dayName = dayNames[ist.dayOfWeek] || `Day ${ist.dayOfWeek}`;
+
+  return {
+    matched: true,
+    blockedReason: `No active regime matched current conditions (VIX=${vixStr}, Day=${dayName}, ${enabledRegimes.length} regime(s) checked — ${vixBlockedCount} VIX mismatch, ${dayBlockedCount} day mismatch). Trade rejected per final rule: a trade is only allowed if at least one regime matches.`
+  };
 }
 
-function evaluateSignalFilters(filters: any, payload: any, symbol: string, tradeType: string): { passed: boolean; reason?: string; regimeInfo?: string; rocketRuleOverride?: boolean } {
+/**
+ * Main signal filter evaluation.
+ *
+ * ARCHITECTURE:
+ * Layer 1: Global filters (trade_enabled, symbol, days, time)
+ * Layer 2: Regime evaluation (VIX, day, time per regime)
+ * Layer 3: Engine evaluation inside matched regime
+ *
+ * FINAL RULE: If regimes are configured, ALL trades must match a regime.
+ * Standard direction filters (trade_grade, etc.) are only used when NO regimes are configured.
+ */
+function evaluateSignalFilters(filters: any, payload: any, symbol: string, tradeType: string): {
+  passed: boolean;
+  reason?: string;
+  regimeInfo?: string;
+  rocketRuleOverride?: boolean;
+} {
   if (!filters) return { passed: true };
 
+  // --- LAYER 1: GLOBAL CHECKS ---
+
+  // Master toggle
+  if (filters.trade_enabled === false) {
+    return { passed: false, reason: 'Trading is disabled (master toggle off)' };
+  }
+
+  // Symbol whitelist/blacklist
   if (filters.symbols?.list && Array.isArray(filters.symbols.list) && filters.symbols.list.length > 0) {
     const mode = filters.symbols.mode || 'whitelist';
     const symbolInList = filters.symbols.list.includes(symbol);
@@ -279,11 +347,23 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     if (mode === 'blacklist' && symbolInList) return { passed: false, reason: `Symbol ${symbol} is blacklisted` };
   }
 
+  // Global trade type toggle
   if (filters.trade_types) {
     if (tradeType === 'BUY' && filters.trade_types.allow_buy === false) return { passed: false, reason: 'BUY trades not allowed' };
     if (tradeType === 'SELL' && filters.trade_types.allow_sell === false) return { passed: false, reason: 'SELL trades not allowed' };
   }
 
+  // Global days filter
+  const ist = getISTTime();
+  if (filters.days_filter?.enabled) {
+    const allowedDays: number[] = filters.days_filter.allowed_days || [1, 2, 3, 4, 5];
+    if (!allowedDays.includes(ist.dayOfWeek)) {
+      const dayNames = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      return { passed: false, reason: `Trading not allowed on ${dayNames[ist.dayOfWeek] || 'today'} (global days filter)` };
+    }
+  }
+
+  // Global time window filter
   if (filters.time_filters?.enabled) {
     const now = new Date();
     const istOffset = 5.5 * 60 * 60 * 1000;
@@ -298,9 +378,13 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     }
   }
 
+  // --- LAYER 2 + 3: REGIME EVALUATION ---
   const regimeResult = evaluateRegimes(filters, payload, tradeType);
 
-  if (regimeResult.matched) {
+  if (regimeResult.noRegimeActive) {
+    // No regimes configured — fall through to standard direction filters
+  } else {
+    // Regimes are active — ALL trades must pass through a regime
     if (regimeResult.blockedReason) {
       return { passed: false, reason: regimeResult.blockedReason };
     }
@@ -319,6 +403,7 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
       return { passed: false, reason: `Regime "${regimeName}": No engines allowed for ${tradeType} on this day/VIX condition` };
     }
 
+    // Regime-level direction overrides (applied before engine evaluation)
     if (dirOverrides.adx?.enabled && payload.adx !== undefined) {
       const minVal = dirOverrides.adx.min_value ?? 0;
       const maxVal = dirOverrides.adx.max_value ?? 100;
@@ -354,6 +439,7 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
       }
     }
 
+    // Engine evaluation: OR logic — signal passes if ANY eligible engine matches
     let anyPassed = false;
     const failedReasons: string[] = [];
 
@@ -371,6 +457,7 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     return { passed: true, regimeInfo: regimeName, rocketRuleOverride: regimeResult.rocketRuleEnabled };
   }
 
+  // --- STANDARD DIRECTION FILTERS (only when no regimes configured) ---
   const directionFilters = tradeType === 'BUY' ? (filters.buy_filters || filters) : (filters.sell_filters || filters);
 
   if (directionFilters.trade_grade?.enabled && payload.trade_grade) {
@@ -504,12 +591,11 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
       return;
     }
 
-    const [keyResult, brokerQueryReady] = await Promise.all([
+    const [keyResult] = await Promise.all([
       supabase.from('webhook_keys')
         .select('id, user_id, name, is_active, account_mappings, lot_multiplier, sl_multiplier, target_multiplier')
         .eq('webhook_key', webhookKey)
         .maybeSingle(),
-      Promise.resolve(null)
     ]);
 
     const keyData = keyResult.data;
@@ -614,6 +700,7 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
       console.log('[Webhook] VIX for regime evaluation:', { liveVIX, vixSource, stale: vixResult.stale });
     }
 
+    // Compute dist_ema21_atr from components if not explicitly provided
     const computedDistEma21Atr =
       rawPayload.dist_ema21_atr === undefined &&
       rawPayload.price !== undefined &&
@@ -706,8 +793,6 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
         let finalLotMultiplier = lotMultiplier;
         let finalTargetMultiplier = targetMultiplier;
 
-        // Fetch fresh signal_filters for this account (needed even when signal_filters_enabled=false
-        // because rocket rule is a position-sizing feature, not just a filter gate)
         const { data: freshAccount } = await supabase
           .from('broker_connections')
           .select('signal_filters')
@@ -716,7 +801,6 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
 
         const sf = freshAccount?.signal_filters ?? account.signal_filters;
         const directionFilters = tradeType === 'BUY' ? sf?.buy_filters : sf?.sell_filters;
-        // Rocket rule lives inside direction-specific filters (buy_filters/sell_filters)
         const rocketRule = directionFilters?.rocket_rule;
 
         console.log('[Webhook] Rocket rule check:', {
