@@ -614,7 +614,20 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
       console.log('[Webhook] VIX for regime evaluation:', { liveVIX, vixSource, stale: vixResult.stale });
     }
 
-    const enrichedPayload = liveVIX !== null ? { ...rawPayload, vix: liveVIX } : rawPayload;
+    const computedDistEma21Atr =
+      rawPayload.dist_ema21_atr === undefined &&
+      rawPayload.price !== undefined &&
+      rawPayload.ema21 !== undefined &&
+      rawPayload.atr !== undefined &&
+      rawPayload.atr > 0
+        ? (rawPayload.price - rawPayload.ema21) / rawPayload.atr
+        : undefined;
+
+    const enrichedPayload = {
+      ...rawPayload,
+      ...(liveVIX !== null ? { vix: liveVIX } : {}),
+      ...(computedDistEma21Atr !== undefined ? { dist_ema21_atr: computedDistEma21Atr } : {}),
+    };
 
     const executionResults = [];
 
