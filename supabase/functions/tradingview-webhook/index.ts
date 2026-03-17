@@ -170,11 +170,18 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
   const vix: number | undefined = payload.vix !== undefined ? parseFloat(payload.vix) : undefined;
   const ist = getISTTime();
 
+  // If regimes are configured but VIX is unavailable, we cannot safely determine which regime applies.
+  // Block the trade rather than silently falling through to the wrong regime or standard filters.
+  if (vix === undefined) {
+    return {
+      matched: true,
+      blockedReason: `VIX data unavailable — cannot determine active regime. Trade blocked to prevent execution in wrong market conditions. Please ensure the HMT engine is running.`
+    };
+  }
+
   for (const regime of enabledRegimes) {
-    if (vix !== undefined) {
-      if (regime.vix_min !== null && regime.vix_min !== undefined && vix < regime.vix_min) continue;
-      if (regime.vix_max !== null && regime.vix_max !== undefined && vix > regime.vix_max) continue;
-    }
+    if (regime.vix_min !== null && regime.vix_min !== undefined && vix < regime.vix_min) continue;
+    if (regime.vix_max !== null && regime.vix_max !== undefined && vix > regime.vix_max) continue;
 
     const allowedDays: number[] = regime.allowed_days || [];
     if (allowedDays.length > 0 && !allowedDays.includes(ist.dayOfWeek)) {
