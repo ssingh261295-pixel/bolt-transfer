@@ -179,6 +179,8 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
     };
   }
 
+  let timeBlockedRegime: any = null;
+
   for (const regime of enabledRegimes) {
     if (regime.vix_min !== null && regime.vix_min !== undefined && vix < regime.vix_min) continue;
     if (regime.vix_max !== null && regime.vix_max !== undefined && vix > regime.vix_max) continue;
@@ -193,12 +195,8 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
     const regimeStart = startHour * 60 + startMin;
     const regimeEnd = endHour * 60 + endMin;
     if (ist.currentMinutes < regimeStart || ist.currentMinutes > regimeEnd) {
-      return {
-        matched: true,
-        regime,
-        regimeName: regime.name,
-        blockedReason: `Regime "${regime.name}" matched but outside time window (${regime.time_start}–${regime.time_end} IST, current: ${ist.hours.toString().padStart(2,'0')}:${ist.minutes.toString().padStart(2,'0')} IST)`
-      };
+      if (!timeBlockedRegime) timeBlockedRegime = { regime, regimeName: regime.name, time_start: regime.time_start, time_end: regime.time_end };
+      continue;
     }
 
     const buyOverrides = regime.buy_overrides || {};
@@ -256,6 +254,15 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
       rocketRuleEnabled,
       adxOverrides,
       directionOverrides
+    };
+  }
+
+  if (timeBlockedRegime) {
+    return {
+      matched: true,
+      regime: timeBlockedRegime.regime,
+      regimeName: timeBlockedRegime.regimeName,
+      blockedReason: `Regime "${timeBlockedRegime.regimeName}" matched but outside time window (${timeBlockedRegime.time_start}–${timeBlockedRegime.time_end} IST, current: ${ist.hours.toString().padStart(2,'0')}:${ist.minutes.toString().padStart(2,'0')} IST)`
     };
   }
 
