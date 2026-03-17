@@ -71,9 +71,27 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
     if (!hasVix) return;
 
     const fetchVix = async () => {
+      if (brokerId) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const resp = await fetch(
+              `${supabaseUrl}/functions/v1/zerodha-ltp?broker_id=${brokerId}&instruments=NSE:INDIA+VIX`,
+              { headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' } }
+            );
+            if (resp.ok) {
+              const json = await resp.json();
+              const price = json?.data?.['NSE:INDIA VIX']?.last_price;
+              if (price) { setVixCachePrice(price); return; }
+            }
+          }
+        } catch (_) { /* fall through to cache */ }
+      }
+
       const { data } = await supabase
         .from('vix_cache')
-        .select('vix_value, fetched_at')
+        .select('vix_value')
         .eq('id', 1)
         .maybeSingle();
       if (data?.vix_value) {
@@ -84,7 +102,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
     fetchVix();
     const interval = setInterval(fetchVix, 30000);
     return () => clearInterval(interval);
-  }, [watchlistItems]);
+  }, [watchlistItems, brokerId]);
 
   const loadBrokerConnection = async () => {
     try {
