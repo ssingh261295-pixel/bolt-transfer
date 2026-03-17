@@ -29,6 +29,7 @@ export function Watchlist() {
   const [gttDefaults, setGttDefaults] = useState<any>({});
   const [sortByName, setSortByName] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [vixCachePrice, setVixCachePrice] = useState<number | null>(null);
 
   const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(brokerId);
 
@@ -40,6 +41,20 @@ export function Watchlist() {
   }, [user]);
 
   useEffect(() => {
+    const fetchVix = async () => {
+      const { data } = await supabase
+        .from('vix_cache')
+        .select('vix_value')
+        .eq('id', 1)
+        .maybeSingle();
+      if (data?.vix_value) setVixCachePrice(parseFloat(data.vix_value));
+    };
+    fetchVix();
+    const interval = setInterval(fetchVix, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     if (brokerId) {
       connect();
     }
@@ -48,12 +63,16 @@ export function Watchlist() {
 
   useEffect(() => {
     if (isConnected && selectedWatchlist?.symbols) {
-      const tokens = selectedWatchlist.symbols
-        .filter((s: any) => s.instrument_token)
-        .map((s: any) => s.instrument_token);
-      if (tokens.length > 0) {
-        subscribe(tokens, 'full');
-      }
+      const allSymbols = selectedWatchlist.symbols.filter((s: any) => s.instrument_token);
+      const indexTokens = allSymbols
+        .map((s: any) => s.instrument_token)
+        .filter((t: number) => (t & 0xff) === 9);
+      const tradableTokens = allSymbols
+        .map((s: any) => s.instrument_token)
+        .filter((t: number) => (t & 0xff) !== 9);
+
+      if (tradableTokens.length > 0) subscribe(tradableTokens, 'full');
+      if (indexTokens.length > 0) subscribe(indexTokens, 'quote');
     }
     setCurrentPage(1);
   }, [isConnected, selectedWatchlist, subscribe]);
@@ -542,8 +561,9 @@ export function Watchlist() {
                           .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
                           .map((symbol: any, index: number) => {
                         const ltp = symbol.instrument_token ? getLTP(symbol.instrument_token) : null;
+                        const isVix = symbol.instrument_token === 264969;
                         const tick = symbol.instrument_token ? ticks.get(symbol.instrument_token) : null;
-                        const price = ltp ?? symbol.price ?? 0;
+                        const price = ltp ?? (isVix ? vixCachePrice : null) ?? symbol.price ?? 0;
                         const change = tick?.close ? (price - tick.close) : 0;
                         const changePercent = tick?.close ? ((price - tick.close) / tick.close) * 100 : 0;
                         const isPositive = change >= 0;

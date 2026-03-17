@@ -32,6 +32,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
   const [brokerId, setBrokerId] = useState<string | null>(null);
 
   const { isConnected, connect, subscribe, unsubscribe, getTick } = useZerodhaWebSocket(brokerId || undefined);
+  const [vixCachePrice, setVixCachePrice] = useState<number | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -48,14 +49,42 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
 
   useEffect(() => {
     if (isConnected && watchlistItems.length > 0) {
-      const tokens = watchlistItems.map(item => item.instrument_token);
-      subscribe(tokens, 'full');
+      const indexTokens = watchlistItems
+        .map(item => item.instrument_token)
+        .filter(token => (token & 0xff) === 9);
+      const tradableTokens = watchlistItems
+        .map(item => item.instrument_token)
+        .filter(token => (token & 0xff) !== 9);
 
+      if (tradableTokens.length > 0) subscribe(tradableTokens, 'full');
+      if (indexTokens.length > 0) subscribe(indexTokens, 'quote');
+
+      const allTokens = watchlistItems.map(item => item.instrument_token);
       return () => {
-        unsubscribe(tokens);
+        unsubscribe(allTokens);
       };
     }
   }, [isConnected, watchlistItems, subscribe, unsubscribe]);
+
+  useEffect(() => {
+    const hasVix = watchlistItems.some(item => item.instrument_token === 264969);
+    if (!hasVix) return;
+
+    const fetchVix = async () => {
+      const { data } = await supabase
+        .from('vix_cache')
+        .select('vix_value, fetched_at')
+        .eq('id', 1)
+        .maybeSingle();
+      if (data?.vix_value) {
+        setVixCachePrice(parseFloat(data.vix_value));
+      }
+    };
+
+    fetchVix();
+    const interval = setInterval(fetchVix, 30000);
+    return () => clearInterval(interval);
+  }, [watchlistItems]);
 
   const loadBrokerConnection = async () => {
     try {
@@ -187,7 +216,8 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
           <div className="divide-y divide-gray-100">
             {watchlistItems.map((item) => {
               const tick = getTick(item.instrument_token);
-              const lastPrice = tick?.last_price || 0;
+              const isVix = item.instrument_token === 264969;
+              const lastPrice = tick?.last_price || (isVix ? vixCachePrice : null) || 0;
               const previousClose = tick?.close || 0;
               const change = previousClose > 0 ? (lastPrice - previousClose) : 0;
               const changePercent = previousClose > 0 ? ((change / previousClose) * 100) : 0;
