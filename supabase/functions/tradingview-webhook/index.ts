@@ -536,6 +536,13 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
 
       if (trackerResult.error || !trackerResult.data) {
         console.log('[Webhook] Duplicate signal blocked:', symbol, tradeType);
+        await supabase.from('tradingview_webhook_logs').insert({
+          webhook_key_id: keyData.id,
+          source_ip: sourceIp,
+          payload: rawPayload,
+          status: 'rejected',
+          error_message: `Duplicate signal blocked: ${symbol} ${tradeType} at ₹${price.toFixed(2)} was already processed today. TradingView may have sent the same alert multiple times.`
+        });
         return;
       }
     }
