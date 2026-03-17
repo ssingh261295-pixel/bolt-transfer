@@ -625,7 +625,15 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
         let regimeRocketRuleEnabled: boolean | undefined = undefined;
         let regimeRocketRuleConfig: any = null;
 
-        if (account.signal_filters_enabled && account.signal_filters) {
+        if (!account.signal_filters_enabled) {
+          accountResult.filter_passed = false;
+          accountResult.filter_reason = 'Signal filters are disabled for this account — trading via webhook is paused';
+          accountResult.error = 'Signal filters are disabled for this account — trading via webhook is paused';
+          executionResults.push(accountResult);
+          continue;
+        }
+
+        if (account.signal_filters) {
           const filterResult = evaluateSignalFilters(account.signal_filters, enrichedPayload, symbol, tradeType);
           accountResult.filter_passed = filterResult.passed;
 
