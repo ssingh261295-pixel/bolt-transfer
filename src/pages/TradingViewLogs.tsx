@@ -751,11 +751,28 @@ export function TradingViewLogs() {
                   </div>
 
                   {log.accounts_executed && (
-                    <div className="text-xs text-gray-600">
-                      <span className="font-medium">
-                        {log.accounts_executed.filter((a: any) => a.order_placed).length}/{log.accounts_executed.length}
-                      </span>
-                      <span className="ml-1">accounts executed</span>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <div>
+                        <span className="font-medium">
+                          {log.accounts_executed.filter((a: any) => a.order_placed).length}/{log.accounts_executed.length}
+                        </span>
+                        <span className="ml-1">accounts executed</span>
+                      </div>
+                      {(() => {
+                        const regimes = [...new Set(log.accounts_executed.map((a: any) => a.regime_matched).filter(Boolean))];
+                        if (regimes.length > 0) {
+                          return (
+                            <div className="flex flex-wrap gap-1">
+                              {regimes.map((r: any) => (
+                                <span key={r} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                                  {r}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   )}
 
@@ -870,11 +887,28 @@ export function TradingViewLogs() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {log.accounts_executed ? (
-                        <div>
-                          <span className="font-medium">
-                            {log.accounts_executed.filter((a: any) => a.order_placed).length}/{log.accounts_executed.length}
-                          </span>
-                          <span className="text-xs text-gray-500 ml-1">executed</span>
+                        <div className="space-y-1">
+                          <div>
+                            <span className="font-medium">
+                              {log.accounts_executed.filter((a: any) => a.order_placed).length}/{log.accounts_executed.length}
+                            </span>
+                            <span className="text-xs text-gray-500 ml-1">executed</span>
+                          </div>
+                          {(() => {
+                            const regimes = [...new Set(log.accounts_executed.map((a: any) => a.regime_matched).filter(Boolean))];
+                            if (regimes.length > 0) {
+                              return (
+                                <div className="flex flex-wrap gap-1">
+                                  {regimes.map((r: any) => (
+                                    <span key={r} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                                      {r}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                       ) : '-'}
                     </td>
@@ -992,6 +1026,28 @@ export function TradingViewLogs() {
                   <label className="text-sm font-medium text-gray-500">Status</label>
                   <div className="mt-1">{getStatusBadge(selectedLog.status)}</div>
                 </div>
+                {selectedLog.payload?.vix !== undefined && selectedLog.payload?.vix !== null && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">VIX at Signal Time</label>
+                    <p className="text-gray-900 font-medium mt-1">{Number(selectedLog.payload.vix).toFixed(2)}</p>
+                  </div>
+                )}
+                {selectedLog.accounts_executed && (() => {
+                  const regimes = [...new Set(selectedLog.accounts_executed.map((a: any) => a.regime_matched).filter(Boolean))];
+                  if (regimes.length === 0) return null;
+                  return (
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Regime(s) Matched</label>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {regimes.map((r: any) => (
+                          <span key={r} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {selectedLog.response_message && (
@@ -1056,6 +1112,22 @@ export function TradingViewLogs() {
                         </div>
 
                         <div className="grid grid-cols-2 gap-3 text-sm">
+                          {account.regime_matched && (
+                            <div className="col-span-2 bg-blue-50 border border-blue-200 rounded p-2 flex items-center gap-2">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300">
+                                {account.regime_matched}
+                              </span>
+                              <span className="text-blue-700 text-xs">Regime matched for this signal</span>
+                            </div>
+                          )}
+                          {!account.regime_matched && account.filter_passed !== false && (
+                            <div className="col-span-2 bg-gray-50 border border-gray-200 rounded p-2 flex items-center gap-2">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-300">
+                                No Regime
+                              </span>
+                              <span className="text-gray-500 text-xs">Signal passed via standard condition sets (no regime matched)</span>
+                            </div>
+                          )}
                           {account.filter_passed === false && account.filter_reason && (
                             <div className="col-span-2 bg-orange-50 border border-orange-200 rounded p-2">
                               <span className="text-orange-800 text-sm font-medium">Signal Filtered: </span>
