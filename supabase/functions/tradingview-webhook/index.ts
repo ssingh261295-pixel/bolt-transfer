@@ -329,6 +329,7 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
   reason?: string;
   regimeInfo?: string;
   rocketRuleOverride?: boolean;
+  matchedEngineName?: string;
 } {
   if (!filters) return { passed: true };
 
@@ -441,12 +442,13 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
 
     // Engine evaluation: OR logic — signal passes if ANY eligible engine matches
     let anyPassed = false;
+    let matchedEngineName: string | undefined;
     const failedReasons: string[] = [];
 
     for (const cs of eligibleSets) {
       const adxOverride = adxOverrides[cs.name];
       const result = evaluateConditionSet(cs, payload, adxOverride);
-      if (result.passed) { anyPassed = true; break; }
+      if (result.passed) { anyPassed = true; matchedEngineName = cs.name; break; }
       failedReasons.push(`${cs.name}: ${result.reasons.join(', ')}`);
     }
 
@@ -454,16 +456,11 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
       return { passed: false, reason: `Regime "${regimeName}": ${tradeType} signal failed all allowed engines. ${failedReasons.join(' | ')}` };
     }
 
-    return { passed: true, regimeInfo: regimeName, rocketRuleOverride: regimeResult.rocketRuleEnabled };
+    return { passed: true, regimeInfo: regimeName, rocketRuleOverride: regimeResult.rocketRuleEnabled, matchedEngineName };
   }
 
   // --- STANDARD DIRECTION FILTERS (only when no regimes configured) ---
   const directionFilters = tradeType === 'BUY' ? (filters.buy_filters || filters) : (filters.sell_filters || filters);
-
-  if (directionFilters.trade_grade?.enabled && payload.trade_grade) {
-    const allowedGrades = directionFilters.trade_grade.allowed_grades || ['A', 'B', 'C', 'D'];
-    if (!allowedGrades.includes(payload.trade_grade)) return { passed: false, reason: `${tradeType}: Trade grade ${payload.trade_grade} not in allowed list` };
-  }
 
   if (directionFilters.trade_score?.enabled && payload.trade_score !== undefined) {
     const minScore = directionFilters.trade_score.min_score || 5.0;
@@ -475,12 +472,6 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     if (!allowedPhases.includes(payload.entry_phase)) return { passed: false, reason: `${tradeType}: Entry phase ${payload.entry_phase} not in allowed list` };
   }
 
-  if (directionFilters.adx?.enabled && payload.adx !== undefined) {
-    const minValue = directionFilters.adx.min_value || 0;
-    const maxValue = directionFilters.adx.max_value || 100;
-    if (payload.adx < minValue || payload.adx > maxValue) return { passed: false, reason: `${tradeType}: ADX ${payload.adx} outside range ${minValue}-${maxValue}` };
-  }
-
   if (directionFilters.volume?.enabled && payload.vol_avg_5d !== undefined) {
     const minVolume = directionFilters.volume.min_avg_volume_5d || 0;
     if (payload.vol_avg_5d < minVolume) return { passed: false, reason: `${tradeType}: Volume ${payload.vol_avg_5d} below minimum ${minVolume}` };
@@ -490,28 +481,6 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     const minPrice = directionFilters.price_range.min_price || 0;
     const maxPrice = directionFilters.price_range.max_price || 1000000;
     if (payload.price < minPrice || payload.price > maxPrice) return { passed: false, reason: `${tradeType}: Price ${payload.price} outside range ${minPrice}-${maxPrice}` };
-  }
-
-  if (directionFilters.dist_ema21_atr?.enabled && payload.dist_ema21_atr !== undefined) {
-    const minValue = directionFilters.dist_ema21_atr.min_value ?? -10.0;
-    const maxValue = directionFilters.dist_ema21_atr.max_value ?? 10.0;
-    if (payload.dist_ema21_atr < minValue || payload.dist_ema21_atr > maxValue) {
-      return { passed: false, reason: `${tradeType}: Distance from EMA21 ${payload.dist_ema21_atr.toFixed(2)} ATR outside range ${minValue}-${maxValue}` };
-    }
-  }
-
-  if (directionFilters.volume_ratio?.enabled && payload.volume !== undefined && payload.vol_avg_5d !== undefined && payload.vol_avg_5d > 0) {
-    const volumeRatio = payload.volume / payload.vol_avg_5d;
-    const minValue = directionFilters.volume_ratio.min_value ?? 0.0;
-    const maxValue = directionFilters.volume_ratio.max_value ?? 10.0;
-    if (volumeRatio < minValue || volumeRatio > maxValue) return { passed: false, reason: `${tradeType}: Volume ratio ${volumeRatio.toFixed(2)} outside range ${minValue}-${maxValue}` };
-  }
-
-  if (directionFilters.di_spread?.enabled && payload.di_plus !== undefined && payload.di_minus !== undefined) {
-    const diSpread = Math.abs(payload.di_plus - payload.di_minus);
-    const minValue = directionFilters.di_spread.min_value ?? 0;
-    const maxValue = directionFilters.di_spread.max_value ?? 100;
-    if (diSpread < minValue || diSpread > maxValue) return { passed: false, reason: `${tradeType}: DI Spread ${diSpread.toFixed(2)} outside range ${minValue}-${maxValue}` };
   }
 
   const conditionSets = directionFilters.condition_sets || [];
@@ -761,12 +730,13 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
 
           if (filterResult.regimeInfo) {
             accountResult.regime_matched = filterResult.regimeInfo;
-            regimeRocketRuleEnabled = filterResult.rocketRuleOverride;
-            if (filterResult.rocketRuleOverride) {
-              const matchedRegime = (account.signal_filters?.regimes || []).find((r: any) => r.name === filterResult.regimeInfo);
-              if (matchedRegime) {
-                const dirOv = tradeType === 'BUY' ? matchedRegime.buy_overrides : matchedRegime.sell_overrides;
-                if (dirOv?.rocket_rule?.enabled) regimeRocketRuleConfig = dirOv.rocket_rule;
+            accountResult.matched_engine = filterResult.matchedEngineName;
+            const matchedRegime = (account.signal_filters?.regimes || []).find((r: any) => r.name === filterResult.regimeInfo);
+            if (matchedRegime) {
+              const dirOv = tradeType === 'BUY' ? matchedRegime.buy_overrides : matchedRegime.sell_overrides;
+              if (dirOv?.rocket_rule?.enabled) {
+                regimeRocketRuleEnabled = true;
+                regimeRocketRuleConfig = dirOv.rocket_rule;
               }
             }
           }
@@ -801,22 +771,29 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
 
         const sf = freshAccount?.signal_filters ?? account.signal_filters;
         const directionFilters = tradeType === 'BUY' ? sf?.buy_filters : sf?.sell_filters;
-        const rocketRule = directionFilters?.rocket_rule;
+        const matchedEngineName = accountResult.matched_engine;
+        const engineConditionSets: any[] = directionFilters?.condition_sets || [];
+        const matchedEngine = matchedEngineName
+          ? engineConditionSets.find((cs: any) => cs.name === matchedEngineName)
+          : null;
+        const engineRocketRule = matchedEngine?.rocket_rule ?? null;
 
         console.log('[Webhook] Rocket rule check:', {
           account_id: account.id,
           trade_type: tradeType,
-          has_signal_filters: !!sf,
-          has_direction_filters: !!directionFilters,
-          rocket_rule: rocketRule,
+          matched_engine: matchedEngineName,
+          engine_rocket_rule: engineRocketRule,
+          regime_rocket_rule_config: regimeRocketRuleConfig,
           volume: enrichedPayload.volume,
           vol_avg_5d: enrichedPayload.vol_avg_5d,
           vix: liveVIX,
           vix_source: vixSource
         });
 
-        const rocketRuleActive = regimeRocketRuleEnabled !== undefined ? regimeRocketRuleEnabled : (rocketRule?.enabled ?? false);
-        const effectiveRocketRule = regimeRocketRuleConfig ?? rocketRule;
+        const effectiveRocketRule = regimeRocketRuleConfig ?? engineRocketRule;
+        const rocketRuleActive = regimeRocketRuleEnabled !== undefined
+          ? regimeRocketRuleEnabled
+          : (engineRocketRule?.enabled ?? false);
 
         if (rocketRuleActive && effectiveRocketRule && enrichedPayload.volume !== undefined && enrichedPayload.vol_avg_5d !== undefined && enrichedPayload.vol_avg_5d > 0) {
           const volumeRatio = enrichedPayload.volume / enrichedPayload.vol_avg_5d;

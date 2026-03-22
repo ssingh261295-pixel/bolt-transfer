@@ -120,20 +120,23 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     volume_ratio: { min: 0.40, max: 100 },
     di_spread: { min: 15, max: 100 },
     adx: { min: 0, max: 35 },
-    ema_distance: { min: 1.0, max: 100 }
+    ema_distance: { min: 1.0, max: 100 },
+    rocket_rule: { enabled: false, volume_ratio_threshold: 0.70, lot_multiplier: 2, target_multiplier: 3.0 }
   });
 
+  const defaultRocketRule = { enabled: false, volume_ratio_threshold: 0.70, lot_multiplier: 2, target_multiplier: 3.0 };
+
   const defaultBuyConditionSets = [
-    { name: 'Option A', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 15, max: 100 }, adx: { min: 0, max: 28 }, ema_distance: { min: 3.0, max: 100 } },
-    { name: 'Option B', enabled: false, volume_ratio: { min: 0.45, max: 100 }, di_spread: { min: 20, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 1.2, max: 2.3 } },
-    { name: 'Option C', enabled: false, volume_ratio: { min: 0.30, max: 100 }, di_spread: { min: 10, max: 100 }, adx: { min: 35.1, max: 100 }, ema_distance: { min: 1.5, max: 4.0 } }
+    { name: 'Option A', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 15, max: 100 }, adx: { min: 0, max: 28 }, ema_distance: { min: 3.0, max: 100 }, rocket_rule: { ...defaultRocketRule } },
+    { name: 'Option B', enabled: false, volume_ratio: { min: 0.45, max: 100 }, di_spread: { min: 20, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 1.2, max: 2.3 }, rocket_rule: { ...defaultRocketRule } },
+    { name: 'Option C', enabled: false, volume_ratio: { min: 0.30, max: 100 }, di_spread: { min: 10, max: 100 }, adx: { min: 35.1, max: 100 }, ema_distance: { min: 1.5, max: 4.0 }, rocket_rule: { ...defaultRocketRule } }
   ];
 
   const defaultSellConditionSets = [
-    { name: 'Option D', enabled: false, volume_ratio: { min: 0.39, max: 100 }, di_spread: { min: 16.5, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 1.2, max: 2.3 } },
-    { name: 'Option E', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 18, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 3.0, max: 100 } },
-    { name: 'Option F', enabled: false, volume_ratio: { min: 0.20, max: 100 }, di_spread: { min: 20, max: 100 }, adx: { min: 0, max: 25 }, ema_distance: { min: 1.5, max: 100 } },
-    { name: 'Option G', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 10, max: 100 }, adx: { min: 0, max: 30 }, ema_distance: { min: 1.2, max: 2.3 } }
+    { name: 'Option D', enabled: false, volume_ratio: { min: 0.39, max: 100 }, di_spread: { min: 16.5, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 1.2, max: 2.3 }, rocket_rule: { ...defaultRocketRule } },
+    { name: 'Option E', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 18, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 3.0, max: 100 }, rocket_rule: { ...defaultRocketRule } },
+    { name: 'Option F', enabled: false, volume_ratio: { min: 0.20, max: 100 }, di_spread: { min: 20, max: 100 }, adx: { min: 0, max: 25 }, ema_distance: { min: 1.5, max: 100 }, rocket_rule: { ...defaultRocketRule } },
+    { name: 'Option G', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 10, max: 100 }, adx: { min: 0, max: 30 }, ema_distance: { min: 1.2, max: 2.3 }, rocket_rule: { ...defaultRocketRule } }
   ];
 
   const defaultDirectionFilters = {
@@ -177,6 +180,15 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
       if (!sellFilters.condition_sets || sellFilters.condition_sets.length === 0) {
         sellFilters.condition_sets = defaultSellConditionSets;
       }
+
+      const migrateConditionSets = (sets: any[], oldRocketRule: any) =>
+        sets.map((cs: any) => ({
+          ...cs,
+          rocket_rule: cs.rocket_rule ?? (oldRocketRule ? { ...oldRocketRule } : { ...defaultRocketRule })
+        }));
+
+      buyFilters.condition_sets = migrateConditionSets(buyFilters.condition_sets, buyFilters.rocket_rule);
+      sellFilters.condition_sets = migrateConditionSets(sellFilters.condition_sets, sellFilters.rocket_rule);
 
       const regimes = (brokerFilters.regimes || DEFAULT_REGIMES).map((r: any) => ({
         ...r,
@@ -997,6 +1009,50 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                   </div>
                 </div>
 
+                <div className="mt-3 border border-amber-200 bg-amber-50 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap className="w-3.5 h-3.5 text-amber-600" />
+                    <span className="text-xs font-semibold text-amber-900">Rocket Rule</span>
+                    <label className="flex items-center gap-1.5 ml-auto">
+                      <span className="text-xs text-amber-700">Enabled</span>
+                      <input
+                        type="checkbox"
+                        checked={conditionSet.rocket_rule?.enabled ?? false}
+                        onChange={(e) => updateConditionSet(direction, index, 'rocket_rule', { ...(conditionSet.rocket_rule ?? defaultRocketRule), enabled: e.target.checked })}
+                        className="w-3.5 h-3.5 text-amber-600 rounded"
+                      />
+                    </label>
+                  </div>
+                  {conditionSet.rocket_rule?.enabled && (
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">VR Threshold</label>
+                        <input type="number" step="0.01"
+                          value={conditionSet.rocket_rule?.volume_ratio_threshold ?? 0.70}
+                          onChange={(e) => updateConditionSet(direction, index, 'rocket_rule', { ...conditionSet.rocket_rule, volume_ratio_threshold: parseFloat(e.target.value) })}
+                          className="w-full px-2 py-1 text-xs border border-amber-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Lot Multiplier</label>
+                        <input type="number" step="1" min="1"
+                          value={conditionSet.rocket_rule?.lot_multiplier ?? 2}
+                          onChange={(e) => updateConditionSet(direction, index, 'rocket_rule', { ...conditionSet.rocket_rule, lot_multiplier: parseInt(e.target.value) })}
+                          className="w-full px-2 py-1 text-xs border border-amber-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Target Multiplier</label>
+                        <input type="number" step="0.1" min="0.1"
+                          value={conditionSet.rocket_rule?.target_multiplier ?? 3.0}
+                          onChange={(e) => updateConditionSet(direction, index, 'rocket_rule', { ...conditionSet.rocket_rule, target_multiplier: parseFloat(e.target.value) })}
+                          className="w-full px-2 py-1 text-xs border border-amber-300 rounded"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {conditionSet.enabled && (
                   <div className={`mt-3 px-3 py-2 bg-${color}-50 rounded-lg border border-${color}-200`}>
                     <p className={`text-xs text-${color}-700 font-medium`}>
@@ -1023,24 +1079,6 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
               </button>
             </div>
           )}
-        </div>
-
-        <div className={`border border-${color}-200 rounded-lg p-4`}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900">Trade Grade</h3>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={directionFilters.trade_grade?.enabled ?? false}
-                onChange={(e) => updateDirectionFilter(direction, 'trade_grade', { ...directionFilters.trade_grade, enabled: e.target.checked })}
-                className={`w-4 h-4 text-${color}-600 rounded focus:ring-2 focus:ring-${color}-500`} />
-              <span className="text-sm text-gray-700">Enabled</span>
-            </label>
-          </div>
-          <MultiSelectFilter
-            options={['A', 'B', 'C', 'D']}
-            selectedValues={directionFilters.trade_grade?.allowed_grades || ['A', 'B', 'C', 'D']}
-            onChange={(values) => updateDirectionFilter(direction, 'trade_grade', { ...directionFilters.trade_grade, allowed_grades: values })}
-            label="Allowed Grades"
-          />
         </div>
 
         <div className={`border border-${color}-200 rounded-lg p-4`}>
@@ -1078,32 +1116,6 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
             onChange={(values) => updateDirectionFilter(direction, 'entry_phase', { ...directionFilters.entry_phase, allowed_phases: values })}
             label="Allowed Phases"
           />
-        </div>
-
-        <div className={`border border-${color}-200 rounded-lg p-4`}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900">ADX Range</h3>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={directionFilters.adx?.enabled ?? false}
-                onChange={(e) => updateDirectionFilter(direction, 'adx', { ...directionFilters.adx, enabled: e.target.checked })}
-                className={`w-4 h-4 text-${color}-600 rounded focus:ring-2 focus:ring-${color}-500`} />
-              <span className="text-sm text-gray-700">Enabled</span>
-            </label>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Min Value</label>
-              <input type="number" step="0.01" value={directionFilters.adx?.min_value ?? 0}
-                onChange={(e) => updateDirectionFilter(direction, 'adx', { ...directionFilters.adx, min_value: parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Max Value</label>
-              <input type="number" step="0.01" value={directionFilters.adx?.max_value ?? 100}
-                onChange={(e) => updateDirectionFilter(direction, 'adx', { ...directionFilters.adx, max_value: parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
-          </div>
         </div>
 
         <div className={`border border-${color}-200 rounded-lg p-4`}>
@@ -1150,129 +1162,6 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
           </div>
         </div>
 
-        <div className={`border border-${color}-200 rounded-lg p-4`}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900">Distance from EMA21 (ATR units)</h3>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={directionFilters.dist_ema21_atr?.enabled ?? false}
-                onChange={(e) => updateDirectionFilter(direction, 'dist_ema21_atr', { ...directionFilters.dist_ema21_atr, enabled: e.target.checked })}
-                className={`w-4 h-4 text-${color}-600 rounded focus:ring-2 focus:ring-${color}-500`} />
-              <span className="text-sm text-gray-700">Enabled</span>
-            </label>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Min Value</label>
-              <input type="number" step="0.1" value={directionFilters.dist_ema21_atr?.min_value ?? -10.0}
-                onChange={(e) => updateDirectionFilter(direction, 'dist_ema21_atr', { ...directionFilters.dist_ema21_atr, min_value: parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Max Value</label>
-              <input type="number" step="0.1" value={directionFilters.dist_ema21_atr?.max_value ?? 10.0}
-                onChange={(e) => updateDirectionFilter(direction, 'dist_ema21_atr', { ...directionFilters.dist_ema21_atr, max_value: parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
-          </div>
-        </div>
-
-        <div className={`border border-${color}-200 rounded-lg p-4`}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900">Volume Ratio</h3>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={directionFilters.volume_ratio?.enabled ?? false}
-                onChange={(e) => updateDirectionFilter(direction, 'volume_ratio', { ...directionFilters.volume_ratio, enabled: e.target.checked })}
-                className={`w-4 h-4 text-${color}-600 rounded focus:ring-2 focus:ring-${color}-500`} />
-              <span className="text-sm text-gray-700">Enabled</span>
-            </label>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Min Value</label>
-              <input type="number" step="0.1" value={directionFilters.volume_ratio?.min_value ?? 0.0}
-                onChange={(e) => updateDirectionFilter(direction, 'volume_ratio', { ...directionFilters.volume_ratio, min_value: parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Max Value</label>
-              <input type="number" step="0.1" value={directionFilters.volume_ratio?.max_value ?? 10.0}
-                onChange={(e) => updateDirectionFilter(direction, 'volume_ratio', { ...directionFilters.volume_ratio, max_value: parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
-          </div>
-        </div>
-
-        <div className={`border border-${color}-200 rounded-lg p-4`}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900">DI Spread</h3>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={directionFilters.di_spread?.enabled ?? false}
-                onChange={(e) => updateDirectionFilter(direction, 'di_spread', { ...directionFilters.di_spread, enabled: e.target.checked })}
-                className={`w-4 h-4 text-${color}-600 rounded focus:ring-2 focus:ring-${color}-500`} />
-              <span className="text-sm text-gray-700">Enabled</span>
-            </label>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Min Value</label>
-              <input type="number" value={directionFilters.di_spread?.min_value ?? 0}
-                onChange={(e) => updateDirectionFilter(direction, 'di_spread', { ...directionFilters.di_spread, min_value: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Max Value</label>
-              <input type="number" value={directionFilters.di_spread?.max_value ?? 100}
-                onChange={(e) => updateDirectionFilter(direction, 'di_spread', { ...directionFilters.di_spread, max_value: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
-          </div>
-        </div>
-
-        <div className={`border border-${color}-200 bg-${color}-50 rounded-lg p-4`}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className={`font-semibold text-${color}-900`}>Rocket Rule</h3>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={directionFilters.rocket_rule?.enabled ?? false}
-                onChange={(e) => updateDirectionFilter(direction, 'rocket_rule', { ...directionFilters.rocket_rule, enabled: e.target.checked })}
-                className={`w-4 h-4 text-${color}-600 rounded focus:ring-2 focus:ring-${color}-500`} />
-              <span className={`text-sm text-${color}-700 font-medium`}>Enabled</span>
-            </label>
-          </div>
-          <p className={`text-xs text-${color}-700 mb-4 font-medium`}>
-            High-conviction trade trigger: when volume ratio &ge; threshold, uses 2 lots and 2.5x ATR target. Overrides per-symbol lot/target settings.
-          </p>
-          <div className="space-y-3">
-            <div>
-              <label className={`block text-sm font-medium text-${color}-900 mb-1`}>Volume Ratio Threshold</label>
-              <input type="number" step="0.01"
-                value={directionFilters.rocket_rule?.volume_ratio_threshold ?? 0.70}
-                onChange={(e) => updateDirectionFilter(direction, 'rocket_rule', { ...directionFilters.rocket_rule, volume_ratio_threshold: parseFloat(e.target.value) })}
-                className={`w-full px-3 py-2 border border-${color}-300 rounded-lg focus:ring-2 focus:ring-${color}-500 focus:border-transparent`} />
-              <p className={`text-xs text-${color}-600 mt-1`}>Trigger when volume/vol_avg_5d &ge; this value (e.g., 0.70 = 70% of avg volume)</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={`block text-sm font-medium text-${color}-900 mb-1`}>Lot Multiplier</label>
-                <input type="number" step="1" min="1"
-                  value={directionFilters.rocket_rule?.lot_multiplier ?? 2}
-                  onChange={(e) => updateDirectionFilter(direction, 'rocket_rule', { ...directionFilters.rocket_rule, lot_multiplier: parseInt(e.target.value) })}
-                  className={`w-full px-3 py-2 border border-${color}-300 rounded-lg focus:ring-2 focus:ring-${color}-500 focus:border-transparent`} />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium text-${color}-900 mb-1`}>Target Multiplier</label>
-                <input type="number" step="0.1" min="0.1"
-                  value={directionFilters.rocket_rule?.target_multiplier ?? 2.5}
-                  onChange={(e) => updateDirectionFilter(direction, 'rocket_rule', { ...directionFilters.rocket_rule, target_multiplier: parseFloat(e.target.value) })}
-                  className={`w-full px-3 py-2 border border-${color}-300 rounded-lg focus:ring-2 focus:ring-${color}-500 focus:border-transparent`} />
-              </div>
-            </div>
-            <div className={`p-3 bg-white rounded-lg border border-${color}-200`}>
-              <p className={`text-xs text-${color}-700`}>
-                <strong>Example:</strong> If VR &ge; {directionFilters.rocket_rule?.volume_ratio_threshold ?? 0.70}, order uses {directionFilters.rocket_rule?.lot_multiplier ?? 2} lots and target {directionFilters.rocket_rule?.target_multiplier ?? 2.5}x ATR
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
     );
   };
