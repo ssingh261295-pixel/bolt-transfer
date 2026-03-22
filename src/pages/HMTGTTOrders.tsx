@@ -18,7 +18,15 @@ export function HMTGTTOrders() {
   const [positions, setPositions] = useState<any[]>([]);
   const [selectedBrokerId, setSelectedBrokerId] = useState<string>('all');
   const [selectedInstruments, setSelectedInstruments] = useState<string[]>([]);
-  const { isConnected, connect, disconnect, subscribe, getLTP } = useZerodhaWebSocket(selectedBrokerId !== 'all' ? selectedBrokerId : brokers[0]?.id);
+  const firstValidBrokerId = useMemo(() => {
+    if (selectedBrokerId !== 'all') {
+      if (!expiredBrokerIds.has(selectedBrokerId)) return selectedBrokerId;
+    }
+    const valid = brokers.find(b => !expiredBrokerIds.has(b.id));
+    return valid?.id || brokers[0]?.id;
+  }, [selectedBrokerId, brokers, expiredBrokerIds]);
+
+  const { isConnected, connect, disconnect, subscribe, getLTP } = useZerodhaWebSocket(firstValidBrokerId);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingGTT, setEditingGTT] = useState<any>(null);
@@ -89,12 +97,11 @@ export function HMTGTTOrders() {
   }, [selectedBrokerId, brokers]);
 
   useEffect(() => {
-    const brokerId = selectedBrokerId !== 'all' ? selectedBrokerId : brokers[0]?.id;
-    if (brokerId) {
+    if (firstValidBrokerId) {
       connect();
     }
     return () => disconnect();
-  }, [selectedBrokerId, brokers, connect, disconnect]);
+  }, [firstValidBrokerId, connect, disconnect]);
 
   useEffect(() => {
     if (isConnected && hmtGttOrders.length > 0) {
