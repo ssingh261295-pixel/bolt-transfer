@@ -48,10 +48,31 @@ export function HMTGTTOrders() {
   }, [user]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadEngineStatus();
-    }, 30000);
-    return () => clearInterval(interval);
+    loadEngineStatus();
+
+    const ch = supabase
+      .channel('engine_state_live')
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'hmt_engine_state', filter: 'id=eq.singleton'
+      }, (payload) => {
+        const s = payload.new as any;
+        if (!s) return;
+        const ago = Date.now() - new Date(s.last_heartbeat).getTime();
+        setEngineStatus({
+          status: s.is_running ? (ago < 60000 ? 'running' : 'stale') : 'stopped',
+          stats: {
+            active_triggers: s.active_triggers || 0,
+            processed_ticks: s.processed_ticks || 0,
+            triggered_orders: s.triggered_orders || 0,
+            websocket_status: s.websocket_status || 'disconnected'
+          },
+          heartbeat: { last_update: s.last_heartbeat, seconds_since_update: Math.floor(ago / 1000) },
+          error: ago >= 60000 ? 'Engine heartbeat stale' : null
+        });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(ch); };
   }, []);
 
   useEffect(() => {
@@ -106,7 +127,7 @@ export function HMTGTTOrders() {
             account_holder_name: broker.account_holder_name,
             client_id: broker.client_id
           };
-          setHmtGttOrders(prev => sortHMTGTTOrders([...prev, newOrder]));
+          setHmtGttOrders(prev => [...prev, newOrder]);
         }
       })
       .on('postgres_changes', {
@@ -116,19 +137,12 @@ export function HMTGTTOrders() {
         filter: `user_id=eq.${user.id}`
       }, (payload) => {
         const updatedFields = payload.new as any;
-        setHmtGttOrders(prev => {
-          const updated = prev.map(order => {
-            if (order.id === updatedFields.id) {
-              return {
-                ...order,
-                ...updatedFields,
-                broker_connections: order.broker_connections
-              };
-            }
-            return order;
-          });
-          return sortHMTGTTOrders(updated);
-        });
+        setHmtGttOrders(prev => prev.map(order => {
+          if (order.id === updatedFields.id) {
+            return { ...order, ...updatedFields, broker_connections: order.broker_connections };
+          }
+          return order;
+        }));
       })
       .on('postgres_changes', {
         event: 'DELETE',
@@ -149,7 +163,7 @@ export function HMTGTTOrders() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, sortField, sortDirection, brokers]);
+  }, [user?.id, brokers]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -202,7 +216,7 @@ export function HMTGTTOrders() {
   const loadBrokers = async () => {
     const { data } = await supabase
       .from('broker_connections')
-      .select('*')
+      .select('id, account_name, account_holder_name, client_id, broker_name, is_active, token_expires_at, api_key, access_token')
       .eq('user_id', user?.id)
       .eq('is_active', true)
       .eq('broker_name', 'zerodha');
@@ -248,13 +262,17 @@ export function HMTGTTOrders() {
     }
   };
 
-  const getPositionForGTT = useCallback((gtt: any) => {
-    return positions.find(pos =>
-      pos.symbol === gtt.trading_symbol &&
-      pos.exchange === gtt.exchange &&
-      pos.broker_connection_id === gtt.broker_connection_id
-    );
+  const positionMap = useMemo(() => {
+    const map = new Map<string, any>();
+    positions.forEach(pos => {
+      map.set(`${pos.symbol}:${pos.exchange}:${pos.broker_connection_id}`, pos);
+    });
+    return map;
   }, [positions]);
+
+  const getPositionForGTT = useCallback((gtt: any) => {
+    return positionMap.get(`${gtt.trading_symbol}:${gtt.exchange}:${gtt.broker_connection_id}`) ?? null;
+  }, [positionMap]);
 
   const loadHMTGTTOrders = async (silent = false) => {
     if (!selectedBrokerId || brokers.length === 0) return;
@@ -377,6 +395,8 @@ export function HMTGTTOrders() {
     [hmtGttOrders, selectedInstruments]
   );
 
+  const sortedOrders = useMemo(() => sortHMTGTTOrders(filteredHmtGttOrders), [filteredHmtGttOrders, sortField, sortDirection]);
+
   useEffect(() => {
     if (selectedInstruments.length === 0 && selectedOrders.size > 0) {
       setSelectedOrders(new Set());
@@ -400,10 +420,10 @@ export function HMTGTTOrders() {
   }, [filteredHmtGttOrders, selectedInstruments]);
 
   const toggleSelectAll = () => {
-    if (selectedOrders.size === filteredHmtGttOrders.length) {
+    if (selectedOrders.size === sortedOrders.length) {
       setSelectedOrders(new Set());
     } else {
-      setSelectedOrders(new Set(filteredHmtGttOrders.map(order => order.id)));
+      setSelectedOrders(new Set(sortedOrders.map(order => order.id)));
     }
   };
 
@@ -863,7 +883,7 @@ export function HMTGTTOrders() {
     <div className="space-y-4">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <h2 className="text-xl lg:text-2xl font-bold text-gray-900 truncate">HMT GTT ({filteredHmtGttOrders.length})</h2>
+          <h2 className="text-xl lg:text-2xl font-bold text-gray-900 truncate">HMT GTT ({sortedOrders.length})</h2>
           <div className="min-h-[40px] flex flex-wrap items-center gap-2 lg:gap-3 mt-2">
             {engineStatus ? (
               <>
@@ -1021,7 +1041,7 @@ export function HMTGTTOrders() {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => {
-                const selectedGTTs = filteredHmtGttOrders.filter(gtt => selectedOrders.has(gtt.id));
+                const selectedGTTs = sortedOrders.filter(gtt => selectedOrders.has(gtt.id));
                 const symbols = new Set(selectedGTTs.map(g => g.trading_symbol));
                 const brokers = new Set(selectedGTTs.map(g => g.broker_connection_id));
 
@@ -1091,7 +1111,7 @@ export function HMTGTTOrders() {
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={selectedOrders.size === filteredHmtGttOrders.length && filteredHmtGttOrders.length > 0}
+                  checked={selectedOrders.size === sortedOrders.length && sortedOrders.length > 0}
                   onChange={toggleSelectAll}
                   className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                 />
@@ -1105,7 +1125,7 @@ export function HMTGTTOrders() {
             </div>
 
             <div className="divide-y divide-gray-200">
-            {filteredHmtGttOrders.map((gtt) => {
+            {sortedOrders.map((gtt) => {
               const ltp = getLTP(gtt.instrument_token);
               const position = getPositionForGTT(gtt);
               const currentPrice = ltp ?? 0;
@@ -1295,7 +1315,7 @@ export function HMTGTTOrders() {
                 <th className="px-2 py-3 text-center w-12">
                   <input
                     type="checkbox"
-                    checked={selectedOrders.size === filteredHmtGttOrders.length && filteredHmtGttOrders.length > 0}
+                    checked={selectedOrders.size === sortedOrders.length && sortedOrders.length > 0}
                     onChange={toggleSelectAll}
                     className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                   />
@@ -1362,7 +1382,7 @@ export function HMTGTTOrders() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {filteredHmtGttOrders.map((gtt) => (
+              {sortedOrders.map((gtt) => (
                 <HMTGTTRow
                   key={gtt.id}
                   gtt={gtt}
