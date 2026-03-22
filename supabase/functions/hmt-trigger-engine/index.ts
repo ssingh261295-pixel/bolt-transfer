@@ -30,7 +30,7 @@ const INDIA_VIX_TOKEN = 264969;
 
 // Global engine state
 let triggerManager: TriggerManager | null = null;
-let wsManager: WebSocketManager | null = null;
+const wsManagers: Map<string, WebSocketManager> = new Map();
 let orderExecutor: OrderExecutor | null = null;
 let engineStartTime: Date | null = null;
 let isEngineRunning = false;
@@ -170,43 +170,58 @@ async function initializeEngine(): Promise<void> {
   // Load active triggers from database
   await loadActiveTriggers();
 
-  // Get broker connection for WebSocket (use first active broker)
-  const broker = await getActiveBroker();
-  if (!broker) {
+  // Get all active brokers
+  const brokers = await getActiveBrokers();
+  if (brokers.length === 0) {
     engineError = 'No active broker connection found. Please connect a broker account first.';
     console.error('[Engine]', engineError);
     stats.websocket_status = 'disconnected';
     return;
   }
 
-  // Initialize WebSocket manager
-  wsManager = new WebSocketManager(
-    broker.api_key,
-    broker.access_token,
-    getConfig().reconnect_delay_ms
-  );
+  // Group instruments by broker from active triggers
+  const { data: activeTriggers } = await getSupabase()
+    .from('hmt_gtt_orders').select('broker_connection_id, instrument_token').eq('status', 'active');
 
-  // Set tick handler
-  wsManager.setTickHandler(handleTick);
+  const tokensByBroker = new Map<string, Set<number>>();
+  (activeTriggers || []).forEach((t: any) => {
+    if (!tokensByBroker.has(t.broker_connection_id)) tokensByBroker.set(t.broker_connection_id, new Set());
+    tokensByBroker.get(t.broker_connection_id)!.add(t.instrument_token);
+  });
 
-  // Connect to WebSocket
+  // Connect a WebSocket per broker
   stats.websocket_status = 'connecting';
-  try {
-    await wsManager.connect();
-    engineError = null;
-  } catch (error: any) {
-    engineError = `WebSocket connection failed: ${error.message}`;
-    console.error('[Engine]', engineError);
-    stats.websocket_status = 'disconnected';
+  const primaryBrokerId = brokers[0].id;
+  for (const broker of brokers) {
+    const tokens = tokensByBroker.get(broker.id);
+    if (!tokens && broker.id !== primaryBrokerId) continue;
+
+    const ws = new WebSocketManager(broker.api_key, broker.access_token, getConfig().reconnect_delay_ms);
+    ws.setTickHandler(handleTick);
+    try {
+      await ws.connect();
+    } catch (error: any) {
+      console.error(`[Engine] WebSocket failed for broker ${broker.account_name || broker.id}:`, error.message);
+      continue;
+    }
+
+    const tokenList = tokens ? Array.from(tokens) : [];
+    if (broker.id === primaryBrokerId && !tokenList.includes(INDIA_VIX_TOKEN)) tokenList.push(INDIA_VIX_TOKEN);
+    if (tokenList.length > 0) ws.subscribe(tokenList);
+
+    wsManagers.set(broker.id, ws);
+    console.log(`[Engine] WebSocket connected for broker ${broker.account_name || broker.id} with ${tokenList.length} tokens`);
   }
 
-  // Subscribe to all instruments plus INDIA VIX for regime evaluation
-  const instruments = triggerManager.getSubscribedInstruments();
-  const allTokens = instruments.includes(INDIA_VIX_TOKEN)
-    ? instruments
-    : [...instruments, INDIA_VIX_TOKEN];
-  wsManager.subscribe(allTokens);
-  stats.subscribed_instruments = instruments.length;
+  if (wsManagers.size === 0) {
+    engineError = 'All WebSocket connections failed.';
+    console.error('[Engine]', engineError);
+    stats.websocket_status = 'disconnected';
+    return;
+  }
+
+  engineError = null;
+  stats.subscribed_instruments = Array.from(wsManagers.values()).reduce((sum, ws) => sum + ws.getSubscribedCount(), 0);
 
   // Start health check monitor
   startHealthCheckMonitor();
@@ -244,28 +259,12 @@ async function loadActiveTriggers(): Promise<void> {
   }
 }
 
-async function getActiveBroker(): Promise<BrokerConnection | null> {
-  try {
-    const { data: brokers, error } = await getSupabase()
-      .from('broker_connections')
-      .select('*')
-      .eq('broker_name', 'zerodha')
-      .eq('is_active', true)
-      .gt('token_expires_at', new Date().toISOString())
-      .order('token_expires_at', { ascending: false })
-      .limit(1);
-
-    if (error || !brokers || brokers.length === 0) {
-      console.error('[Engine] No active broker with valid token found');
-      return null;
-    }
-
-    console.log(`[Engine] Using broker: ${brokers[0].account_name || brokers[0].id}, token expires: ${brokers[0].token_expires_at}`);
-    return brokers[0];
-  } catch (error) {
-    console.error('[Engine] Error fetching broker:', error);
-    return null;
-  }
+async function getActiveBrokers(): Promise<BrokerConnection[]> {
+  const { data } = await getSupabase().from('broker_connections')
+    .select('id, user_id, broker_name, api_key, access_token, is_active, account_name, token_expires_at')
+    .eq('is_active', true)
+    .gt('token_expires_at', new Date().toISOString());
+  return data || [];
 }
 
 function handleTick(tick: WebSocketTick): void {
@@ -520,15 +519,25 @@ function subscribeToTriggerChanges(): void {
 }
 
 function handleTriggerInsert(trigger: HMTTrigger): void {
-  if (!triggerManager || !wsManager || trigger.status !== 'active') return;
+  if (!triggerManager || trigger.status !== 'active') return;
 
   console.log(`[Engine] New trigger added: ${trigger.id}`);
   triggerManager.addTrigger(trigger);
 
-  const currentInstruments = new Set(triggerManager.getSubscribedInstruments());
-  if (!currentInstruments.has(trigger.instrument_token)) {
-    wsManager.subscribe([trigger.instrument_token]);
-    stats.subscribed_instruments++;
+  const ws = wsManagers.get(trigger.broker_connection_id);
+  if (ws) {
+    ws.subscribe([trigger.instrument_token]);
+  } else {
+    getCachedBroker(trigger.broker_connection_id).then(broker => {
+      if (!broker) return;
+      const newWs = new WebSocketManager(broker.api_key, broker.access_token, getConfig().reconnect_delay_ms);
+      newWs.setTickHandler(handleTick);
+      newWs.connect().then(() => {
+        newWs.subscribe([trigger.instrument_token]);
+        wsManagers.set(broker.id, newWs);
+        console.log(`[Engine] New WebSocket spun up for broker ${broker.account_name || broker.id}`);
+      }).catch((e: any) => console.error('[Engine] Failed to connect new broker WS:', e.message));
+    });
   }
 
   stats.active_triggers = triggerManager.getActiveTriggerCount();
@@ -560,9 +569,11 @@ function startHealthCheckMonitor(): void {
       stats.uptime_seconds = Math.floor((Date.now() - engineStartTime.getTime()) / 1000);
     }
 
-    if (wsManager) {
-      stats.websocket_status = wsManager.isConnected() ? 'connected' : 'disconnected';
-    }
+    const allWs = Array.from(wsManagers.values());
+    stats.websocket_status = allWs.length === 0 ? 'disconnected'
+      : allWs.every(ws => ws.isConnected()) ? 'connected'
+      : allWs.some(ws => ws.isConnected()) ? 'connecting' : 'disconnected';
+    stats.subscribed_instruments = allWs.reduce((sum, ws) => sum + ws.getSubscribedCount(), 0);
 
     if (stats.last_tick_time) {
       const timeSinceLastTick = Date.now() - stats.last_tick_time;
@@ -605,10 +616,8 @@ async function shutdownEngine(): Promise<void> {
     heartbeatInterval = null;
   }
 
-  if (wsManager) {
-    wsManager.disconnect();
-    wsManager = null;
-  }
+  for (const [, ws] of wsManagers) ws.disconnect();
+  wsManagers.clear();
 
   if (triggerManager) {
     triggerManager.clear();
@@ -705,7 +714,7 @@ Deno.serve(async (req: Request) => {
       stats: {
         ...stats,
         active_triggers: dbState?.active_triggers || triggerManager?.getActiveTriggerCount() || 0,
-        subscribed_instruments: wsManager?.getSubscribedCount() || 0,
+        subscribed_instruments: Array.from(wsManagers.values()).reduce((sum, ws) => sum + ws.getSubscribedCount(), 0),
         processed_ticks: dbState?.processed_ticks || stats.processed_ticks,
         triggered_orders: dbState?.triggered_orders || stats.triggered_orders,
         websocket_status: dbState?.websocket_status || stats.websocket_status
@@ -756,7 +765,7 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({
       ...stats,
       active_triggers: triggerManager?.getActiveTriggerCount() || 0,
-      subscribed_instruments: wsManager?.getSubscribedCount() || 0,
+      subscribed_instruments: Array.from(wsManagers.values()).reduce((sum, ws) => sum + ws.getSubscribedCount(), 0),
       uptime_seconds: engineStartTime ? Math.floor((Date.now() - engineStartTime.getTime()) / 1000) : 0
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

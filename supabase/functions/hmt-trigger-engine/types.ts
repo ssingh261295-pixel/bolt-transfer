@@ -44,7 +44,8 @@ export interface BrokerConnection {
 export interface WebSocketTick {
   instrument_token: number;
   last_price: number;
-  timestamp?: Date;
+  exchange?: string;
+  timestamp?: number;
 }
 
 export interface TriggerExecution {

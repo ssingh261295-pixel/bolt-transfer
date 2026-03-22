@@ -5,6 +5,8 @@
 
 import { HMTTrigger } from './types.ts';
 
+const EMPTY: HMTTrigger[] = Object.freeze([]) as any;
+
 export class TriggerManager {
   // Map: instrument_token -> Set of trigger IDs
   private triggersByInstrument: Map<number, Set<string>> = new Map();
@@ -18,6 +20,9 @@ export class TriggerManager {
   // Set of triggers currently being processed (prevent double execution)
   private processing: Set<string> = new Set();
 
+  // Map: broker_connection_id -> Set of instrument tokens
+  private instrumentsByBroker: Map<string, Set<number>> = new Map();
+
   /**
    * Load triggers from database on startup
    */
@@ -29,6 +34,12 @@ export class TriggerManager {
       this.triggersByInstrument.set(trigger.instrument_token, new Set());
     }
     this.triggersByInstrument.get(trigger.instrument_token)!.add(trigger.id);
+
+    // Index by broker
+    if (!this.instrumentsByBroker.has(trigger.broker_connection_id)) {
+      this.instrumentsByBroker.set(trigger.broker_connection_id, new Set());
+    }
+    this.instrumentsByBroker.get(trigger.broker_connection_id)!.add(trigger.instrument_token);
 
     // Track OCO groups
     if (trigger.condition_type === 'two-leg' && trigger.parent_id) {
@@ -68,6 +79,16 @@ export class TriggerManager {
       }
     }
 
+    // Clean up broker instrument index if no more triggers for this token under this broker
+    const brokerTokens = this.instrumentsByBroker.get(trigger.broker_connection_id);
+    if (brokerTokens) {
+      const tokenSet = this.triggersByInstrument.get(trigger.instrument_token);
+      if (!tokenSet || tokenSet.size === 0) {
+        brokerTokens.delete(trigger.instrument_token);
+        if (brokerTokens.size === 0) this.instrumentsByBroker.delete(trigger.broker_connection_id);
+      }
+    }
+
     // Remove from main storage
     this.triggers.delete(triggerId);
     this.processing.delete(triggerId);
@@ -77,14 +98,24 @@ export class TriggerManager {
    * Get all triggers for a specific instrument (O(1) lookup)
    */
   getTriggersForInstrument(instrumentToken: number): HMTTrigger[] {
-    const triggerIds = this.triggersByInstrument.get(instrumentToken);
-    if (!triggerIds || triggerIds.size === 0) {
-      return [];
+    const ids = this.triggersByInstrument.get(instrumentToken);
+    if (!ids || ids.size === 0) return EMPTY;
+
+    if (ids.size === 1) {
+      const t = this.triggers.get(ids.values().next().value);
+      return (t && t.status === 'active') ? [t] : EMPTY;
     }
 
-    return Array.from(triggerIds)
-      .map(id => this.triggers.get(id))
-      .filter((t): t is HMTTrigger => t !== undefined && t.status === 'active');
+    const result: HMTTrigger[] = [];
+    for (const id of ids) {
+      const t = this.triggers.get(id);
+      if (t && t.status === 'active') result.push(t);
+    }
+    return result;
+  }
+
+  getInstrumentsForBroker(brokerId: string): number[] {
+    return Array.from(this.instrumentsByBroker.get(brokerId) || []);
   }
 
   /**
@@ -147,5 +178,6 @@ export class TriggerManager {
     this.triggersByInstrument.clear();
     this.ocoGroups.clear();
     this.processing.clear();
+    this.instrumentsByBroker.clear();
   }
 }
