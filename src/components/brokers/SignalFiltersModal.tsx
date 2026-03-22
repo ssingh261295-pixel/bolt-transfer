@@ -37,22 +37,16 @@ function detectVixConflicts(regimes: any[]): string[] {
 
 const DEFAULT_REGIME_BUY_OVERRIDES = {
   allow_buy: true,
-  condition_sets_override: [],
-  adx: { enabled: false, min_value: 0, max_value: 100 },
-  volume_ratio: { enabled: false, min_value: 0.0, max_value: 10.0 },
-  di_spread: { enabled: false, min_value: 0, max_value: 100 },
-  dist_ema21_atr: { enabled: false, min_value: -10.0, max_value: 10.0 },
-  rocket_rule: { enabled: false, volume_ratio_threshold: 0.70, lot_multiplier: 2, target_multiplier: 3.0 }
+  schedule: {} as Record<string, { start_time: string; end_time: string }>,
+  engines: [] as string[],
+  day_engine_overrides: {} as Record<string, string[]>
 };
 
 const DEFAULT_REGIME_SELL_OVERRIDES = {
   allow_sell: true,
-  condition_sets_override: [],
-  adx: { enabled: false, min_value: 0, max_value: 100 },
-  volume_ratio: { enabled: false, min_value: 0.0, max_value: 10.0 },
-  di_spread: { enabled: false, min_value: 0, max_value: 100 },
-  dist_ema21_atr: { enabled: false, min_value: -10.0, max_value: 10.0 },
-  rocket_rule: { enabled: false, volume_ratio_threshold: 0.70, lot_multiplier: 2, target_multiplier: 3.0 }
+  schedule: {} as Record<string, { start_time: string; end_time: string }>,
+  engines: [] as string[],
+  day_engine_overrides: {} as Record<string, string[]>
 };
 
 const DEFAULT_REGIMES = [
@@ -61,50 +55,54 @@ const DEFAULT_REGIMES = [
     enabled: false,
     vix_min: null,
     vix_max: 18,
-    allowed_days: [1, 2, 3, 4],
-    time_start: '10:10',
-    time_end: '14:20',
-    allowed_buy_engines: ['Option A', 'Option B', 'Option C'],
-    allowed_sell_engines: ['Option D', 'Option E', 'Option F', 'Option G'],
-    wednesday_only_buy_engines: ['Option A', 'Option C'],
-    wednesday_only_sell_engines: ['Option E'],
-    rocket_rule_enabled: true,
-    buy_overrides: { ...DEFAULT_REGIME_BUY_OVERRIDES, allow_buy: true },
-    sell_overrides: { ...DEFAULT_REGIME_SELL_OVERRIDES, allow_sell: true }
+    buy_overrides: {
+      allow_buy: true,
+      schedule: { '1': { start_time: '10:10', end_time: '14:20' }, '2': { start_time: '10:10', end_time: '14:20' }, '3': { start_time: '10:10', end_time: '14:20' }, '4': { start_time: '10:10', end_time: '14:20' } },
+      engines: ['Option A', 'Option B', 'Option C'],
+      day_engine_overrides: { '3': ['Option A', 'Option C'] }
+    },
+    sell_overrides: {
+      allow_sell: true,
+      schedule: { '1': { start_time: '10:10', end_time: '14:20' }, '2': { start_time: '10:10', end_time: '14:20' }, '3': { start_time: '10:10', end_time: '14:20' }, '4': { start_time: '10:10', end_time: '14:20' } },
+      engines: ['Option D', 'Option E', 'Option F', 'Option G'],
+      day_engine_overrides: { '3': ['Option E'] }
+    }
   },
   {
     name: 'Regime 2 — Mid VIX (18–20)',
     enabled: false,
     vix_min: 18.01,
     vix_max: 20,
-    allowed_days: [3, 4],
-    time_start: '11:15',
-    time_end: '13:20',
-    allowed_buy_engines: [],
-    allowed_sell_engines: ['Option D'],
-    wednesday_only_buy_engines: null,
-    wednesday_only_sell_engines: null,
-    rocket_rule_enabled: false,
-    sell_adx_override: { 'Option D': { max: 40 } },
-    buy_overrides: { ...DEFAULT_REGIME_BUY_OVERRIDES, allow_buy: false },
-    sell_overrides: { ...DEFAULT_REGIME_SELL_OVERRIDES, allow_sell: true }
+    buy_overrides: {
+      allow_buy: false,
+      schedule: {},
+      engines: [],
+      day_engine_overrides: {}
+    },
+    sell_overrides: {
+      allow_sell: true,
+      schedule: { '3': { start_time: '11:15', end_time: '13:20' }, '4': { start_time: '11:15', end_time: '13:20' } },
+      engines: ['Option D'],
+      day_engine_overrides: {}
+    }
   },
   {
     name: 'Regime 3 — High VIX (>20)',
     enabled: false,
     vix_min: 20.01,
     vix_max: null,
-    allowed_days: [3, 4],
-    time_start: '11:15',
-    time_end: '13:20',
-    allowed_buy_engines: [],
-    allowed_sell_engines: ['Option D'],
-    wednesday_only_buy_engines: null,
-    wednesday_only_sell_engines: null,
-    rocket_rule_enabled: false,
-    sell_adx_override: { 'Option D': { max: 25 } },
-    buy_overrides: { ...DEFAULT_REGIME_BUY_OVERRIDES, allow_buy: false },
-    sell_overrides: { ...DEFAULT_REGIME_SELL_OVERRIDES, allow_sell: true }
+    buy_overrides: {
+      allow_buy: false,
+      schedule: {},
+      engines: [],
+      day_engine_overrides: {}
+    },
+    sell_overrides: {
+      allow_sell: true,
+      schedule: { '3': { start_time: '11:15', end_time: '13:20' }, '4': { start_time: '11:15', end_time: '13:20' } },
+      engines: ['Option D'],
+      day_engine_overrides: {}
+    }
   }
 ];
 
@@ -190,10 +188,47 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
       buyFilters.condition_sets = migrateConditionSets(buyFilters.condition_sets, buyFilters.rocket_rule);
       sellFilters.condition_sets = migrateConditionSets(sellFilters.condition_sets, sellFilters.rocket_rule);
 
+      const migrateOverrides = (r: any, direction: 'buy' | 'sell') => {
+        const overrideKey = `${direction}_overrides`;
+        const existing = r[overrideKey] || {};
+        const allowKey = direction === 'buy' ? 'allow_buy' : 'allow_sell';
+        const enginesOldKey = direction === 'buy' ? 'allowed_buy_engines' : 'allowed_sell_engines';
+        const wedOldKey = direction === 'buy' ? 'wednesday_only_buy_engines' : 'wednesday_only_sell_engines';
+
+        let schedule: Record<string, { start_time: string; end_time: string }> = existing.schedule || {};
+        if (Object.keys(schedule).length === 0 && r.allowed_days && r.allowed_days.length > 0) {
+          const ts = r.time_start || '09:15';
+          const te = r.time_end || '15:15';
+          for (const d of r.allowed_days) {
+            schedule[String(d)] = { start_time: ts, end_time: te };
+          }
+        }
+
+        let engines: string[] = existing.engines || [];
+        if (engines.length === 0 && r[enginesOldKey]) {
+          engines = r[enginesOldKey];
+        }
+
+        let dayEngineOverrides: Record<string, string[]> = existing.day_engine_overrides || {};
+        if (Object.keys(dayEngineOverrides).length === 0 && r[wedOldKey] != null) {
+          dayEngineOverrides = { '3': r[wedOldKey] };
+        }
+
+        return {
+          [allowKey]: existing[allowKey] !== undefined ? existing[allowKey] : true,
+          schedule,
+          engines,
+          day_engine_overrides: dayEngineOverrides
+        };
+      };
+
       const regimes = (brokerFilters.regimes || DEFAULT_REGIMES).map((r: any) => ({
-        ...r,
-        buy_overrides: r.buy_overrides || { ...DEFAULT_REGIME_BUY_OVERRIDES, allow_buy: true },
-        sell_overrides: r.sell_overrides || { ...DEFAULT_REGIME_SELL_OVERRIDES, allow_sell: true }
+        name: r.name,
+        enabled: r.enabled,
+        vix_min: r.vix_min,
+        vix_max: r.vix_max,
+        buy_overrides: migrateOverrides(r, 'buy'),
+        sell_overrides: migrateOverrides(r, 'sell')
       }));
 
       setFilters({
@@ -306,16 +341,8 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
       enabled: false,
       vix_min: null,
       vix_max: null,
-      allowed_days: [1, 2, 3, 4, 5],
-      time_start: '09:15',
-      time_end: '15:15',
-      allowed_buy_engines: [],
-      allowed_sell_engines: [],
-      wednesday_only_buy_engines: null,
-      wednesday_only_sell_engines: null,
-      rocket_rule_enabled: false,
-      buy_overrides: { ...DEFAULT_REGIME_BUY_OVERRIDES, allow_buy: true },
-      sell_overrides: { ...DEFAULT_REGIME_SELL_OVERRIDES, allow_sell: true }
+      buy_overrides: { allow_buy: true, schedule: {}, engines: [], day_engine_overrides: {} },
+      sell_overrides: { allow_sell: true, schedule: {}, engines: [], day_engine_overrides: {} }
     });
     setFilters({ ...filters, regimes });
     setExpandedRegimes({ ...expandedRegimes, [regimes.length - 1]: true });
@@ -327,88 +354,11 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     setFilters({ ...filters, regimes });
   };
 
-  const toggleEngineInList = (index: number, field: string, engineName: string) => {
-    const regime = filters.regimes[index];
-    const list: string[] = [...(regime[field] || [])];
-    const idx = list.indexOf(engineName);
-    if (idx >= 0) list.splice(idx, 1);
-    else list.push(engineName);
-    updateRegime(index, field, list);
-  };
-
   const getBuyEngineNames = () => (filters.buy_filters?.condition_sets || []).map((cs: any) => cs.name).filter(Boolean);
   const getSellEngineNames = () => (filters.sell_filters?.condition_sets || []).map((cs: any) => cs.name).filter(Boolean);
 
   const toggleRegimeSection = (key: string) => {
     setExpandedRegimeSections(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const renderEngineToggleList = (regimeIndex: number, field: string, engineNames: string[], color: 'green' | 'red') => {
-    const regime = filters.regimes[regimeIndex];
-    const active: string[] = regime[field] || [];
-    if (engineNames.length === 0) {
-      return <p className="text-xs text-gray-400 italic">No engines defined yet. Add condition sets in the {color === 'green' ? 'BUY' : 'SELL'} Filters tab first.</p>;
-    }
-    return (
-      <div className="flex flex-wrap gap-2">
-        {engineNames.map((name) => {
-          const isOn = active.includes(name);
-          return (
-            <button
-              key={name}
-              type="button"
-              onClick={() => toggleEngineInList(regimeIndex, field, name)}
-              className={`px-3 py-1 text-xs font-semibold rounded-full border transition ${
-                isOn
-                  ? color === 'green'
-                    ? 'bg-green-600 text-white border-green-600'
-                    : 'bg-red-600 text-white border-red-600'
-                  : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
-              }`}
-            >
-              {name}
-            </button>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const renderRegimeAdxOverride = (regimeIndex: number, engineName: string) => {
-    const regime = filters.regimes[regimeIndex];
-    const overrides = regime.sell_adx_override || {};
-    const override = overrides[engineName] || {};
-    const updateOverride = (key: string, val: any) => {
-      const newOverrides = { ...overrides, [engineName]: { ...override, [key]: val } };
-      updateRegime(regimeIndex, 'sell_adx_override', newOverrides);
-    };
-    return (
-      <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
-        <p className="text-xs font-semibold text-orange-800 mb-2">ADX Override for {engineName}</p>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">ADX Min Override</label>
-            <input
-              type="number" step="0.1"
-              placeholder="(use engine default)"
-              value={override.min ?? ''}
-              onChange={(e) => updateOverride('min', e.target.value === '' ? undefined : parseFloat(e.target.value))}
-              className="w-full px-2 py-1 text-xs border border-orange-300 rounded focus:ring-1 focus:ring-orange-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">ADX Max Override</label>
-            <input
-              type="number" step="0.1"
-              placeholder="(use engine default)"
-              value={override.max ?? ''}
-              onChange={(e) => updateOverride('max', e.target.value === '' ? undefined : parseFloat(e.target.value))}
-              className="w-full px-2 py-1 text-xs border border-orange-300 rounded focus:ring-1 focus:ring-orange-500"
-            />
-          </div>
-        </div>
-      </div>
-    );
   };
 
   const renderRegimeDirectionOverrides = (regimeIndex: number, direction: 'buy' | 'sell') => {
@@ -422,10 +372,51 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
     const color = direction === 'buy' ? 'green' : 'red';
     const Icon = direction === 'buy' ? TrendingUp : TrendingDown;
     const engineNames = direction === 'buy' ? getBuyEngineNames() : getSellEngineNames();
-    const engineField = direction === 'buy' ? 'allowed_buy_engines' : 'allowed_sell_engines';
-    const wedEngineField = direction === 'buy' ? 'wednesday_only_buy_engines' : 'wednesday_only_sell_engines';
     const sectionKey = `${regimeIndex}_${direction}`;
     const isExpanded = expandedRegimeSections[sectionKey] ?? false;
+
+    const schedule: Record<string, { start_time: string; end_time: string }> = overrides.schedule || {};
+    const engines: string[] = overrides.engines || [];
+    const dayEngineOverrides: Record<string, string[]> = overrides.day_engine_overrides || {};
+
+    const toggleScheduleDay = (dayKey: string) => {
+      const newSchedule = { ...schedule };
+      if (newSchedule[dayKey]) {
+        delete newSchedule[dayKey];
+      } else {
+        newSchedule[dayKey] = { start_time: '09:15', end_time: '15:15' };
+      }
+      updateOverride(regimeIndex, 'schedule', newSchedule);
+    };
+
+    const updateScheduleTime = (dayKey: string, field: 'start_time' | 'end_time', value: string) => {
+      updateOverride(regimeIndex, 'schedule', {
+        ...schedule,
+        [dayKey]: { ...(schedule[dayKey] || { start_time: '09:15', end_time: '15:15' }), [field]: value }
+      });
+    };
+
+    const toggleEngine = (name: string) => {
+      const newEngines = engines.includes(name) ? engines.filter(e => e !== name) : [...engines, name];
+      updateOverride(regimeIndex, 'engines', newEngines);
+    };
+
+    const toggleDayOverrideEngine = (dayKey: string, name: string) => {
+      const current: string[] = dayEngineOverrides[dayKey] || [];
+      const updated = current.includes(name) ? current.filter(e => e !== name) : [...current, name];
+      updateOverride(regimeIndex, 'day_engine_overrides', { ...dayEngineOverrides, [dayKey]: updated });
+    };
+
+    const toggleDayOverrideEnabled = (dayKey: string, enabled: boolean) => {
+      const newOverrides = { ...dayEngineOverrides };
+      if (enabled) { newOverrides[dayKey] = []; } else { delete newOverrides[dayKey]; }
+      updateOverride(regimeIndex, 'day_engine_overrides', newOverrides);
+    };
+
+    const scheduledDays = Object.keys(schedule).map(Number).sort();
+    const scheduleSummary = scheduledDays.length > 0
+      ? scheduledDays.map(d => DAY_LABELS[d]).filter(Boolean).join(', ')
+      : 'No days';
 
     return (
       <div className={`border-2 rounded-xl overflow-hidden ${isAllowed ? `border-${color}-300` : 'border-gray-200'}`}>
@@ -436,6 +427,9 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
           <Icon className={`w-4 h-4 ${isAllowed ? `text-${color}-600` : 'text-gray-400'}`} />
           <span className={`font-semibold text-sm flex-1 ${isAllowed ? `text-${color}-900` : 'text-gray-500'}`}>
             {direction.toUpperCase()} Signals
+            {isAllowed && scheduledDays.length > 0 && (
+              <span className="ml-2 text-xs font-normal text-gray-500">{scheduleSummary}</span>
+            )}
           </span>
           <label className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
             <span className="text-xs text-gray-600">Allow {direction.toUpperCase()}</span>
@@ -455,207 +449,130 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
 
         {isExpanded && isAllowed && (
           <div className="p-4 space-y-4 border-t border-gray-100 bg-white">
+
             <div className={`border border-${color}-200 rounded-lg p-3`}>
-              <h5 className={`text-sm font-semibold text-${color}-800 mb-2`}>Allowed Engines (all days)</h5>
-              {renderEngineToggleList(regimeIndex, engineField, engineNames, color)}
-              {direction === 'sell' && (regime[engineField] || []).map((engineName: string) => (
-                <div key={engineName} className="mt-2">
-                  {renderRegimeAdxOverride(regimeIndex, engineName)}
+              <h5 className={`text-sm font-semibold text-${color}-800 mb-3`}>Schedule (Days + Time Windows)</h5>
+              <p className="text-xs text-gray-500 mb-3">Only days in the schedule will allow {direction.toUpperCase()} signals. Each day can have its own time window.</p>
+              <div className="flex gap-2 flex-wrap mb-3">
+                {[1, 2, 3, 4, 5].map((day) => {
+                  const dk = String(day);
+                  const isOn = !!schedule[dk];
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => toggleScheduleDay(dk)}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${
+                        isOn ? `bg-${color}-600 text-white border-${color}-600` : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      {DAY_LABELS[day]}
+                    </button>
+                  );
+                })}
+              </div>
+              {Object.keys(schedule).length === 0 && (
+                <p className="text-xs text-amber-600 italic">No days selected — {direction.toUpperCase()} will be blocked every day.</p>
+              )}
+              {Object.keys(schedule).sort().map((dk) => (
+                <div key={dk} className="grid grid-cols-3 gap-2 items-center mb-2">
+                  <span className="text-xs font-semibold text-gray-700">{DAY_LABELS[parseInt(dk)] || `Day ${dk}`}</span>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">Start</label>
+                    <input
+                      type="time"
+                      value={schedule[dk].start_time}
+                      onChange={(e) => updateScheduleTime(dk, 'start_time', e.target.value)}
+                      className={`w-full px-2 py-1 text-xs border border-${color}-300 rounded focus:ring-1 focus:ring-${color}-500`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-0.5">End</label>
+                    <input
+                      type="time"
+                      value={schedule[dk].end_time}
+                      onChange={(e) => updateScheduleTime(dk, 'end_time', e.target.value)}
+                      className={`w-full px-2 py-1 text-xs border border-${color}-300 rounded focus:ring-1 focus:ring-${color}-500`}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
 
-            <div className={`border border-${color}-100 bg-${color}-50 rounded-lg p-3`}>
-              <div className="flex items-center justify-between mb-2">
-                <h5 className={`text-sm font-semibold text-${color}-800`}>Wednesday Override</h5>
-                <label className={`flex items-center gap-1.5 text-xs text-${color}-700`}>
-                  <input
-                    type="checkbox"
-                    checked={regime[wedEngineField] !== null && regime[wedEngineField] !== undefined}
-                    onChange={(e) => updateRegime(regimeIndex, wedEngineField, e.target.checked ? [] : null)}
-                    className="w-3.5 h-3.5"
-                  />
-                  Enable Wed override
-                </label>
-              </div>
-              {regime[wedEngineField] !== null && regime[wedEngineField] !== undefined
-                ? renderEngineToggleList(regimeIndex, wedEngineField, engineNames, color)
-                : <p className="text-xs text-gray-400 italic">Not set — uses all-days list on Wednesdays.</p>
+            <div className={`border border-${color}-200 rounded-lg p-3`}>
+              <h5 className={`text-sm font-semibold text-${color}-800 mb-2`}>Default Engines (all scheduled days)</h5>
+              {engineNames.length === 0
+                ? <p className="text-xs text-gray-400 italic">No engines defined. Add condition sets in the {direction.toUpperCase()} Filters tab first.</p>
+                : (
+                  <div className="flex flex-wrap gap-2">
+                    {engineNames.map((name: string) => {
+                      const isOn = engines.includes(name);
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => toggleEngine(name)}
+                          className={`px-3 py-1 text-xs font-semibold rounded-full border transition ${
+                            isOn
+                              ? direction === 'buy' ? 'bg-green-600 text-white border-green-600' : 'bg-red-600 text-white border-red-600'
+                              : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
               }
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className={`border border-${color}-200 rounded-lg p-3`}>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-semibold text-gray-700">ADX Range Override</label>
-                  <input
-                    type="checkbox"
-                    checked={overrides.adx?.enabled ?? false}
-                    onChange={(e) => updateOverride(regimeIndex, 'adx', { ...overrides.adx, enabled: e.target.checked })}
-                    className="w-3.5 h-3.5"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Min</label>
-                    <input type="number" step="0.1"
-                      value={overrides.adx?.min_value ?? 0}
-                      onChange={(e) => updateOverride(regimeIndex, 'adx', { ...overrides.adx, min_value: parseFloat(e.target.value) })}
-                      disabled={!overrides.adx?.enabled}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
-                    />
+            <div className={`border border-${color}-100 bg-${color}-50 rounded-lg p-3`}>
+              <h5 className={`text-sm font-semibold text-${color}-800 mb-2`}>Per-Day Engine Overrides</h5>
+              <p className="text-xs text-gray-500 mb-3">Override which engines fire on specific days (replaces the default list above for that day).</p>
+              {[1, 2, 3, 4, 5].map((day) => {
+                const dk = String(day);
+                const hasOverride = dk in dayEngineOverrides;
+                const overrideEngines: string[] = dayEngineOverrides[dk] || [];
+                return (
+                  <div key={dk} className="mb-3">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={hasOverride}
+                          onChange={(e) => toggleDayOverrideEnabled(dk, e.target.checked)}
+                          className="w-3.5 h-3.5"
+                        />
+                        <span className="font-semibold">{DAY_LABELS[day]}</span>
+                      </label>
+                      {!hasOverride && <span className="text-xs text-gray-400 italic">uses default</span>}
+                    </div>
+                    {hasOverride && engineNames.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pl-5">
+                        {engineNames.map((name: string) => {
+                          const isOn = overrideEngines.includes(name);
+                          return (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => toggleDayOverrideEngine(dk, name)}
+                              className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border transition ${
+                                isOn
+                                  ? direction === 'buy' ? 'bg-green-600 text-white border-green-600' : 'bg-red-600 text-white border-red-600'
+                                  : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+                              }`}
+                            >
+                              {name}
+                            </button>
+                          );
+                        })}
+                        {engineNames.length === 0 && <p className="text-xs text-gray-400 italic">No engines defined yet.</p>}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Max</label>
-                    <input type="number" step="0.1"
-                      value={overrides.adx?.max_value ?? 100}
-                      onChange={(e) => updateOverride(regimeIndex, 'adx', { ...overrides.adx, max_value: parseFloat(e.target.value) })}
-                      disabled={!overrides.adx?.enabled}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className={`border border-${color}-200 rounded-lg p-3`}>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-semibold text-gray-700">Volume Ratio Override</label>
-                  <input
-                    type="checkbox"
-                    checked={overrides.volume_ratio?.enabled ?? false}
-                    onChange={(e) => updateOverride(regimeIndex, 'volume_ratio', { ...overrides.volume_ratio, enabled: e.target.checked })}
-                    className="w-3.5 h-3.5"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Min</label>
-                    <input type="number" step="0.01"
-                      value={overrides.volume_ratio?.min_value ?? 0}
-                      onChange={(e) => updateOverride(regimeIndex, 'volume_ratio', { ...overrides.volume_ratio, min_value: parseFloat(e.target.value) })}
-                      disabled={!overrides.volume_ratio?.enabled}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Max</label>
-                    <input type="number" step="0.01"
-                      value={overrides.volume_ratio?.max_value ?? 10}
-                      onChange={(e) => updateOverride(regimeIndex, 'volume_ratio', { ...overrides.volume_ratio, max_value: parseFloat(e.target.value) })}
-                      disabled={!overrides.volume_ratio?.enabled}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className={`border border-${color}-200 rounded-lg p-3`}>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-semibold text-gray-700">DI Spread Override</label>
-                  <input
-                    type="checkbox"
-                    checked={overrides.di_spread?.enabled ?? false}
-                    onChange={(e) => updateOverride(regimeIndex, 'di_spread', { ...overrides.di_spread, enabled: e.target.checked })}
-                    className="w-3.5 h-3.5"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Min</label>
-                    <input type="number" step="0.1"
-                      value={overrides.di_spread?.min_value ?? 0}
-                      onChange={(e) => updateOverride(regimeIndex, 'di_spread', { ...overrides.di_spread, min_value: parseFloat(e.target.value) })}
-                      disabled={!overrides.di_spread?.enabled}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Max</label>
-                    <input type="number" step="0.1"
-                      value={overrides.di_spread?.max_value ?? 100}
-                      onChange={(e) => updateOverride(regimeIndex, 'di_spread', { ...overrides.di_spread, max_value: parseFloat(e.target.value) })}
-                      disabled={!overrides.di_spread?.enabled}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className={`border border-${color}-200 rounded-lg p-3`}>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-semibold text-gray-700">EMA Dist Override</label>
-                  <input
-                    type="checkbox"
-                    checked={overrides.dist_ema21_atr?.enabled ?? false}
-                    onChange={(e) => updateOverride(regimeIndex, 'dist_ema21_atr', { ...overrides.dist_ema21_atr, enabled: e.target.checked })}
-                    className="w-3.5 h-3.5"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Min</label>
-                    <input type="number" step="0.1"
-                      value={overrides.dist_ema21_atr?.min_value ?? -10}
-                      onChange={(e) => updateOverride(regimeIndex, 'dist_ema21_atr', { ...overrides.dist_ema21_atr, min_value: parseFloat(e.target.value) })}
-                      disabled={!overrides.dist_ema21_atr?.enabled}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-0.5">Max</label>
-                    <input type="number" step="0.1"
-                      value={overrides.dist_ema21_atr?.max_value ?? 10}
-                      onChange={(e) => updateOverride(regimeIndex, 'dist_ema21_atr', { ...overrides.dist_ema21_atr, max_value: parseFloat(e.target.value) })}
-                      disabled={!overrides.dist_ema21_atr?.enabled}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-50"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className={`border border-amber-200 bg-amber-50 rounded-lg p-3`}>
-              <div className="flex items-center gap-2 mb-2">
-                <Zap className="w-4 h-4 text-amber-600" />
-                <span className="text-sm font-semibold text-amber-900">Rocket Rule</span>
-                <label className="flex items-center gap-1.5 ml-auto">
-                  <span className="text-xs text-amber-700">Enabled</span>
-                  <input
-                    type="checkbox"
-                    checked={overrides.rocket_rule?.enabled ?? false}
-                    onChange={(e) => updateOverride(regimeIndex, 'rocket_rule', { ...overrides.rocket_rule, enabled: e.target.checked })}
-                    className="w-4 h-4 text-amber-600 rounded"
-                  />
-                </label>
-              </div>
-              {overrides.rocket_rule?.enabled && (
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">VR Threshold</label>
-                    <input type="number" step="0.01"
-                      value={overrides.rocket_rule?.volume_ratio_threshold ?? 0.70}
-                      onChange={(e) => updateOverride(regimeIndex, 'rocket_rule', { ...overrides.rocket_rule, volume_ratio_threshold: parseFloat(e.target.value) })}
-                      className="w-full px-2 py-1 text-xs border border-amber-300 rounded"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Lot Multiplier</label>
-                    <input type="number" step="1" min="1"
-                      value={overrides.rocket_rule?.lot_multiplier ?? 2}
-                      onChange={(e) => updateOverride(regimeIndex, 'rocket_rule', { ...overrides.rocket_rule, lot_multiplier: parseInt(e.target.value) })}
-                      className="w-full px-2 py-1 text-xs border border-amber-300 rounded"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Target Multiplier</label>
-                    <input type="number" step="0.1" min="0.1"
-                      value={overrides.rocket_rule?.target_multiplier ?? 3.0}
-                      onChange={(e) => updateOverride(regimeIndex, 'rocket_rule', { ...overrides.rocket_rule, target_multiplier: parseFloat(e.target.value) })}
-                      className="w-full px-2 py-1 text-xs border border-amber-300 rounded"
-                    />
-                  </div>
-                </div>
-              )}
+                );
+              })}
             </div>
           </div>
         )}
@@ -745,18 +662,19 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                       VIX: {regime.vix_min ?? '—'} to {regime.vix_max ?? '—'}
                     </span>
                     <span className="text-gray-300">|</span>
-                    <span className="text-xs text-gray-500">
-                      {(regime.allowed_days || []).map((d: number) => DAY_LABELS[d]).join(', ')}
-                    </span>
+                    {buyEnabled && (
+                      <span className="text-xs text-green-700 font-medium">
+                        BUY: {Object.keys(regime.buy_overrides?.schedule || {}).map(d => DAY_LABELS[parseInt(d)]).filter(Boolean).join(', ') || 'no days'}
+                      </span>
+                    )}
+                    {!buyEnabled && <span className="text-xs text-gray-400">BUY: OFF</span>}
                     <span className="text-gray-300">|</span>
-                    <span className="text-xs text-gray-500">{regime.time_start}–{regime.time_end}</span>
-                    <span className="text-gray-300">|</span>
-                    <span className={`text-xs font-medium ${buyEnabled ? 'text-green-700' : 'text-gray-400'}`}>
-                      BUY: {buyEnabled ? 'ON' : 'OFF'}
-                    </span>
-                    <span className={`text-xs font-medium ${sellEnabled ? 'text-red-700' : 'text-gray-400'}`}>
-                      SELL: {sellEnabled ? 'ON' : 'OFF'}
-                    </span>
+                    {sellEnabled && (
+                      <span className="text-xs text-red-700 font-medium">
+                        SELL: {Object.keys(regime.sell_overrides?.schedule || {}).map(d => DAY_LABELS[parseInt(d)]).filter(Boolean).join(', ') || 'no days'}
+                      </span>
+                    )}
+                    {!sellEnabled && <span className="text-xs text-gray-400">SELL: OFF</span>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -793,54 +711,6 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                         type="number" step="0.01" placeholder="No upper bound"
                         value={regime.vix_max ?? ''}
                         onChange={(e) => updateRegime(idx, 'vix_max', e.target.value === '' ? null : parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Allowed Days</label>
-                    <div className="flex gap-2 flex-wrap">
-                      {[1, 2, 3, 4, 5].map((day) => {
-                        const isActive = (regime.allowed_days || []).includes(day);
-                        return (
-                          <button
-                            key={day}
-                            type="button"
-                            onClick={() => {
-                              const days = [...(regime.allowed_days || [])];
-                              const di = days.indexOf(day);
-                              if (di >= 0) days.splice(di, 1); else days.push(day);
-                              days.sort();
-                              updateRegime(idx, 'allowed_days', days);
-                            }}
-                            className={`px-3 py-1.5 text-sm font-semibold rounded-lg border transition ${
-                              isActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-300 hover:border-blue-400'
-                            }`}
-                          >
-                            {DAY_LABELS[day]}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Time Start (IST)</label>
-                      <input
-                        type="time"
-                        value={regime.time_start || '09:15'}
-                        onChange={(e) => updateRegime(idx, 'time_start', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Time End (IST)</label>
-                      <input
-                        type="time"
-                        value={regime.time_end || '15:15'}
-                        onChange={(e) => updateRegime(idx, 'time_end', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>

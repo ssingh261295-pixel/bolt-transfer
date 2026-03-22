@@ -172,31 +172,30 @@ function evaluateConditionSet(conditionSet: any, payload: any, adxOverride?: { m
 /**
  * STEP 2 + 3: Evaluate regimes.
  *
- * FINAL RULE: If any regime is enabled, a trade is ONLY allowed if at least one regime matches
- * the current signal (VIX, day, time) AND at least one engine inside that regime passes.
- * If NO regime matches → reject. There is NO fallback to standard direction filters when regimes are active.
+ * FINAL RULE: ALL trades must match a regime. If no regimes are configured/enabled → reject.
+ * Per-direction schedule: each direction's overrides carries a schedule map (day→time window).
+ * Per-day engine overrides: day_engine_overrides[dayNumber] overrides the default engines list.
+ *
+ * Backward compat: old format fields (allowed_days, time_start, time_end, allowed_buy_engines,
+ * wednesday_only_buy_engines, sell_adx_override) are converted on-the-fly.
  */
 function evaluateRegimes(filters: any, payload: any, tradeType: string): {
   matched: boolean;
   regime?: any;
   regimeName?: string;
   allowedEngineNames?: string[];
-  rocketRuleEnabled?: boolean;
-  adxOverrides?: Record<string, { min?: number; max?: number }>;
-  directionOverrides?: any;
   blockedReason?: string;
-  noRegimeActive?: boolean;
 } {
   const regimes: any[] = filters.regimes || [];
   const enabledRegimes = regimes.filter((r: any) => r.enabled);
 
-  // No regimes configured/enabled → no regime layer, fall through to direction filters
-  if (enabledRegimes.length === 0) return { matched: false, noRegimeActive: true };
+  if (enabledRegimes.length === 0) {
+    return { matched: true, blockedReason: 'No regimes configured. All trades must match a regime.' };
+  }
 
   const vix: number | undefined = payload.vix !== undefined ? parseFloat(payload.vix) : undefined;
   const ist = getISTTime();
 
-  // Regimes are enabled but VIX is unavailable → block trade (cannot determine regime)
   if (vix === undefined) {
     return {
       matched: true,
@@ -204,112 +203,96 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
     };
   }
 
-  let timeBlockedRegime: any = null;
+  const dayKey = String(ist.dayOfWeek);
+  const dayNames = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   let vixBlockedCount = 0;
-  let dayBlockedCount = 0;
+  let scheduleBlockedCount = 0;
 
   for (const regime of enabledRegimes) {
-    // VIX range check
     if (regime.vix_min !== null && regime.vix_min !== undefined && vix < regime.vix_min) { vixBlockedCount++; continue; }
     if (regime.vix_max !== null && regime.vix_max !== undefined && vix > regime.vix_max) { vixBlockedCount++; continue; }
 
-    // Day check
-    const allowedDays: number[] = regime.allowed_days || [];
-    if (allowedDays.length > 0 && !allowedDays.includes(ist.dayOfWeek)) {
-      dayBlockedCount++;
-      continue;
-    }
+    const dirOverrides = tradeType === 'BUY'
+      ? (regime.buy_overrides || {})
+      : (regime.sell_overrides || {});
 
-    // Time check
-    const [startHour, startMin] = (regime.time_start || '09:15').split(':').map(Number);
-    const [endHour, endMin] = (regime.time_end || '15:15').split(':').map(Number);
-    const regimeStart = startHour * 60 + startMin;
-    const regimeEnd = endHour * 60 + endMin;
-    if (ist.currentMinutes < regimeStart || ist.currentMinutes > regimeEnd) {
-      if (!timeBlockedRegime) timeBlockedRegime = { regime, regimeName: regime.name, time_start: regime.time_start, time_end: regime.time_end };
-      continue;
-    }
-
-    const buyOverrides = regime.buy_overrides || {};
-    const sellOverrides = regime.sell_overrides || {};
-
-    if (tradeType === 'BUY' && buyOverrides.allow_buy === false) {
+    const allowKey = tradeType === 'BUY' ? 'allow_buy' : 'allow_sell';
+    if (dirOverrides[allowKey] === false) {
       return {
         matched: true,
         regime,
         regimeName: regime.name,
-        blockedReason: `Regime "${regime.name}": BUY signals are disabled for this VIX regime (VIX ${vix.toFixed(2)})`
+        blockedReason: `Regime "${regime.name}": ${tradeType} signals are disabled for this VIX regime (VIX ${vix.toFixed(2)})`
       };
     }
 
-    if (tradeType === 'SELL' && sellOverrides.allow_sell === false) {
-      return {
-        matched: true,
-        regime,
-        regimeName: regime.name,
-        blockedReason: `Regime "${regime.name}": SELL signals are disabled for this VIX regime (VIX ${vix.toFixed(2)})`
-      };
+    // Build schedule — new format: schedule[dayKey] = { start_time, end_time }
+    // Backward compat: if old format (allowed_days + time_start + time_end), build schedule on-the-fly
+    let schedule: Record<string, { start_time: string; end_time: string }> = dirOverrides.schedule || {};
+    if (Object.keys(schedule).length === 0 && regime.allowed_days) {
+      const allowedDays: number[] = regime.allowed_days || [];
+      const ts = regime.time_start || '09:15';
+      const te = regime.time_end || '15:15';
+      for (const d of allowedDays) {
+        schedule[String(d)] = { start_time: ts, end_time: te };
+      }
     }
 
-    // Determine which engines are active for this day
-    // Wednesday override applies only to day 3 (Wednesday)
-    // Day override fields are named wednesday_only_* but the logic is:
-    // if today is Wednesday AND override is set → use override, else use all-days list
-    const isWednesday = ist.dayOfWeek === 3;
-    let allowedEngineNames: string[];
-    let adxOverrides: Record<string, { min?: number; max?: number }> = {};
+    // Check if today's day is in this direction's schedule
+    const todayWindow = schedule[dayKey];
+    if (!todayWindow) {
+      scheduleBlockedCount++;
+      continue;
+    }
 
-    if (tradeType === 'BUY') {
-      if (isWednesday && regime.wednesday_only_buy_engines !== null && regime.wednesday_only_buy_engines !== undefined) {
+    // Check time window for today
+    const [startHour, startMin] = (todayWindow.start_time || '09:15').split(':').map(Number);
+    const [endHour, endMin] = (todayWindow.end_time || '15:15').split(':').map(Number);
+    const windowStart = startHour * 60 + startMin;
+    const windowEnd = endHour * 60 + endMin;
+    if (ist.currentMinutes < windowStart || ist.currentMinutes > windowEnd) {
+      scheduleBlockedCount++;
+      continue;
+    }
+
+    // Build engine list — new format: engines + day_engine_overrides[dayKey]
+    // Backward compat: old format (allowed_buy/sell_engines, wednesday_only_*)
+    let engines: string[] = dirOverrides.engines || [];
+    if (engines.length === 0) {
+      if (tradeType === 'BUY') {
+        engines = dirOverrides.allowed_buy_engines || regime.allowed_buy_engines || [];
+      } else {
+        engines = dirOverrides.allowed_sell_engines || regime.allowed_sell_engines || [];
+      }
+    }
+
+    const dayEngineOverrides: Record<string, string[]> = dirOverrides.day_engine_overrides || {};
+    let allowedEngineNames: string[] = dayEngineOverrides[dayKey] ?? engines;
+
+    // Backward compat: wednesday_only_* fields
+    if (!dirOverrides.day_engine_overrides && ist.dayOfWeek === 3) {
+      if (tradeType === 'BUY' && regime.wednesday_only_buy_engines !== null && regime.wednesday_only_buy_engines !== undefined) {
         allowedEngineNames = regime.wednesday_only_buy_engines;
-      } else {
-        allowedEngineNames = buyOverrides.allowed_buy_engines || regime.allowed_buy_engines || [];
-      }
-    } else {
-      if (isWednesday && regime.wednesday_only_sell_engines !== null && regime.wednesday_only_sell_engines !== undefined) {
+      } else if (tradeType === 'SELL' && regime.wednesday_only_sell_engines !== null && regime.wednesday_only_sell_engines !== undefined) {
         allowedEngineNames = regime.wednesday_only_sell_engines;
-      } else {
-        allowedEngineNames = sellOverrides.allowed_sell_engines || regime.allowed_sell_engines || [];
-      }
-      if (regime.sell_adx_override) {
-        adxOverrides = regime.sell_adx_override;
       }
     }
-
-    const directionOverrides = tradeType === 'BUY' ? buyOverrides : sellOverrides;
-
-    const rocketRuleFromOverride = directionOverrides?.rocket_rule?.enabled === true ? directionOverrides.rocket_rule : null;
-    const rocketRuleEnabled = rocketRuleFromOverride !== null ? true : (regime.rocket_rule_enabled ?? false);
 
     return {
       matched: true,
       regime,
       regimeName: regime.name,
-      allowedEngineNames,
-      rocketRuleEnabled,
-      adxOverrides,
-      directionOverrides
+      allowedEngineNames
     };
   }
 
-  // All enabled regimes were skipped due to VIX/day/time mismatch
-  // Per spec: if no regime matches → do not take trade
-  if (timeBlockedRegime) {
-    return {
-      matched: true,
-      regime: timeBlockedRegime.regime,
-      regimeName: timeBlockedRegime.regimeName,
-      blockedReason: `Regime "${timeBlockedRegime.regimeName}" matched VIX/day but outside time window (${timeBlockedRegime.time_start}–${timeBlockedRegime.time_end} IST, current: ${ist.hours.toString().padStart(2,'0')}:${ist.minutes.toString().padStart(2,'0')} IST)`
-    };
-  }
-
-  const vixStr = vix !== undefined ? vix.toFixed(2) : 'unknown';
-  const dayNames = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const vixStr = vix.toFixed(2);
   const dayName = dayNames[ist.dayOfWeek] || `Day ${ist.dayOfWeek}`;
+  const currentTimeStr = `${ist.hours.toString().padStart(2,'0')}:${ist.minutes.toString().padStart(2,'0')}`;
 
   return {
     matched: true,
-    blockedReason: `No active regime matched current conditions (VIX=${vixStr}, Day=${dayName}, ${enabledRegimes.length} regime(s) checked — ${vixBlockedCount} VIX mismatch, ${dayBlockedCount} day mismatch). Trade rejected per final rule: a trade is only allowed if at least one regime matches.`
+    blockedReason: `No active regime matched current conditions (VIX=${vixStr}, Day=${dayName}, Time=${currentTimeStr} IST, ${enabledRegimes.length} regime(s) checked — ${vixBlockedCount} VIX mismatch, ${scheduleBlockedCount} schedule/time mismatch). Trade rejected: all trades must match a regime.`
   };
 }
 
@@ -318,29 +301,26 @@ function evaluateRegimes(filters: any, payload: any, tradeType: string): {
  *
  * ARCHITECTURE:
  * Layer 1: Global filters (trade_enabled, symbol, days, time)
- * Layer 2: Regime evaluation (VIX, day, time per regime)
- * Layer 3: Engine evaluation inside matched regime
+ * Layer 2: Regime matching (VIX, per-direction schedule, day engine overrides)
+ * Layer 3: Pre-engine standalone gates (trade_score, entry_phase, volume, price_range)
+ * Layer 4: Engine evaluation (OR logic — any one passing engine = signal passes)
+ * Layer 5: Rocket rule applied from matched engine
  *
- * FINAL RULE: If regimes are configured, ALL trades must match a regime.
- * Standard direction filters (trade_grade, etc.) are only used when NO regimes are configured.
+ * FINAL RULE: ALL trades must match a regime. No fallback path.
  */
 function evaluateSignalFilters(filters: any, payload: any, symbol: string, tradeType: string): {
   passed: boolean;
   reason?: string;
   regimeInfo?: string;
-  rocketRuleOverride?: boolean;
   matchedEngineName?: string;
 } {
   if (!filters) return { passed: true };
 
   // --- LAYER 1: GLOBAL CHECKS ---
-
-  // Master toggle
   if (filters.trade_enabled === false) {
     return { passed: false, reason: 'Trading is disabled (master toggle off)' };
   }
 
-  // Symbol whitelist/blacklist
   if (filters.symbols?.list && Array.isArray(filters.symbols.list) && filters.symbols.list.length > 0) {
     const mode = filters.symbols.mode || 'whitelist';
     const symbolInList = filters.symbols.list.includes(symbol);
@@ -348,13 +328,11 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     if (mode === 'blacklist' && symbolInList) return { passed: false, reason: `Symbol ${symbol} is blacklisted` };
   }
 
-  // Global trade type toggle
   if (filters.trade_types) {
     if (tradeType === 'BUY' && filters.trade_types.allow_buy === false) return { passed: false, reason: 'BUY trades not allowed' };
     if (tradeType === 'SELL' && filters.trade_types.allow_sell === false) return { passed: false, reason: 'SELL trades not allowed' };
   }
 
-  // Global days filter
   const ist = getISTTime();
   if (filters.days_filter?.enabled) {
     const allowedDays: number[] = filters.days_filter.allowed_days || [1, 2, 3, 4, 5];
@@ -364,7 +342,6 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     }
   }
 
-  // Global time window filter
   if (filters.time_filters?.enabled) {
     const now = new Date();
     const istOffset = 5.5 * 60 * 60 * 1000;
@@ -379,89 +356,25 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     }
   }
 
-  // --- LAYER 2 + 3: REGIME EVALUATION ---
+  // --- LAYER 2: REGIME MATCHING ---
   const regimeResult = evaluateRegimes(filters, payload, tradeType);
 
-  if (regimeResult.noRegimeActive) {
-    // No regimes configured — fall through to standard direction filters
-  } else {
-    // Regimes are active — ALL trades must pass through a regime
-    if (regimeResult.blockedReason) {
-      return { passed: false, reason: regimeResult.blockedReason };
-    }
-
-    const allowedEngineNames = regimeResult.allowedEngineNames || [];
-    const adxOverrides = regimeResult.adxOverrides || {};
-    const regimeName = regimeResult.regimeName || 'Unknown Regime';
-    const dirOverrides = regimeResult.directionOverrides || {};
-
-    const directionFilters = tradeType === 'BUY' ? (filters.buy_filters || {}) : (filters.sell_filters || {});
-    const allConditionSets: any[] = directionFilters.condition_sets || [];
-
-    const eligibleSets = allConditionSets.filter((cs: any) => allowedEngineNames.includes(cs.name));
-
-    if (eligibleSets.length === 0) {
-      return { passed: false, reason: `Regime "${regimeName}": No engines allowed for ${tradeType} on this day/VIX condition` };
-    }
-
-    // Regime-level direction overrides (applied before engine evaluation)
-    if (dirOverrides.adx?.enabled && payload.adx !== undefined) {
-      const minVal = dirOverrides.adx.min_value ?? 0;
-      const maxVal = dirOverrides.adx.max_value ?? 100;
-      if (payload.adx < minVal || payload.adx > maxVal) {
-        return { passed: false, reason: `Regime "${regimeName}": ${tradeType} ADX ${payload.adx} outside regime override range ${minVal}-${maxVal}` };
-      }
-    }
-
-    if (dirOverrides.volume_ratio?.enabled && payload.volume !== undefined && payload.vol_avg_5d !== undefined && payload.vol_avg_5d > 0) {
-      const vr = payload.volume / payload.vol_avg_5d;
-      const minVal = dirOverrides.volume_ratio.min_value ?? 0;
-      const maxVal = dirOverrides.volume_ratio.max_value ?? 10;
-      if (vr < minVal || vr > maxVal) {
-        return { passed: false, reason: `Regime "${regimeName}": ${tradeType} Volume ratio ${vr.toFixed(2)} outside regime override range ${minVal}-${maxVal}` };
-      }
-    }
-
-    if (dirOverrides.di_spread?.enabled && payload.di_plus !== undefined && payload.di_minus !== undefined) {
-      const diSpread = Math.abs(payload.di_plus - payload.di_minus);
-      const minVal = dirOverrides.di_spread.min_value ?? 0;
-      const maxVal = dirOverrides.di_spread.max_value ?? 100;
-      if (diSpread < minVal || diSpread > maxVal) {
-        return { passed: false, reason: `Regime "${regimeName}": ${tradeType} DI Spread ${diSpread.toFixed(2)} outside regime override range ${minVal}-${maxVal}` };
-      }
-    }
-
-    if (dirOverrides.dist_ema21_atr?.enabled && payload.dist_ema21_atr !== undefined) {
-      const emaD = Math.abs(payload.dist_ema21_atr);
-      const minVal = dirOverrides.dist_ema21_atr.min_value ?? -10;
-      const maxVal = dirOverrides.dist_ema21_atr.max_value ?? 10;
-      if (emaD < minVal || emaD > maxVal) {
-        return { passed: false, reason: `Regime "${regimeName}": ${tradeType} EMA distance ${emaD.toFixed(2)} outside regime override range ${minVal}-${maxVal}` };
-      }
-    }
-
-    // Engine evaluation: OR logic — signal passes if ANY eligible engine matches
-    let anyPassed = false;
-    let matchedEngineName: string | undefined;
-    const failedReasons: string[] = [];
-
-    for (const cs of eligibleSets) {
-      const adxOverride = adxOverrides[cs.name];
-      const result = evaluateConditionSet(cs, payload, adxOverride);
-      if (result.passed) { anyPassed = true; matchedEngineName = cs.name; break; }
-      failedReasons.push(`${cs.name}: ${result.reasons.join(', ')}`);
-    }
-
-    if (!anyPassed) {
-      return { passed: false, reason: `Regime "${regimeName}": ${tradeType} signal failed all allowed engines. ${failedReasons.join(' | ')}` };
-    }
-
-    return { passed: true, regimeInfo: regimeName, rocketRuleOverride: regimeResult.rocketRuleEnabled, matchedEngineName };
+  if (regimeResult.blockedReason) {
+    return { passed: false, reason: regimeResult.blockedReason };
   }
 
-  // --- STANDARD DIRECTION FILTERS (only when no regimes configured) ---
-  const directionFilters = tradeType === 'BUY' ? (filters.buy_filters || filters) : (filters.sell_filters || filters);
+  const allowedEngineNames = regimeResult.allowedEngineNames || [];
+  const regimeName = regimeResult.regimeName || 'Unknown Regime';
 
+  const directionFilters = tradeType === 'BUY' ? (filters.buy_filters || {}) : (filters.sell_filters || {});
+  const allConditionSets: any[] = directionFilters.condition_sets || [];
+  const eligibleSets = allConditionSets.filter((cs: any) => allowedEngineNames.includes(cs.name));
+
+  if (eligibleSets.length === 0) {
+    return { passed: false, reason: `Regime "${regimeName}": No engines configured for ${tradeType} on this day/schedule` };
+  }
+
+  // --- LAYER 3: STANDALONE PRE-ENGINE GATES ---
   if (directionFilters.trade_score?.enabled && payload.trade_score !== undefined) {
     const minScore = directionFilters.trade_score.min_score || 5.0;
     if (payload.trade_score < minScore) return { passed: false, reason: `${tradeType}: Trade score ${payload.trade_score} below minimum ${minScore}` };
@@ -483,23 +396,22 @@ function evaluateSignalFilters(filters: any, payload: any, symbol: string, trade
     if (payload.price < minPrice || payload.price > maxPrice) return { passed: false, reason: `${tradeType}: Price ${payload.price} outside range ${minPrice}-${maxPrice}` };
   }
 
-  const conditionSets = directionFilters.condition_sets || [];
-  const enabledConditionSets = conditionSets.filter((cs: any) => cs.enabled);
+  // --- LAYER 4: ENGINE EVALUATION (OR logic) ---
+  let anyPassed = false;
+  let matchedEngineName: string | undefined;
+  const failedReasons: string[] = [];
 
-  if (enabledConditionSets.length > 0) {
-    let anyConditionSetPassed = false;
-    const failedReasons: string[] = [];
-
-    for (const conditionSet of enabledConditionSets) {
-      const result = evaluateConditionSet(conditionSet, payload);
-      if (result.passed) { anyConditionSetPassed = true; break; }
-      failedReasons.push(`${conditionSet.name}: ${result.reasons.join(', ')}`);
-    }
-
-    if (!anyConditionSetPassed) return { passed: false, reason: `${tradeType}: Failed all condition sets. ${failedReasons.join(' | ')}` };
+  for (const cs of eligibleSets) {
+    const result = evaluateConditionSet(cs, payload);
+    if (result.passed) { anyPassed = true; matchedEngineName = cs.name; break; }
+    failedReasons.push(`${cs.name}: ${result.reasons.join(', ')}`);
   }
 
-  return { passed: true };
+  if (!anyPassed) {
+    return { passed: false, reason: `Regime "${regimeName}": ${tradeType} signal failed all allowed engines. ${failedReasons.join(' | ')}` };
+  }
+
+  return { passed: true, regimeInfo: regimeName, matchedEngineName };
 }
 
 async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) {
@@ -698,9 +610,6 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
       };
 
       try {
-        let regimeRocketRuleEnabled: boolean | undefined = undefined;
-        let regimeRocketRuleConfig: any = null;
-
         if (!account.signal_filters_enabled) {
           accountResult.filter_passed = false;
           accountResult.filter_reason = 'Signal filters are disabled for this account — trading via webhook is paused';
@@ -731,14 +640,6 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
           if (filterResult.regimeInfo) {
             accountResult.regime_matched = filterResult.regimeInfo;
             accountResult.matched_engine = filterResult.matchedEngineName;
-            const matchedRegime = (account.signal_filters?.regimes || []).find((r: any) => r.name === filterResult.regimeInfo);
-            if (matchedRegime) {
-              const dirOv = tradeType === 'BUY' ? matchedRegime.buy_overrides : matchedRegime.sell_overrides;
-              if (dirOv?.rocket_rule?.enabled) {
-                regimeRocketRuleEnabled = true;
-                regimeRocketRuleConfig = dirOv.rocket_rule;
-              }
-            }
           }
         }
 
@@ -783,27 +684,23 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
           trade_type: tradeType,
           matched_engine: matchedEngineName,
           engine_rocket_rule: engineRocketRule,
-          regime_rocket_rule_config: regimeRocketRuleConfig,
           volume: enrichedPayload.volume,
           vol_avg_5d: enrichedPayload.vol_avg_5d,
           vix: liveVIX,
           vix_source: vixSource
         });
 
-        const effectiveRocketRule = regimeRocketRuleConfig ?? engineRocketRule;
-        const rocketRuleActive = regimeRocketRuleEnabled !== undefined
-          ? regimeRocketRuleEnabled
-          : (engineRocketRule?.enabled ?? false);
+        const rocketRuleActive = engineRocketRule?.enabled ?? false;
 
-        if (rocketRuleActive && effectiveRocketRule && enrichedPayload.volume !== undefined && enrichedPayload.vol_avg_5d !== undefined && enrichedPayload.vol_avg_5d > 0) {
+        if (rocketRuleActive && engineRocketRule && enrichedPayload.volume !== undefined && enrichedPayload.vol_avg_5d !== undefined && enrichedPayload.vol_avg_5d > 0) {
           const volumeRatio = enrichedPayload.volume / enrichedPayload.vol_avg_5d;
-          const threshold = effectiveRocketRule.volume_ratio_threshold ?? 0.70;
-          console.log('[Webhook] Rocket rule volume check:', { volumeRatio, threshold, triggered: volumeRatio >= threshold, source: regimeRocketRuleConfig ? 'regime_override' : 'global' });
+          const threshold = engineRocketRule.volume_ratio_threshold ?? 0.70;
+          console.log('[Webhook] Rocket rule volume check:', { volumeRatio, threshold, triggered: volumeRatio >= threshold });
           if (volumeRatio >= threshold) {
             rocketRuleTriggered = true;
-            finalLotMultiplier = effectiveRocketRule.lot_multiplier ?? 2;
-            finalTargetMultiplier = effectiveRocketRule.target_multiplier ?? 3.0;
-            console.log('[Webhook] ROCKET RULE TRIGGERED:', { finalLotMultiplier, finalTargetMultiplier, volumeRatio, source: regimeRocketRuleConfig ? 'regime_override' : 'global' });
+            finalLotMultiplier = engineRocketRule.lot_multiplier ?? 2;
+            finalTargetMultiplier = engineRocketRule.target_multiplier ?? 3.0;
+            console.log('[Webhook] ROCKET RULE TRIGGERED:', { finalLotMultiplier, finalTargetMultiplier, volumeRatio });
           }
         }
 
