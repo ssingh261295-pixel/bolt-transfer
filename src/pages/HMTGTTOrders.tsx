@@ -14,6 +14,7 @@ export function HMTGTTOrders() {
   const { user, session } = useAuth();
   const [hmtGttOrders, setHmtGttOrders] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
+  const [expiredBrokerIds, setExpiredBrokerIds] = useState<Set<string>>(new Set());
   const [positions, setPositions] = useState<any[]>([]);
   const [selectedBrokerId, setSelectedBrokerId] = useState<string>('all');
   const [selectedInstruments, setSelectedInstruments] = useState<string[]>([]);
@@ -213,40 +214,48 @@ export function HMTGTTOrders() {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const brokerChannel = supabase
+      .channel('broker_token_refresh')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'broker_connections',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const updated = payload.new as any;
+        if (updated.token_expires_at && new Date(updated.token_expires_at) > new Date()) {
+          console.log('[HMT GTT] Broker token refreshed, reloading...');
+          loadBrokers();
+          loadHMTGTTOrders(true);
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(brokerChannel); };
+  }, [user?.id]);
+
   const loadBrokers = async () => {
     const { data } = await supabase
       .from('broker_connections')
       .select('id, account_name, account_holder_name, client_id, broker_name, is_active, token_expires_at, api_key, access_token')
       .eq('user_id', user?.id)
-      .eq('is_active', true)
       .eq('broker_name', 'zerodha');
 
     if (data && data.length > 0) {
-      // Filter out expired tokens
       const now = new Date();
-      const activeBrokers = data.filter(broker => {
-        if (!broker.token_expires_at) return true;
-        const expiryDate = new Date(broker.token_expires_at);
-        return expiryDate > now;
+      const expired = new Set<string>();
+
+      data.forEach(broker => {
+        if (broker.token_expires_at && new Date(broker.token_expires_at) <= now) {
+          expired.add(broker.id);
+        }
       });
 
-      // Mark expired brokers as inactive
-      const expiredBrokers = data.filter(broker => {
-        if (!broker.token_expires_at) return false;
-        const expiryDate = new Date(broker.token_expires_at);
-        return expiryDate <= now;
-      });
-
-      if (expiredBrokers.length > 0) {
-        expiredBrokers.forEach(async (broker) => {
-          await supabase
-            .from('broker_connections')
-            .update({ is_active: false })
-            .eq('id', broker.id);
-        });
-      }
-
-      setBrokers(activeBrokers);
+      setExpiredBrokerIds(expired);
+      setBrokers(data);
     }
   };
 
@@ -285,7 +294,7 @@ export function HMTGTTOrders() {
         .from('hmt_gtt_orders')
         .select(`
           *,
-          broker_connections!inner (
+          broker_connections (
             id,
             account_name,
             account_holder_name,
@@ -968,6 +977,7 @@ export function HMTGTTOrders() {
               {brokers.map((broker) => (
                 <option key={broker.id} value={broker.id}>
                   {(broker.account_holder_name || broker.account_name || 'Account')} ({broker.client_id || 'No ID'})
+                  {expiredBrokerIds.has(broker.id) ? ' ⚠ Token Expired' : ''}
                 </option>
               ))}
             </select>
@@ -1030,6 +1040,26 @@ export function HMTGTTOrders() {
       {converting && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-800 font-medium">Converting HMT GTT to regular GTT...</p>
+        </div>
+      )}
+
+      {expiredBrokerIds.size > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-red-800">
+              Token expired for {brokers.filter(b => expiredBrokerIds.has(b.id)).map(b => b.account_holder_name || b.account_name || b.client_id).join(', ')}
+            </p>
+            <p className="text-xs text-red-600 mt-1">
+              HMT GTT triggers for this account are not being monitored. Please reconnect your Zerodha account to resume.
+            </p>
+          </div>
+          <a
+            href="/brokers"
+            className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium whitespace-nowrap flex-shrink-0"
+          >
+            Reconnect
+          </a>
         </div>
       )}
 
@@ -1131,9 +1161,10 @@ export function HMTGTTOrders() {
               const currentPrice = ltp ?? 0;
               const pnl = position && currentPrice ? (currentPrice - position.average_price) * position.quantity : null;
               const showMobileMenu = openMobileMenu === gtt.id;
+              const isExpired = expiredBrokerIds.has(gtt.broker_connection_id);
 
               return (
-                <div key={gtt.id} className="p-4 space-y-3 transition-colors relative">
+                <div key={gtt.id} className={`p-4 space-y-3 transition-colors relative ${isExpired ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       <input
@@ -1157,11 +1188,18 @@ export function HMTGTTOrders() {
                         )}
                       </div>
                     </div>
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap flex-shrink-0 ml-2 ${
-                      gtt.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                    }`}>
-                      {gtt.status}
-                    </span>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0 ml-2">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${
+                        gtt.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {gtt.status}
+                      </span>
+                      {isExpired && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-700 whitespace-nowrap">
+                          ⚠ Token expired
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-sm min-h-[120px]">
@@ -1386,6 +1424,7 @@ export function HMTGTTOrders() {
                 <HMTGTTRow
                   key={gtt.id}
                   gtt={gtt}
+                  isExpired={expiredBrokerIds.has(gtt.broker_connection_id)}
                   isSelected={selectedOrders.has(gtt.id)}
                   onToggleSelect={toggleOrderSelection}
                   onEdit={handleEdit}

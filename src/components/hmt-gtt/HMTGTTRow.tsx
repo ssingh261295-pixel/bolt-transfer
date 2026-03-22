@@ -1,9 +1,10 @@
 import { memo, useState, useRef, useEffect } from 'react';
-import { Edit2, Trash2, TrendingUp, MoreVertical, ArrowRightLeft } from 'lucide-react';
+import { CreditCard as Edit2, Trash2, TrendingUp, MoreVertical, ArrowRightLeft } from 'lucide-react';
 import { formatIndianCurrency } from '../../lib/formatters';
 
 interface HMTGTTRowProps {
   gtt: any;
+  isExpired: boolean;
   isSelected: boolean;
   onToggleSelect: (id: string) => void;
   onEdit: (gtt: any) => void;
@@ -17,6 +18,7 @@ interface HMTGTTRowProps {
 
 const HMTGTTRowComponent = ({
   gtt,
+  isExpired,
   isSelected,
   onToggleSelect,
   onEdit,
@@ -98,7 +100,7 @@ const HMTGTTRowComponent = ({
   const showBreakeven = isStopLossAboveBreakeven();
 
   return (
-    <tr className="hover:bg-gray-50 transition-colors">
+    <tr className={`hover:bg-gray-50 transition-colors ${isExpired ? 'opacity-60' : ''}`}>
       <td className="px-4 py-3 text-center align-middle">
         <input
           type="checkbox"
@@ -201,15 +203,22 @@ const HMTGTTRowComponent = ({
         )}
       </td>
       <td className="px-4 py-3 align-middle">
-        <span className={`inline-flex px-2 py-1 rounded text-xs font-medium uppercase ${
-          gtt.status === 'active' ? 'bg-green-100 text-green-700' :
-          gtt.status === 'triggered' ? 'bg-blue-100 text-blue-700' :
-          gtt.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
-          gtt.status === 'failed' ? 'bg-red-100 text-red-700' :
-          'bg-yellow-100 text-yellow-700'
-        }`}>
-          {gtt.status}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className={`inline-flex px-2 py-1 rounded text-xs font-medium uppercase w-fit ${
+            gtt.status === 'active' ? 'bg-green-100 text-green-700' :
+            gtt.status === 'triggered' ? 'bg-blue-100 text-blue-700' :
+            gtt.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
+            gtt.status === 'failed' ? 'bg-red-100 text-red-700' :
+            'bg-yellow-100 text-yellow-700'
+          }`}>
+            {gtt.status}
+          </span>
+          {isExpired && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-700 w-fit">
+              ⚠ Token expired
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3 align-middle">
         <div className="relative" ref={menuRef}>
@@ -281,6 +290,7 @@ export const HMTGTTRow = memo(HMTGTTRowComponent, (prevProps, nextProps) => {
     prevProps.gtt.condition_type === nextProps.gtt.condition_type &&
     prevProps.gtt.transaction_type === nextProps.gtt.transaction_type &&
     prevProps.gtt.trading_symbol === nextProps.gtt.trading_symbol &&
+    prevProps.isExpired === nextProps.isExpired &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.ltp === nextProps.ltp &&
     prevProps.isConnected === nextProps.isConnected &&
