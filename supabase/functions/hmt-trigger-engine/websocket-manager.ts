@@ -31,6 +31,15 @@ export class WebSocketManager {
   }
 
   /**
+   * Update credentials (used when token refreshes after expiry)
+   */
+  updateCredentials(apiKey: string, accessToken: string): void {
+    this.apiKey = apiKey;
+    this.accessToken = accessToken;
+    console.log('[WebSocketManager] Credentials updated');
+  }
+
+  /**
    * Set the handler for incoming ticks
    */
   setTickHandler(handler: TickHandler): void {

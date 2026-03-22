@@ -14,9 +14,6 @@ export class TriggerManager {
   // Map: trigger_id -> trigger data
   private triggers: Map<string, HMTTrigger> = new Map();
 
-  // Map: parent_id -> [leg1_id, leg2_id] for OCO tracking
-  private ocoGroups: Map<string, string[]> = new Map();
-
   // Set of triggers currently being processed (prevent double execution)
   private processing: Set<string> = new Set();
 
@@ -40,14 +37,6 @@ export class TriggerManager {
       this.instrumentsByBroker.set(trigger.broker_connection_id, new Set());
     }
     this.instrumentsByBroker.get(trigger.broker_connection_id)!.add(trigger.instrument_token);
-
-    // Track OCO groups
-    if (trigger.condition_type === 'two-leg' && trigger.parent_id) {
-      if (!this.ocoGroups.has(trigger.parent_id)) {
-        this.ocoGroups.set(trigger.parent_id, []);
-      }
-      this.ocoGroups.get(trigger.parent_id)!.push(trigger.id);
-    }
   }
 
   /**
@@ -63,19 +52,6 @@ export class TriggerManager {
       tokenSet.delete(triggerId);
       if (tokenSet.size === 0) {
         this.triggersByInstrument.delete(trigger.instrument_token);
-      }
-    }
-
-    // Remove from OCO groups
-    if (trigger.parent_id) {
-      const group = this.ocoGroups.get(trigger.parent_id);
-      if (group) {
-        const filtered = group.filter(id => id !== triggerId);
-        if (filtered.length === 0) {
-          this.ocoGroups.delete(trigger.parent_id);
-        } else {
-          this.ocoGroups.set(trigger.parent_id, filtered);
-        }
       }
     }
 
@@ -144,19 +120,6 @@ export class TriggerManager {
   }
 
   /**
-   * Get OCO sibling trigger ID
-   */
-  getOCOSibling(triggerId: string): string | null {
-    const trigger = this.triggers.get(triggerId);
-    if (!trigger || !trigger.parent_id) return null;
-
-    const group = this.ocoGroups.get(trigger.parent_id);
-    if (!group || group.length !== 2) return null;
-
-    return group.find(id => id !== triggerId) || null;
-  }
-
-  /**
    * Get all unique instrument tokens being monitored
    */
   getSubscribedInstruments(): number[] {
@@ -176,7 +139,6 @@ export class TriggerManager {
   clear(): void {
     this.triggers.clear();
     this.triggersByInstrument.clear();
-    this.ocoGroups.clear();
     this.processing.clear();
     this.instrumentsByBroker.clear();
   }

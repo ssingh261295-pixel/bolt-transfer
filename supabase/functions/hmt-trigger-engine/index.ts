@@ -97,8 +97,21 @@ async function getCachedBroker(id: string): Promise<BrokerConnection | null> {
 
 // Risk limits cache
 const riskCache: Map<string, { limits: any; at: number }> = new Map();
+let lastResetDate: string = '';
 
 async function checkRiskCached(userId: string): Promise<boolean> {
+  const today = new Date().toISOString().split('T')[0];
+  if (lastResetDate !== today) {
+    try {
+      await getSupabase().rpc('reset_daily_risk_counters');
+      lastResetDate = today;
+      riskCache.clear();
+      console.log('[Engine] Daily risk counters reset for', today);
+    } catch (e: any) {
+      console.error('[Engine] Failed to reset daily counters:', e.message);
+    }
+  }
+
   const c = riskCache.get(userId);
   let lim: any;
   if (c && Date.now() - c.at < 60000) { lim = c.limits; }
@@ -318,6 +331,17 @@ function handleTick(tick: WebSocketTick): void {
   }
 }
 
+function cleanupOrphanedSubscriptions(trigger: HMTTrigger): void {
+  const remainingTriggers = triggerManager?.getTriggersForInstrument(trigger.instrument_token);
+  if (!remainingTriggers || remainingTriggers.length === 0) {
+    const ws = wsManagers.get(trigger.broker_connection_id);
+    if (ws && trigger.instrument_token !== INDIA_VIX_TOKEN) {
+      ws.unsubscribe([trigger.instrument_token]);
+      console.log(`[Engine] Unsubscribed from orphaned instrument ${trigger.instrument_token}`);
+    }
+  }
+}
+
 async function executeTriggerAsync(
   execution: any,
   trigger: HMTTrigger
@@ -339,15 +363,18 @@ async function executeTriggerAsync(
         logTrade(trigger, execution, result.order_id!)
       ]);
       triggerManager.removeTrigger(trigger.id);
+      cleanupOrphanedSubscriptions(trigger);
       stats.triggered_orders++;
     } else {
       markTriggerFailed(trigger.id, result.error || 'Unknown').catch(() => {});
       triggerManager.removeTrigger(trigger.id);
+      cleanupOrphanedSubscriptions(trigger);
       stats.failed_orders++;
     }
   } catch (err: any) {
     markTriggerFailed(trigger.id, err.message).catch(() => {});
     triggerManager?.removeTrigger(trigger.id);
+    if (triggerManager) cleanupOrphanedSubscriptions(trigger);
     stats.failed_orders++;
   } finally {
     triggerManager?.unmarkProcessing(trigger.id);
@@ -546,10 +573,13 @@ function handleTriggerInsert(trigger: HMTTrigger): void {
 function handleTriggerUpdate(trigger: HMTTrigger): void {
   if (!triggerManager) return;
 
+  const oldTrigger = triggerManager.getTrigger(trigger.id);
   triggerManager.removeTrigger(trigger.id);
 
   if (trigger.status === 'active') {
     triggerManager.addTrigger(trigger);
+  } else if (oldTrigger) {
+    cleanupOrphanedSubscriptions(oldTrigger);
   }
 
   stats.active_triggers = triggerManager.getActiveTriggerCount();
@@ -559,7 +589,9 @@ function handleTriggerDelete(triggerId: string): void {
   if (!triggerManager) return;
 
   console.log(`[Engine] Trigger deleted: ${triggerId}`);
+  const trigger = triggerManager.getTrigger(triggerId);
   triggerManager.removeTrigger(triggerId);
+  if (trigger) cleanupOrphanedSubscriptions(trigger);
   stats.active_triggers = triggerManager.getActiveTriggerCount();
 }
 
@@ -583,6 +615,19 @@ function startHealthCheckMonitor(): void {
     }
 
     console.log(`[Engine] Heartbeat | Uptime: ${stats.uptime_seconds}s | Ticks: ${stats.processed_ticks} | Orders: ${stats.triggered_orders} | Active: ${stats.active_triggers} | WS: ${stats.websocket_status}`);
+
+    // Token refresh check: detect stale WebSocket credentials
+    for (const [brokerId, ws] of wsManagers) {
+      if (!ws.isConnected()) {
+        brokerCacheRefreshed = 0;
+        getCachedBroker(brokerId).then(freshBroker => {
+          if (freshBroker && freshBroker.access_token) {
+            ws.updateCredentials(freshBroker.api_key, freshBroker.access_token);
+            console.log(`[Engine] Refreshed credentials for broker ${freshBroker.account_name || brokerId}, attempting reconnect`);
+          }
+        }).catch(() => {});
+      }
+    }
   }, getConfig().health_check_interval_ms);
 }
 

@@ -137,7 +137,6 @@ export class TriggerEvaluator {
 
     // Prioritize leg 1 (stop-loss) over leg 2 (target) if both trigger simultaneously
     if (leg1Triggered) {
-      console.log(`[Trigger Evaluator] Leg 1 (SL) triggered for ${trigger.id}: LTP=${ltp}, Trigger=${trigger.trigger_price_1}, Type=${trigger.transaction_type}`);
       return {
         trigger_id: trigger.id,
         trigger: trigger,
@@ -156,7 +155,6 @@ export class TriggerEvaluator {
     }
 
     if (leg2Triggered && trigger.quantity_2 && trigger.product_type_2) {
-      console.log(`[Trigger Evaluator] Leg 2 (Target) triggered for ${trigger.id}: LTP=${ltp}, Trigger=${trigger.trigger_price_2}, Type=${trigger.transaction_type}`);
       return {
         trigger_id: trigger.id,
         trigger: trigger,
