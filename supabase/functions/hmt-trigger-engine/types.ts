@@ -85,5 +85,5 @@ export interface EngineStats {
   failed_orders: number;
   uptime_seconds: number;
   websocket_status: 'connected' | 'disconnected' | 'connecting';
-  last_tick_time: Date | null;
+  last_tick_time: number | null;
 }

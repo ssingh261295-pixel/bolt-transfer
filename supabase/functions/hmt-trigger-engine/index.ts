@@ -81,6 +81,39 @@ function getSupabase() {
   return supabase;
 }
 
+// Broker credential cache
+const brokerCache: Map<string, BrokerConnection> = new Map();
+let brokerCacheRefreshed = 0;
+
+async function getCachedBroker(id: string): Promise<BrokerConnection | null> {
+  if (Date.now() - brokerCacheRefreshed > 300000) {
+    const { data } = await getSupabase().from('broker_connections')
+      .select('id, user_id, broker_name, api_key, access_token, is_active, account_name, token_expires_at')
+      .eq('is_active', true);
+    if (data) { brokerCache.clear(); data.forEach((b: any) => brokerCache.set(b.id, b)); brokerCacheRefreshed = Date.now(); }
+  }
+  return brokerCache.get(id) || null;
+}
+
+// Risk limits cache
+const riskCache: Map<string, { limits: any; at: number }> = new Map();
+
+async function checkRiskCached(userId: string): Promise<boolean> {
+  const c = riskCache.get(userId);
+  let lim: any;
+  if (c && Date.now() - c.at < 60000) { lim = c.limits; }
+  else {
+    const { data } = await getSupabase().from('risk_limits').select('*').eq('user_id', userId).single();
+    if (!data) return false;
+    lim = data;
+    riskCache.set(userId, { limits: data, at: Date.now() });
+  }
+  if (lim.kill_switch_enabled) return false;
+  if (lim.daily_trades_count >= lim.max_trades_per_day) return false;
+  if (lim.daily_pnl <= -Math.abs(lim.max_loss_per_day)) return false;
+  return true;
+}
+
 /**
  * Initialize the trigger engine
  */
@@ -239,7 +272,7 @@ function handleTick(tick: WebSocketTick): void {
   if (!triggerManager || !orderExecutor) return;
 
   stats.processed_ticks++;
-  stats.last_tick_time = tick.timestamp || new Date();
+  stats.last_tick_time = Date.now();
   stats.websocket_status = 'connected';
 
   // Update VIX cache from live WebSocket stream (throttled to once per 30s)
@@ -291,50 +324,30 @@ async function executeTriggerAsync(
   trigger: HMTTrigger
 ): Promise<void> {
   if (!triggerManager || !orderExecutor) return;
-
   try {
-    const { data: broker, error: brokerError } = await getSupabase()
-      .from('broker_connections')
-      .select('*')
-      .eq('id', trigger.broker_connection_id)
-      .single();
+    const broker = await getCachedBroker(trigger.broker_connection_id);
+    if (!broker) { markTriggerFailed(trigger.id, 'Broker not found').catch(() => {}); return; }
 
-    if (brokerError || !broker) {
-      console.error(`[Engine] Broker not found for trigger ${trigger.id}`);
-      await markTriggerFailed(trigger.id, 'Broker connection not found');
-      return;
-    }
-
-    const riskCheckPassed = await checkRiskLimits(trigger.user_id);
-    if (!riskCheckPassed) {
-      console.error(`[Engine] Risk limits exceeded for user ${trigger.user_id}`);
-      await markTriggerFailed(trigger.id, 'Risk limits exceeded (max trades, max loss, or kill switch)');
-      return;
+    if (!await checkRiskCached(trigger.user_id)) {
+      markTriggerFailed(trigger.id, 'Risk limits exceeded').catch(() => {}); return;
     }
 
     const result = await orderExecutor.execute(execution, broker);
 
     if (result.success) {
-      await markTriggerTriggered(
-        trigger.id,
-        execution.triggered_leg,
-        execution.ltp,
-        result.order_id!
-      );
-
-      await logTrade(trigger, execution, result.order_id!);
+      Promise.allSettled([
+        markTriggerTriggered(trigger.id, execution.triggered_leg, execution.ltp, result.order_id!),
+        logTrade(trigger, execution, result.order_id!)
+      ]);
       triggerManager.removeTrigger(trigger.id);
       stats.triggered_orders++;
-      console.log(`[Engine] Trigger ${trigger.id} executed: ${result.order_id}`);
     } else {
-      await markTriggerFailed(trigger.id, result.error || 'Unknown error');
+      markTriggerFailed(trigger.id, result.error || 'Unknown').catch(() => {});
       triggerManager.removeTrigger(trigger.id);
       stats.failed_orders++;
-      console.error(`[Engine] Trigger ${trigger.id} failed: ${result.error}`);
     }
-  } catch (error: any) {
-    console.error(`[Engine] Exception executing trigger ${trigger.id}:`, error);
-    await markTriggerFailed(trigger.id, error.message || 'Unknown error');
+  } catch (err: any) {
+    markTriggerFailed(trigger.id, err.message).catch(() => {});
     triggerManager?.removeTrigger(trigger.id);
     stats.failed_orders++;
   } finally {
@@ -385,60 +398,6 @@ async function cancelTrigger(triggerId: string, reason: string = 'Cancelled'): P
     .eq('status', 'active');
 }
 
-async function checkRiskLimits(userId: string): Promise<boolean> {
-  try {
-    const { data: limits, error } = await getSupabase()
-      .from('risk_limits')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
-    if (error || !limits) {
-      console.error(`[Engine] Risk limits not found for user ${userId}`);
-      return false;
-    }
-
-    if (limits.kill_switch_enabled) {
-      console.error(`[Engine] Kill switch enabled for user ${userId}`);
-      return false;
-    }
-
-    const today = new Date().toISOString().split('T')[0];
-    if (limits.last_reset_date !== today) {
-      await getSupabase().rpc('reset_daily_risk_counters');
-      const { data: refreshedLimits } = await getSupabase()
-        .from('risk_limits')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-      if (refreshedLimits) {
-        Object.assign(limits, refreshedLimits);
-      }
-    }
-
-    if (limits.daily_trades_count >= limits.max_trades_per_day) {
-      console.error(`[Engine] Max trades per day exceeded for user ${userId}`);
-      return false;
-    }
-
-    if (limits.daily_pnl <= -Math.abs(limits.max_loss_per_day)) {
-      console.error(`[Engine] Max loss per day exceeded for user ${userId}`);
-      return false;
-    }
-
-    const now = new Date();
-    const currentTime = now.toTimeString().split(' ')[0];
-    if (currentTime >= limits.auto_square_off_time) {
-      console.error(`[Engine] Auto square-off time reached for user ${userId}`);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('[Engine] Error checking risk limits:', error);
-    return false;
-  }
-}
 
 async function logTrade(
   trigger: HMTTrigger,
@@ -606,7 +565,7 @@ function startHealthCheckMonitor(): void {
     }
 
     if (stats.last_tick_time) {
-      const timeSinceLastTick = Date.now() - stats.last_tick_time.getTime();
+      const timeSinceLastTick = Date.now() - stats.last_tick_time;
       if (timeSinceLastTick > 60000 && stats.websocket_status === 'connected') {
         console.warn('[Engine] No ticks in 60s - connection may be stale');
       }

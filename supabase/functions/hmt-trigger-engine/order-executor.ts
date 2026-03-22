@@ -60,7 +60,7 @@ export class OrderExecutor {
             execution.ltp
           );
 
-          await createNotification(this.supabase, {
+          createNotification(this.supabase, {
             user_id: execution.trigger.user_id,
             broker_account_id: execution.trigger.broker_connection_id,
             source: 'hmt_engine',
@@ -74,7 +74,7 @@ export class OrderExecutor {
               trigger_id: execution.trigger_id,
               leg: execution.triggered_leg
             }
-          });
+          }).catch((e: any) => console.error('[OrderExecutor] Notification error:', e.message));
 
           return result;
         }
@@ -102,7 +102,7 @@ export class OrderExecutor {
       lastError
     );
 
-    await createNotification(this.supabase, {
+    createNotification(this.supabase, {
       user_id: execution.trigger.user_id,
       broker_account_id: execution.trigger.broker_connection_id,
       source: 'hmt_engine',
@@ -116,7 +116,7 @@ export class OrderExecutor {
         leg: execution.triggered_leg,
         error: lastError
       }
-    });
+    }).catch((e: any) => console.error('[OrderExecutor] Notification error:', e.message));
 
     return {
       success: false,
@@ -125,49 +125,44 @@ export class OrderExecutor {
   }
 
   /**
-   * Place order via zerodha-orders edge function
+   * Place order directly via Kite API (no proxy hop)
    */
   private async placeOrder(
     execution: TriggerExecution,
     broker: BrokerConnection
   ): Promise<OrderResult> {
-    const url = `${this.supabaseUrl}/functions/v1/zerodha-orders/place`;
-
-    const orderPayload = {
-      ...execution.order_data,
-      broker_connection_id: broker.id
-    };
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.supabaseKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(orderPayload),
+    const params = new URLSearchParams({
+      tradingsymbol: execution.order_data.symbol,
+      exchange: execution.order_data.exchange,
+      transaction_type: execution.order_data.transaction_type,
+      quantity: execution.order_data.quantity.toString(),
+      order_type: execution.order_data.order_type,
+      product: execution.order_data.product,
+      validity: execution.order_data.validity || 'DAY',
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return {
-        success: false,
-        error: `HTTP ${response.status}: ${errorText}`
-      };
-    }
+    const response = await fetch('https://api.kite.trade/orders/regular', {
+      method: 'POST',
+      headers: {
+        'Authorization': `token ${broker.api_key}:${broker.access_token}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Kite-Version': '3',
+      },
+      body: params,
+    });
 
     const result = await response.json();
-
-    if (result.success && result.order_id) {
-      return {
-        success: true,
-        order_id: result.order_id
-      };
+    if (result.status === 'success' && result.data?.order_id) {
+      this.supabase.from('orders').insert({
+        user_id: execution.trigger.user_id, broker_connection_id: broker.id,
+        symbol: execution.order_data.symbol, exchange: execution.order_data.exchange,
+        order_type: execution.order_data.order_type, transaction_type: execution.order_data.transaction_type,
+        quantity: execution.order_data.quantity, status: 'OPEN', order_id: result.data.order_id,
+        product: execution.order_data.product, order_timestamp: new Date().toISOString(),
+      }).then(() => {}).catch((e: any) => console.error('[OrderExecutor] DB log:', e.message));
+      return { success: true, order_id: result.data.order_id };
     }
-
-    return {
-      success: false,
-      error: result.error || result.message || 'Order placement failed'
-    };
+    return { success: false, error: result.message || 'Order failed' };
   }
 
   /**

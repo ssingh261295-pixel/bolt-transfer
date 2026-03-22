@@ -104,10 +104,9 @@ export class WebSocketManager {
       this.ws.send(JSON.stringify(message));
       console.log(`[WebSocketManager] Subscribed to ${tokens.length} instruments`);
 
-      // Set mode to full for detailed data
       const modeMessage = {
         a: 'mode',
-        v: ['full', tokens]
+        v: ['ltp', tokens]
       };
       this.ws.send(JSON.stringify(modeMessage));
     }
