@@ -32,6 +32,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
     { id: 'brokers', label: 'Brokers', path: '/brokers', icon: LinkIcon },
     { id: 'orders', label: 'Orders', path: '/orders', icon: ShoppingCart },
     { id: 'positions', label: 'Positions', path: '/positions', icon: LineChart },
+    { id: 'watchlist', label: 'Watchlist', path: '/watchlist', icon: Bell },
     { id: 'gtt', label: 'GTT Orders', path: '/gtt', icon: Target },
     { id: 'hmt-gtt', label: 'HMT GTT', path: '/hmt-gtt', icon: Target },
     { id: 'strategies', label: 'Strategies', path: '/strategies', icon: TrendingUp },

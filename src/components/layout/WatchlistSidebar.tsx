@@ -1,19 +1,8 @@
-import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Plus, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { TrendingUp, TrendingDown, Plus, X, ChevronUp, Search } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useZerodhaWebSocket } from '../../hooks/useZerodhaWebSocket';
-import AddToWatchlistModal from '../watchlist/AddToWatchlistModal';
-
-interface WatchlistItem {
-  id: string;
-  instrument_token: number;
-  tradingsymbol: string;
-  exchange: string;
-  last_price?: number;
-  change?: number;
-  change_percent?: number;
-}
 
 interface WatchlistSidebarProps {
   onBuyClick: (symbol: string, exchange: string, token: number) => void;
@@ -24,19 +13,33 @@ interface WatchlistSidebarProps {
 
 export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, onHMTGTTClick }: WatchlistSidebarProps) {
   const { user } = useAuth();
-  const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
+  const [watchlists, setWatchlists] = useState<any[]>([]);
+  const [selectedWatchlist, setSelectedWatchlist] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [brokerId, setBrokerId] = useState<string | null>(null);
+  const [vixCachePrice, setVixCachePrice] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newWatchlistName, setNewWatchlistName] = useState('');
 
   const { isConnected, connect, subscribe, unsubscribe, getTick } = useZerodhaWebSocket(brokerId || undefined);
-  const [vixCachePrice, setVixCachePrice] = useState<number | null>(null);
+
+  const watchlistItems = useMemo(() => {
+    if (!selectedWatchlist?.symbols) return [];
+    return selectedWatchlist.symbols.map((s: any) => ({
+      id: s.instrument_token?.toString() || s.symbol,
+      instrument_token: s.instrument_token,
+      tradingsymbol: s.symbol,
+      exchange: s.exchange,
+    }));
+  }, [selectedWatchlist]);
 
   useEffect(() => {
     if (user) {
-      loadWatchlist();
+      loadWatchlists();
       loadBrokerConnection();
     }
   }, [user]);
@@ -50,16 +53,16 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
   useEffect(() => {
     if (isConnected && watchlistItems.length > 0) {
       const indexTokens = watchlistItems
-        .map(item => item.instrument_token)
-        .filter(token => (token & 0xff) === 9);
+        .map((item: any) => item.instrument_token)
+        .filter((token: number) => (token & 0xff) === 9);
       const tradableTokens = watchlistItems
-        .map(item => item.instrument_token)
-        .filter(token => (token & 0xff) !== 9);
+        .map((item: any) => item.instrument_token)
+        .filter((token: number) => (token & 0xff) !== 9);
 
       if (tradableTokens.length > 0) subscribe(tradableTokens, 'full');
       if (indexTokens.length > 0) subscribe(indexTokens, 'quote');
 
-      const allTokens = watchlistItems.map(item => item.instrument_token);
+      const allTokens = watchlistItems.map((item: any) => item.instrument_token);
       return () => {
         unsubscribe(allTokens);
       };
@@ -67,7 +70,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
   }, [isConnected, watchlistItems, subscribe, unsubscribe]);
 
   useEffect(() => {
-    const hasVix = watchlistItems.some(item => item.instrument_token === 264969);
+    const hasVix = watchlistItems.some((item: any) => item.instrument_token === 264969);
     if (!hasVix) return;
 
     const fetchVix = async () => {
@@ -94,9 +97,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
         .select('vix_value')
         .eq('id', 1)
         .maybeSingle();
-      if (data?.vix_value) {
-        setVixCachePrice(parseFloat(data.vix_value));
-      }
+      if (data?.vix_value) setVixCachePrice(parseFloat(data.vix_value));
     };
 
     fetchVix();
@@ -114,73 +115,92 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
         .limit(1)
         .maybeSingle();
 
-      if (broker) {
-        setBrokerId(broker.id);
-      }
+      if (broker) setBrokerId(broker.id);
     } catch (error) {
       console.error('Error loading broker:', error);
     }
   };
 
-  const loadWatchlist = async () => {
+  const loadWatchlists = async () => {
     try {
-      const { data: watchlists } = await supabase
+      const { data } = await supabase
         .from('watchlists')
-        .select('id')
-        .eq('user_id', user?.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (!watchlists) {
-        const { data: newWatchlist } = await supabase
-          .from('watchlists')
-          .insert({ user_id: user?.id, name: 'Default' })
-          .select()
-          .single();
-
-        if (newWatchlist) {
-          setLoading(false);
-        }
-        return;
-      }
-
-      const { data: items } = await supabase
-        .from('watchlist_items')
         .select('*')
-        .eq('watchlist_id', watchlists.id)
-        .order('sort_order');
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: true });
 
-      if (items) {
-        setWatchlistItems(items);
+      if (data && data.length > 0) {
+        setWatchlists(data);
+        setSelectedWatchlist((prev: any) => {
+          if (!prev) return data[0];
+          const updated = data.find((w: any) => w.id === prev.id);
+          return updated || data[0];
+        });
+      } else {
+        setWatchlists([]);
       }
     } catch (error) {
-      console.error('Error loading watchlist:', error);
+      console.error('Error loading watchlists:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const removeFromWatchlist = async (itemId: string) => {
-    try {
-      await supabase
-        .from('watchlist_items')
-        .delete()
-        .eq('id', itemId);
+  const createWatchlist = async () => {
+    if (!newWatchlistName.trim() || watchlists.length >= 7) return;
+    await supabase.from('watchlists').insert({
+      user_id: user?.id,
+      name: newWatchlistName.trim(),
+      symbols: [],
+    });
+    setNewWatchlistName('');
+    setShowCreateForm(false);
+    await loadWatchlists();
+  };
 
-      setWatchlistItems(prev => prev.filter(item => item.id !== itemId));
-    } catch (error) {
-      console.error('Error removing item:', error);
-    }
+  const searchInstruments = async (query: string) => {
+    if (!query || query.length < 2) { setSearchResults([]); return; }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    try {
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NFO&search=${encodeURIComponent(query)}`,
+        { headers: { 'Authorization': `Bearer ${session.access_token}` } }
+      );
+      const result = await resp.json();
+      if (result.success) setSearchResults(result.instruments || []);
+    } catch (_) { /* ignore */ }
+  };
+
+  const addInstrument = async (inst: any) => {
+    if (!selectedWatchlist) return;
+    const current = selectedWatchlist.symbols || [];
+    if (current.some((s: any) => s.instrument_token === parseInt(inst.instrument_token))) return;
+    const newSym = {
+      symbol: inst.tradingsymbol,
+      exchange: inst.exchange,
+      instrument_token: parseInt(inst.instrument_token),
+      name: inst.name,
+      instrument_type: inst.instrument_type,
+      expiry: inst.expiry,
+      strike: inst.strike,
+      lot_size: inst.lot_size,
+    };
+    const updated = [newSym, ...current];
+    await supabase.from('watchlists').update({ symbols: updated }).eq('id', selectedWatchlist.id);
+    setSelectedWatchlist({ ...selectedWatchlist, symbols: updated });
+  };
+
+  const removeInstrument = async (token: number) => {
+    if (!selectedWatchlist) return;
+    const updated = (selectedWatchlist.symbols || []).filter((s: any) => s.instrument_token !== token);
+    await supabase.from('watchlists').update({ symbols: updated }).eq('id', selectedWatchlist.id);
+    setSelectedWatchlist({ ...selectedWatchlist, symbols: updated });
   };
 
   const getPriceColor = (change?: number) => {
     if (!change) return 'text-gray-600';
     return change > 0 ? 'text-green-600' : change < 0 ? 'text-red-600' : 'text-gray-600';
-  };
-
-  const getPriceBgColor = (change?: number) => {
-    if (!change) return 'bg-gray-50';
-    return change > 0 ? 'bg-green-50' : change < 0 ? 'bg-red-50' : 'bg-gray-50';
   };
 
   if (isCollapsed) {
@@ -198,28 +218,94 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
   }
 
   return (
-    <div className="hidden md:flex w-full md:w-80 lg:w-72 bg-white border-r border-gray-200 flex-col h-full">
+    <div className="hidden md:flex w-full md:w-72 bg-white border-r border-gray-200 flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-gray-900">Watchlist</h2>
+      <div className="p-3 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-sm text-gray-900">
+              {selectedWatchlist?.name || 'Watchlist'}{' '}
+              <span className="text-gray-400 font-normal">({watchlistItems.length})</span>
+            </h2>
+            {brokerId && (
+              <div className="flex items-center gap-1.5 text-[10px] mt-0.5">
+                <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                <span className="text-gray-500">{isConnected ? 'Live' : 'Connecting...'}</span>
+              </div>
+            )}
+          </div>
           <button
             onClick={() => setIsCollapsed(true)}
             className="p-1 hover:bg-gray-100 rounded"
             aria-label="Collapse watchlist"
           >
-            <ChevronDown className="w-4 h-4 rotate-90" />
+            <ChevronUp className="w-4 h-4 rotate-90" />
           </button>
         </div>
-        {brokerId && (
-          <div className="flex items-center gap-2 text-xs">
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-            <span className="text-gray-600">
-              {isConnected ? 'Live' : 'Connecting...'}
-            </span>
-          </div>
-        )}
       </div>
+
+      {/* Inline create form */}
+      {showCreateForm && (
+        <div className="px-3 py-2 border-b border-gray-200 flex items-center gap-2">
+          <input
+            type="text"
+            value={newWatchlistName}
+            onChange={(e) => setNewWatchlistName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') createWatchlist();
+              if (e.key === 'Escape') { setShowCreateForm(false); setNewWatchlistName(''); }
+            }}
+            className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none"
+            placeholder="Name"
+            autoFocus
+          />
+          <button onClick={createWatchlist} className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">OK</button>
+          <button onClick={() => { setShowCreateForm(false); setNewWatchlistName(''); }} className="text-gray-400 hover:text-gray-600">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Search */}
+      {selectedWatchlist && (
+        <div className="px-3 py-2 border-b border-gray-100">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); searchInstruments(e.target.value); }}
+              className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none bg-gray-50"
+              placeholder="Search F&O instruments..."
+            />
+          </div>
+          {searchResults.length > 0 && (
+            <div className="mt-1 max-h-40 overflow-y-auto border border-gray-200 rounded bg-white shadow-sm">
+              {searchResults.map((inst: any) => {
+                const alreadyAdded = (selectedWatchlist?.symbols || []).some(
+                  (s: any) => s.instrument_token === parseInt(inst.instrument_token)
+                );
+                return (
+                  <div
+                    key={inst.instrument_token}
+                    className={`flex items-center justify-between px-2.5 py-1.5 text-xs ${
+                      alreadyAdded ? 'bg-green-50' : 'hover:bg-gray-50 cursor-pointer'
+                    }`}
+                    onClick={() => !alreadyAdded && addInstrument(inst)}
+                  >
+                    <span className="font-medium text-gray-900 truncate">{inst.tradingsymbol}</span>
+                    {alreadyAdded ? (
+                      <span className="text-green-600 text-[10px] ml-1 flex-shrink-0">✓</span>
+                    ) : (
+                      <Plus className="w-3 h-3 text-blue-600 flex-shrink-0 ml-1" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Items List */}
       <div className="flex-1 overflow-y-auto">
@@ -227,12 +313,12 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
           <div className="p-4 text-center text-gray-500 text-sm">Loading...</div>
         ) : watchlistItems.length === 0 ? (
           <div className="p-4 text-center text-gray-500 text-sm">
-            <p>No items in watchlist</p>
-            <p className="mt-2 text-xs">Add instruments from the search</p>
+            <p>No items</p>
+            <p className="mt-1 text-xs">Search above to add instruments</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {watchlistItems.map((item) => {
+            {watchlistItems.map((item: any) => {
               const tick = getTick(item.instrument_token);
               const isVix = item.instrument_token === 264969;
               const lastPrice = tick?.last_price || (isVix ? vixCachePrice : null) || 0;
@@ -248,7 +334,6 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
                   onMouseLeave={() => setHoveredItem(null)}
                 >
                   {hoveredItem === item.id ? (
-                    // Hover state: Show action buttons in single row (Zerodha style)
                     <div className="flex items-center justify-between gap-2 h-[28px]">
                       <div className="font-medium text-[13px] text-gray-900 truncate flex-1 min-w-0">
                         {item.tradingsymbol}
@@ -269,7 +354,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
                         {onHMTGTTClick && (
                           <button
                             onClick={() => onHMTGTTClick(item.tradingsymbol, item.exchange, item.instrument_token)}
-                            className="px-2.5 py-1 bg-purple-600 text-white text-xs font-semibold rounded hover:bg-purple-700 transition-colors"
+                            className="px-2.5 py-1 bg-violet-600 text-white text-xs font-semibold rounded hover:bg-violet-700 transition-colors"
                             title="HMT GTT"
                           >
                             H
@@ -283,7 +368,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
                           G
                         </button>
                         <button
-                          onClick={() => removeFromWatchlist(item.id)}
+                          onClick={() => removeInstrument(item.instrument_token)}
                           className="p-1 hover:bg-gray-200 rounded transition-colors"
                         >
                           <X className="w-3.5 h-3.5 text-gray-600" />
@@ -291,7 +376,6 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
                       </div>
                     </div>
                   ) : (
-                    // Normal state: Show price info (Zerodha style)
                     <div className="flex items-center justify-between gap-1.5 h-[28px]">
                       <div className="flex-1 min-w-0 pr-1">
                         <div className="font-medium text-[13px] text-gray-900 truncate leading-tight">
@@ -324,25 +408,32 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
         )}
       </div>
 
-      {/* Footer - Add Symbol */}
-      <div className="p-4 border-t border-gray-200">
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Instruments
-        </button>
+      {/* Bottom numbered tabs */}
+      <div className="flex items-center border-t border-gray-200">
+        {watchlists.map((wl, i) => (
+          <button
+            key={wl.id}
+            onClick={() => setSelectedWatchlist(wl)}
+            className={`flex-1 py-2.5 text-xs font-medium transition ${
+              selectedWatchlist?.id === wl.id
+                ? 'text-blue-600 border-b-2 border-blue-500'
+                : 'text-gray-400 hover:text-gray-700'
+            }`}
+            title={wl.name}
+          >
+            {i + 1}
+          </button>
+        ))}
+        {watchlists.length < 7 && (
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="px-3 py-2.5 text-gray-400 hover:text-blue-600 text-sm transition"
+            title="New watchlist"
+          >
+            +
+          </button>
+        )}
       </div>
-
-      <AddToWatchlistModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onAdded={() => {
-          loadWatchlist();
-          setShowAddModal(false);
-        }}
-      />
     </div>
   );
 }

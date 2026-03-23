@@ -21,6 +21,7 @@ export default function TopNavigation({ onMobileMenuToggle }: TopNavigationProps
     { label: 'Brokers', path: '/brokers' },
     { label: 'Orders', path: '/orders' },
     { label: 'Positions', path: '/positions' },
+    { label: 'Watchlist', path: '/watchlist' },
     { label: 'GTT', path: '/gtt' },
     { label: 'HMT GTT', path: '/hmt-gtt' },
     { label: 'Strategies', path: '/strategies' },
