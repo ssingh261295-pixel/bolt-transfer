@@ -121,51 +121,36 @@ export function ExitPositionModal({ isOpen, onClose, positions, onSuccess }: Exi
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      let successCount = 0;
 
-      for (const position of positions) {
-        try {
+      const exitResults = await Promise.allSettled(
+        positions.map(async (position) => {
           const exitTransactionType = position.quantity > 0 ? 'SELL' : 'BUY';
           const exitQuantity = Math.abs(position.quantity);
-
           const response = await fetch(
             `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-orders/place`,
             {
               method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${session?.access_token}`,
-                'Content-Type': 'application/json',
-              },
+              headers: { 'Authorization': `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 broker_connection_id: position.broker_connection_id,
-                symbol: position.symbol,
-                exchange: position.exchange,
-                transaction_type: exitTransactionType,
-                quantity: exitQuantity,
-                order_type: 'MARKET',
-                product: position.product_type || 'NRML',
-                validity: 'DAY',
+                symbol: position.symbol, exchange: position.exchange,
+                transaction_type: exitTransactionType, quantity: exitQuantity,
+                order_type: 'MARKET', product: position.product_type || 'NRML', validity: 'DAY',
               }),
             }
           );
-
           const result = await response.json();
-
           if (result.success) {
-            await supabase
-              .from('positions')
-              .update({ quantity: 0 })
-              .eq('id', position.id);
-            successCount++;
-          } else {
-            console.error(`Failed to exit ${position.symbol}:`, result.error);
-            setError(`Failed to exit ${position.symbol}: ${result.error || 'Unknown error'}`);
+            await supabase.from('positions').update({ quantity: 0 }).eq('id', position.id);
+            return { success: true, symbol: position.symbol };
           }
-        } catch (posErr: any) {
-          console.error(`Error exiting ${position.symbol}:`, posErr);
-          setError(`Error exiting ${position.symbol}: ${posErr.message}`);
-        }
-      }
+          throw new Error(result.error || `Failed to exit ${position.symbol}`);
+        })
+      );
+
+      const successCount = exitResults.filter(r => r.status === 'fulfilled').length;
+      const failures = exitResults.filter(r => r.status === 'rejected').map(r => (r as PromiseRejectedResult).reason.message);
+      if (failures.length > 0) setError(failures.join('; '));
 
       if (deleteOrders && associatedOrders.length > 0) {
         try {

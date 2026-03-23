@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
-import { LineChart, ArrowUpDown, Activity, MoreVertical, RefreshCw } from 'lucide-react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import { LineChart, ArrowUpDown, Activity, MoreVertical, RefreshCw, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useZerodhaWebSocket } from '../hooks/useZerodhaWebSocket';
@@ -13,16 +13,12 @@ type SortDirection = 'asc' | 'desc';
 
 export function Positions() {
   const { user, session } = useAuth();
-  const [positions, setPositions] = useState<any[]>([]);
   const [allPositions, setAllPositions] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
+  const [expiredBrokerIds, setExpiredBrokerIds] = useState<Set<string>>(new Set());
   const [selectedBroker, setSelectedBroker] = useState<string>('all');
   const [selectedSymbol, setSelectedSymbol] = useState<string>('all');
   const [syncMessage, setSyncMessage] = useState('');
-  const [summary, setSummary] = useState({
-    totalPnL: 0,
-    totalInvested: 0,
-  });
   const [gttModalOpen, setGttModalOpen] = useState(false);
   const [hmtGttModalOpen, setHmtGttModalOpen] = useState(false);
   const [exitModalOpen, setExitModalOpen] = useState(false);
@@ -31,7 +27,6 @@ export function Positions() {
   const [sortField, setSortField] = useState<SortField>('pnl');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedPositions, setSelectedPositions] = useState<Set<string>>(new Set());
-  const [isExiting, setIsExiting] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [frozenPositionsForExit, setFrozenPositionsForExit] = useState<any[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -39,7 +34,12 @@ export function Positions() {
   const [menuOpenUpward, setMenuOpenUpward] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBroker !== 'all' ? selectedBroker : brokers[0]?.id);
+  const firstValidBrokerId = useMemo(() => {
+    if (selectedBroker !== 'all') return selectedBroker;
+    return brokers[0]?.id;
+  }, [selectedBroker, brokers]);
+
+  const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(firstValidBrokerId);
 
   useEffect(() => {
     if (user) {
@@ -60,33 +60,74 @@ export function Positions() {
         setOpenMenuId(null);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
-    filterPositions();
-  }, [selectedBroker, selectedSymbol, allPositions, sortField, sortDirection]);
-
-  useEffect(() => {
-    const brokerId = selectedBroker !== 'all' ? selectedBroker : brokers[0]?.id;
-    if (brokerId) {
-      connect();
-    }
+    if (firstValidBrokerId) { connect(); }
     return () => disconnect();
-  }, [selectedBroker, brokers, connect, disconnect]);
+  }, [firstValidBrokerId, connect, disconnect]);
 
   useEffect(() => {
-    if (isConnected && positions.length > 0) {
-      const tokens = positions
-        .map(p => p.instrument_token)
-        .filter(Boolean);
+    if (isConnected && sortedPositions.length > 0) {
+      const tokens = sortedPositions.map(p => p.instrument_token).filter(Boolean);
       if (tokens.length > 0) {
         subscribe(tokens, 'full');
       }
     }
-  }, [isConnected, positions, subscribe]);
+  }, [isConnected, sortedPositions, subscribe]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const posChannel = supabase
+      .channel('positions_live')
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'positions', filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const newPos = payload.new as any;
+        if (expiredBrokerIds.has(newPos.broker_connection_id)) return;
+        setAllPositions(prev => {
+          if (prev.find(p => p.id === newPos.id)) return prev;
+          return [...prev, newPos];
+        });
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'positions', filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const updated = payload.new as any;
+        setAllPositions(prev => {
+          if (updated.quantity === 0) return prev.filter(p => p.id !== updated.id);
+          return prev.map(p => p.id === updated.id ? { ...p, ...updated } : p);
+        });
+      })
+      .on('postgres_changes', {
+        event: 'DELETE', schema: 'public', table: 'positions', filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        setAllPositions(prev => prev.filter(p => p.id !== payload.old.id));
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(posChannel); };
+  }, [user?.id, expiredBrokerIds]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const brokerCh = supabase
+      .channel('broker_refresh_positions')
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'broker_connections', filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const updated = payload.new as any;
+        if (updated.token_expires_at && new Date(updated.token_expires_at) > new Date()) {
+          loadBrokers();
+          loadPositions();
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(brokerCh); };
+  }, [user?.id]);
 
   const loadPositions = async () => {
     const { data } = await supabase
@@ -102,7 +143,6 @@ export function Positions() {
         )
       `)
       .eq('user_id', user?.id)
-      .eq('broker_connections.is_active', true)
       .neq('quantity', 0)
       .order('created_at', { ascending: false });
 
@@ -111,45 +151,67 @@ export function Positions() {
     }
   };
 
-  const sortPositions = (data: any[]) => {
-    return [...data].sort((a, b) => {
+  const loadBrokers = useCallback(async () => {
+    const { data } = await supabase
+      .from('broker_connections')
+      .select('id, account_name, account_holder_name, client_id, broker_name, is_active, token_expires_at, api_key, access_token')
+      .eq('user_id', user?.id)
+      .eq('broker_name', 'zerodha');
+
+    if (data && data.length > 0) {
+      const now = new Date();
+      const expired = new Set<string>();
+      data.forEach(broker => {
+        if (broker.token_expires_at && new Date(broker.token_expires_at) <= now) {
+          expired.add(broker.id);
+        }
+      });
+      setExpiredBrokerIds(expired);
+      const activeBrokers = data.filter(b => !expired.has(b.id));
+      setBrokers(activeBrokers);
+    }
+  }, [user?.id]);
+
+  const filteredPositions = useMemo(() => {
+    let filtered = allPositions.filter(pos => !expiredBrokerIds.has(pos.broker_connection_id));
+    if (selectedBroker !== 'all') {
+      filtered = filtered.filter(pos => pos.broker_connection_id === selectedBroker);
+    }
+    if (selectedSymbol !== 'all') {
+      filtered = filtered.filter(pos => pos.symbol === selectedSymbol);
+    }
+    return filtered;
+  }, [allPositions, expiredBrokerIds, selectedBroker, selectedSymbol]);
+
+  const sortedPositions = useMemo(() => {
+    return [...filteredPositions].sort((a, b) => {
       let aVal, bVal;
-
       switch (sortField) {
-        case 'symbol':
-          aVal = a.symbol || '';
-          bVal = b.symbol || '';
-          break;
-        case 'quantity':
-          aVal = a.quantity || 0;
-          bVal = b.quantity || 0;
-          break;
-        case 'average_price':
-          aVal = a.average_price || 0;
-          bVal = b.average_price || 0;
-          break;
-        case 'current_price':
-          aVal = a.current_price || 0;
-          bVal = b.current_price || 0;
-          break;
-        case 'pnl':
-          aVal = a.pnl || 0;
-          bVal = b.pnl || 0;
-          break;
-        case 'pnl_percentage':
-        default:
-          aVal = a.pnl_percentage || 0;
-          bVal = b.pnl_percentage || 0;
-          break;
+        case 'symbol': aVal = a.symbol || ''; bVal = b.symbol || ''; break;
+        case 'quantity': aVal = a.quantity || 0; bVal = b.quantity || 0; break;
+        case 'average_price': aVal = a.average_price || 0; bVal = b.average_price || 0; break;
+        case 'current_price': aVal = a.current_price || 0; bVal = b.current_price || 0; break;
+        case 'pnl': aVal = a.pnl || 0; bVal = b.pnl || 0; break;
+        case 'pnl_percentage': default: aVal = a.pnl_percentage || 0; bVal = b.pnl_percentage || 0; break;
       }
-
-      if (sortDirection === 'asc') {
-        return aVal > bVal ? 1 : -1;
-      } else {
-        return aVal < bVal ? 1 : -1;
-      }
+      return sortDirection === 'asc' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
     });
-  };
+  }, [filteredPositions, sortField, sortDirection]);
+
+  const summary = useMemo(() => {
+    let totalPnL = 0;
+    let totalInvested = 0;
+    for (const pos of filteredPositions) {
+      const ltp = pos.instrument_token ? getLTP(pos.instrument_token) : null;
+      const currentPrice = ltp ?? pos.current_price ?? pos.average_price;
+      const dayPnl = pos.close_price
+        ? (currentPrice - pos.close_price) * pos.quantity
+        : (currentPrice - pos.average_price) * pos.quantity;
+      totalPnL += dayPnl;
+      totalInvested += Math.abs(pos.quantity) * pos.average_price;
+    }
+    return { totalPnL, totalInvested };
+  }, [filteredPositions, ticks]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -157,88 +219,6 @@ export function Positions() {
     } else {
       setSortField(field);
       setSortDirection('desc');
-    }
-  };
-
-  const filterPositions = () => {
-    let filtered = allPositions;
-
-    if (selectedBroker !== 'all') {
-      filtered = filtered.filter(pos => pos.broker_connection_id === selectedBroker);
-    }
-
-    if (selectedSymbol !== 'all') {
-      filtered = filtered.filter(pos => pos.symbol === selectedSymbol);
-    }
-
-    setPositions(sortPositions(filtered));
-    updateSummary(filtered);
-  };
-
-  const updateSummary = (positionsToSum: any[]) => {
-    const totalPnL = positionsToSum.reduce((sum, pos) => {
-      const ltp = pos.instrument_token ? getLTP(pos.instrument_token) : null;
-      const currentPrice = ltp ?? pos.current_price ?? pos.average_price;
-      const dayPnl = pos.close_price
-        ? (currentPrice - pos.close_price) * pos.quantity
-        : (currentPrice - pos.average_price) * pos.quantity;
-      return sum + dayPnl;
-    }, 0);
-
-    const totalInvested = positionsToSum.reduce((sum, pos) => {
-      return sum + (Math.abs(pos.quantity) * pos.average_price);
-    }, 0);
-
-    setSummary({ totalPnL, totalInvested });
-  };
-
-  useEffect(() => {
-    if (ticks.size > 0 && positions.length > 0 && !exitModalOpen) {
-      updateSummary(positions);
-    }
-  }, [ticks, positions, exitModalOpen]);
-
-  const loadBrokers = async () => {
-    const { data } = await supabase
-      .from('broker_connections')
-      .select('*')
-      .eq('user_id', user?.id)
-      .eq('is_active', true)
-      .eq('broker_name', 'zerodha');
-
-    if (data) {
-      // Filter out expired tokens
-      const now = new Date();
-      const activeBrokers = data.filter(broker => {
-        if (!broker.token_expires_at) return true;
-        const expiryDate = new Date(broker.token_expires_at);
-        return expiryDate > now;
-      });
-
-      // Mark expired brokers as inactive
-      const expiredBrokers = data.filter(broker => {
-        if (!broker.token_expires_at) return false;
-        const expiryDate = new Date(broker.token_expires_at);
-        return expiryDate <= now;
-      });
-
-      if (expiredBrokers.length > 0) {
-        // Update expired brokers to inactive in background
-        expiredBrokers.forEach(async (broker) => {
-          await supabase
-            .from('broker_connections')
-            .update({ is_active: false })
-            .eq('id', broker.id);
-        });
-
-        // Show message to user
-        if (activeBrokers.length > 0) {
-          setSyncMessage(`${expiredBrokers.length} account(s) expired. Showing data from ${activeBrokers.length} active account(s).`);
-          setTimeout(() => setSyncMessage(''), 5000);
-        }
-      }
-
-      setBrokers(activeBrokers);
     }
   };
 
@@ -251,15 +231,6 @@ export function Positions() {
     try {
       const fetchPromises = brokers.map(async (broker) => {
         try {
-          // Check if token is expired before attempting sync
-          if (broker.token_expires_at) {
-            const expiryDate = new Date(broker.token_expires_at);
-            if (expiryDate <= new Date()) {
-              console.log(`Skipping expired broker ${broker.id}`);
-              return;
-            }
-          }
-
           const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-positions/sync?broker_id=${broker.id}`;
           const response = await fetch(apiUrl, {
             headers: {
@@ -269,14 +240,8 @@ export function Positions() {
           });
           const result = await response.json();
 
-          if (result.success) {
-            console.log(`Synced ${result.synced || 0} positions from broker ${broker.id}`);
-          } else if (result.error?.includes('Token expired') || result.error?.includes('403')) {
-            // Mark broker as inactive
-            await supabase
-              .from('broker_connections')
-              .update({ is_active: false })
-              .eq('id', broker.id);
+          if (!result.success && (result.error?.includes('Token expired') || result.error?.includes('403'))) {
+            setExpiredBrokerIds(prev => new Set([...prev, broker.id]));
           }
         } catch (err) {
           console.error(`Error syncing positions for broker ${broker.id}:`, err);
@@ -296,11 +261,10 @@ export function Positions() {
     setIsSyncing(true);
     try {
       await fetchInitialPositions();
-      setSyncMessage('✓ Positions refreshed successfully');
+      setSyncMessage('Positions refreshed successfully');
       setTimeout(() => setSyncMessage(''), 3000);
     } catch (error) {
-      console.error('Error refreshing positions:', error);
-      setSyncMessage('✗ Failed to refresh positions');
+      setSyncMessage('Failed to refresh positions');
       setTimeout(() => setSyncMessage(''), 3000);
     }
   };
@@ -311,7 +275,7 @@ export function Positions() {
       setSelectedPosition(position);
       setExitModalOpen(true);
     } else if (selectedPositions.size > 0) {
-      const positionsToFreeze = positions.filter(p => selectedPositions.has(p.id));
+      const positionsToFreeze = sortedPositions.filter(p => selectedPositions.has(p.id));
       setFrozenPositionsForExit(positionsToFreeze);
       setExitModalOpen(true);
     }
@@ -319,29 +283,17 @@ export function Positions() {
   };
 
   const handleExitSuccess = () => {
-    setSyncMessage('✓ Position(s) exited successfully');
+    setSyncMessage('Position(s) exited successfully');
     setSelectedPositions(new Set());
     setFrozenPositionsForExit([]);
     loadPositions();
     setTimeout(() => setSyncMessage(''), 5000);
   };
 
-  const getPositionsToExit = () => {
-    return frozenPositionsForExit;
-  };
-
   const handleOpenGTT = (position: any) => {
     const ltp = position.instrument_token ? getLTP(position.instrument_token) : null;
     const capturedPrice = ltp ?? position.current_price ?? position.average_price;
-
-    console.log('[Positions] Opening GTT - LTP:', ltp, 'Current Price:', position.current_price, 'Average Price:', position.average_price, 'Captured Price:', capturedPrice);
-
-    const positionSnapshot = {
-      ...position,
-      current_price: capturedPrice
-    };
-
-    setSelectedPosition(positionSnapshot);
+    setSelectedPosition({ ...position, current_price: capturedPrice });
     setGttModalOpen(true);
     setOpenMenuId(null);
   };
@@ -354,15 +306,7 @@ export function Positions() {
   const handleOpenHMTGTT = (position: any) => {
     const ltp = position.instrument_token ? getLTP(position.instrument_token) : null;
     const capturedPrice = ltp ?? position.current_price ?? position.average_price;
-
-    console.log('[Positions] Opening HMT GTT - LTP:', ltp, 'Current Price:', position.current_price, 'Average Price:', position.average_price, 'Captured Price:', capturedPrice);
-
-    const positionSnapshot = {
-      ...position,
-      current_price: capturedPrice
-    };
-
-    setSelectedPosition(positionSnapshot);
+    setSelectedPosition({ ...position, current_price: capturedPrice });
     setHmtGttModalOpen(true);
     setOpenMenuId(null);
   };
@@ -378,21 +322,18 @@ export function Positions() {
       setMenuOpenUpward(false);
     } else {
       setOpenMenuId(positionId);
-
       const buttonElement = event.currentTarget as HTMLElement;
       const rect = buttonElement.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      const menuHeight = 180;
-
-      setMenuOpenUpward(spaceBelow < menuHeight);
+      setMenuOpenUpward(spaceBelow < 180);
     }
   };
 
   const handleSelectAll = () => {
-    if (selectedPositions.size === positions.length) {
+    if (selectedPositions.size === sortedPositions.length) {
       setSelectedPositions(new Set());
     } else {
-      setSelectedPositions(new Set(positions.map(p => p.id)));
+      setSelectedPositions(new Set(sortedPositions.map(p => p.id)));
     }
   };
 
@@ -405,7 +346,6 @@ export function Positions() {
     }
     setSelectedPositions(newSelected);
   };
-
 
   return (
     <div className="space-y-4 md:space-y-6 max-w-full overflow-x-hidden">
@@ -478,12 +418,29 @@ export function Positions() {
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 sm:col-span-2 md:col-span-1">
           <h3 className="text-sm text-gray-600 mb-1">Open Positions</h3>
-          <p className="text-2xl md:text-3xl font-bold text-gray-900">{positions.length}</p>
+          <p className="text-2xl md:text-3xl font-bold text-gray-900">{sortedPositions.length}</p>
         </div>
       </div>
 
+      {expiredBrokerIds.size > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-amber-800">
+              {expiredBrokerIds.size} account{expiredBrokerIds.size > 1 ? 's' : ''} with expired tokens — positions hidden
+            </p>
+            <p className="text-xs text-amber-600 mt-1">
+              Reconnect to see positions from expired accounts.
+            </p>
+          </div>
+          <a href="/brokers" className="flex items-center gap-1 px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition text-sm font-medium whitespace-nowrap flex-shrink-0">
+            Reconnect
+          </a>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {positions.length === 0 ? (
+        {sortedPositions.length === 0 ? (
           <div className="text-center py-12">
             <LineChart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No open positions</h3>
@@ -493,7 +450,7 @@ export function Positions() {
           <>
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-200">
-              {positions.map((position) => {
+              {sortedPositions.map((position) => {
                 const ltp = position.instrument_token ? getLTP(position.instrument_token) : null;
                 const currentPrice = ltp ?? position.current_price ?? position.average_price;
                 const pnl = position.close_price
@@ -630,7 +587,7 @@ export function Positions() {
                   <th className="px-3 py-3 text-left">
                     <input
                       type="checkbox"
-                      checked={positions.length > 0 && selectedPositions.size === positions.length}
+                      checked={sortedPositions.length > 0 && selectedPositions.size === sortedPositions.length}
                       onChange={handleSelectAll}
                       className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                     />
@@ -698,7 +655,7 @@ export function Positions() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {positions.map((position) => {
+                {sortedPositions.map((position) => {
                   const ltp = position.instrument_token ? getLTP(position.instrument_token) : null;
                   const currentPrice = ltp ?? position.current_price ?? position.average_price;
                   const pnl = position.close_price
@@ -752,53 +709,53 @@ export function Positions() {
                           {pnlPercentage >= 0 ? '+' : ''}{pnlPercentage.toFixed(2)}%
                         </span>
                       </td>
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      <div className="relative" ref={openMenuId === position.id ? menuRef : null}>
-                        <button
-                          onClick={(e) => toggleMenu(position.id, e)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition"
-                        >
-                          <MoreVertical className="w-5 h-5 text-gray-600" />
-                        </button>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <div className="relative" ref={openMenuId === position.id ? menuRef : null}>
+                          <button
+                            onClick={(e) => toggleMenu(position.id, e)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition"
+                          >
+                            <MoreVertical className="w-5 h-5 text-gray-600" />
+                          </button>
 
-                        {openMenuId === position.id && (
-                          <div className={`absolute right-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 ${
-                            menuOpenUpward ? 'bottom-full mb-1' : 'mt-1'
-                          }`}>
-                            <div className="py-1">
-                              <button
-                                onClick={() => handleOpenExitModal(position)}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
-                              >
-                                Exit position
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setSelectedPosition(position);
-                                  setAddOrderModalOpen(true);
-                                  setOpenMenuId(null);
-                                }}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
-                              >
-                                Add
-                              </button>
-                              <button
-                                onClick={() => handleOpenGTT(position)}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
-                              >
-                                Create GTT
-                              </button>
-                              <button
-                                onClick={() => handleOpenHMTGTT(position)}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
-                              >
-                                Create HMT GTT
-                              </button>
+                          {openMenuId === position.id && (
+                            <div className={`absolute right-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 ${
+                              menuOpenUpward ? 'bottom-full mb-1' : 'mt-1'
+                            }`}>
+                              <div className="py-1">
+                                <button
+                                  onClick={() => handleOpenExitModal(position)}
+                                  className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                                >
+                                  Exit position
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedPosition(position);
+                                    setAddOrderModalOpen(true);
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                                >
+                                  Add
+                                </button>
+                                <button
+                                  onClick={() => handleOpenGTT(position)}
+                                  className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                                >
+                                  Create GTT
+                                </button>
+                                <button
+                                  onClick={() => handleOpenHMTGTT(position)}
+                                  className="w-full text-left px-4 py-2 hover:bg-gray-50 transition text-sm text-gray-700 block"
+                                >
+                                  Create HMT GTT
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    </td>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
