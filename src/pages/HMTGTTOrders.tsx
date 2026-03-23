@@ -1196,10 +1196,13 @@ export function HMTGTTOrders() {
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1 flex-shrink-0 ml-2">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${
-                        gtt.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap uppercase ${
+                        gtt.status === 'active' ? 'bg-green-100 text-green-700' :
+                        gtt.status === 'triggered' ? 'bg-blue-100 text-blue-700' :
+                        gtt.status === 'failed' ? 'bg-red-100 text-red-700' :
+                        'bg-gray-100 text-gray-700'
                       }`}>
-                        {gtt.status}
+                        {gtt.status === 'triggered' ? 'executed' : gtt.status}
                       </span>
                       {isExpired && (
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-700 whitespace-nowrap">

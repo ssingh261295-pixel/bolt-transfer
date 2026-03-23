@@ -211,7 +211,7 @@ const HMTGTTRowComponent = ({
             gtt.status === 'failed' ? 'bg-red-100 text-red-700' :
             'bg-yellow-100 text-yellow-700'
           }`}>
-            {gtt.status}
+            {gtt.status === 'triggered' ? 'executed' : gtt.status}
           </span>
           {isExpired && (
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-700 w-fit">
