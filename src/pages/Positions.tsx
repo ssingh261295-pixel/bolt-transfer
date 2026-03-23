@@ -125,7 +125,7 @@ export function Positions() {
       .from('positions')
       .select(`
         *,
-        broker_connections!inner (
+        broker_connections (
           account_name,
           broker_name,
           client_id,
