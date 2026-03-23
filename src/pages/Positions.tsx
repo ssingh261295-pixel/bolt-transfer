@@ -70,15 +70,6 @@ export function Positions() {
   }, [firstValidBrokerId, connect, disconnect]);
 
   useEffect(() => {
-    if (isConnected && sortedPositions.length > 0) {
-      const tokens = sortedPositions.map(p => p.instrument_token).filter(Boolean);
-      if (tokens.length > 0) {
-        subscribe(tokens, 'full');
-      }
-    }
-  }, [isConnected, sortedPositions, subscribe]);
-
-  useEffect(() => {
     if (!user?.id) return;
 
     const posChannel = supabase
@@ -197,6 +188,15 @@ export function Positions() {
       return sortDirection === 'asc' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
     });
   }, [filteredPositions, sortField, sortDirection]);
+
+  useEffect(() => {
+    if (isConnected && sortedPositions.length > 0) {
+      const tokens = sortedPositions.map(p => p.instrument_token).filter(Boolean);
+      if (tokens.length > 0) {
+        subscribe(tokens, 'full');
+      }
+    }
+  }, [isConnected, sortedPositions, subscribe]);
 
   const summary = useMemo(() => {
     let totalPnL = 0;
