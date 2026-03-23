@@ -661,6 +661,7 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
         }
 
         let rocketRuleTriggered = false;
+        let hyperDriveTriggered = false;
         let finalLotMultiplier = lotMultiplier;
         let finalTargetMultiplier = targetMultiplier;
 
@@ -677,30 +678,53 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
         const matchedEngine = matchedEngineName
           ? engineConditionSets.find((cs: any) => cs.name === matchedEngineName)
           : null;
+
+        const engineHyperDrive = matchedEngine?.hyper_drive_rule ?? null;
         const engineRocketRule = matchedEngine?.rocket_rule ?? null;
 
-        console.log('[Webhook] Rocket rule check:', {
+        console.log('[Webhook] Boost rule check:', {
           account_id: account.id,
           trade_type: tradeType,
           matched_engine: matchedEngineName,
+          engine_hyper_drive: engineHyperDrive,
           engine_rocket_rule: engineRocketRule,
           volume: enrichedPayload.volume,
           vol_avg_5d: enrichedPayload.vol_avg_5d,
+          entry_phase: enrichedPayload.entry_phase,
+          trade_grade: enrichedPayload.trade_grade,
           vix: liveVIX,
           vix_source: vixSource
         });
 
-        const rocketRuleActive = engineRocketRule?.enabled ?? false;
+        const hyperDriveActive = engineHyperDrive?.enabled ?? false;
+        if (hyperDriveActive && engineHyperDrive && enrichedPayload.entry_phase && enrichedPayload.trade_grade) {
+          const phaseMatch = enrichedPayload.entry_phase === engineHyperDrive.entry_phase;
+          const gradeMatch = enrichedPayload.trade_grade === engineHyperDrive.trade_grade;
+          console.log('[Webhook] Hyper Drive check:', {
+            entry_phase: enrichedPayload.entry_phase, required_phase: engineHyperDrive.entry_phase,
+            trade_grade: enrichedPayload.trade_grade, required_grade: engineHyperDrive.trade_grade,
+            phase_match: phaseMatch, grade_match: gradeMatch
+          });
+          if (phaseMatch && gradeMatch) {
+            hyperDriveTriggered = true;
+            finalLotMultiplier = engineHyperDrive.lot_multiplier ?? 3;
+            finalTargetMultiplier = engineHyperDrive.target_multiplier ?? 2.5;
+            console.log('[Webhook] HYPER DRIVE TRIGGERED:', { finalLotMultiplier, finalTargetMultiplier });
+          }
+        }
 
-        if (rocketRuleActive && engineRocketRule && enrichedPayload.volume !== undefined && enrichedPayload.vol_avg_5d !== undefined && enrichedPayload.vol_avg_5d > 0) {
-          const volumeRatio = enrichedPayload.volume / enrichedPayload.vol_avg_5d;
-          const threshold = engineRocketRule.volume_ratio_threshold ?? 0.70;
-          console.log('[Webhook] Rocket rule volume check:', { volumeRatio, threshold, triggered: volumeRatio >= threshold });
-          if (volumeRatio >= threshold) {
-            rocketRuleTriggered = true;
-            finalLotMultiplier = engineRocketRule.lot_multiplier ?? 2;
-            finalTargetMultiplier = engineRocketRule.target_multiplier ?? 3.0;
-            console.log('[Webhook] ROCKET RULE TRIGGERED:', { finalLotMultiplier, finalTargetMultiplier, volumeRatio });
+        if (!hyperDriveTriggered) {
+          const rocketRuleActive = engineRocketRule?.enabled ?? false;
+          if (rocketRuleActive && engineRocketRule && enrichedPayload.volume !== undefined && enrichedPayload.vol_avg_5d !== undefined && enrichedPayload.vol_avg_5d > 0) {
+            const volumeRatio = enrichedPayload.volume / enrichedPayload.vol_avg_5d;
+            const threshold = engineRocketRule.volume_ratio_threshold ?? 0.70;
+            console.log('[Webhook] Rocket rule volume check:', { volumeRatio, threshold, triggered: volumeRatio >= threshold });
+            if (volumeRatio >= threshold) {
+              rocketRuleTriggered = true;
+              finalLotMultiplier = engineRocketRule.lot_multiplier ?? 2;
+              finalTargetMultiplier = engineRocketRule.target_multiplier ?? 3.0;
+              console.log('[Webhook] ROCKET RULE TRIGGERED:', { finalLotMultiplier, finalTargetMultiplier, volumeRatio });
+            }
           }
         }
 
@@ -796,7 +820,7 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
               product_type_1: 'NRML', trigger_price_1: stopLossPrice, order_price_1: stopLossPrice, quantity_1: quantity,
               product_type_2: 'NRML', trigger_price_2: targetPrice, order_price_2: targetPrice, quantity_2: quantity,
               status: 'active',
-              metadata: { source: 'tradingview_webhook', webhook_key_name: keyData.name, entry_price: executedPrice, cash_price: price, atr, timeframe: enrichedPayload.timeframe || null, rocket_rule_triggered: rocketRuleTriggered, volume_ratio: enrichedPayload.volume && enrichedPayload.vol_avg_5d ? (enrichedPayload.volume / enrichedPayload.vol_avg_5d).toFixed(2) : null, vix: liveVIX, vix_source: vixSource, regime_matched: accountResult.regime_matched || null }
+              metadata: { source: 'tradingview_webhook', webhook_key_name: keyData.name, entry_price: executedPrice, cash_price: price, atr, timeframe: enrichedPayload.timeframe || null, rocket_rule_triggered: rocketRuleTriggered, hyper_drive_triggered: hyperDriveTriggered, volume_ratio: enrichedPayload.volume && enrichedPayload.vol_avg_5d ? (enrichedPayload.volume / enrichedPayload.vol_avg_5d).toFixed(2) : null, vix: liveVIX, vix_source: vixSource, regime_matched: accountResult.regime_matched || null }
             }).select().single();
 
             if (!hmtError && hmtGtt) {

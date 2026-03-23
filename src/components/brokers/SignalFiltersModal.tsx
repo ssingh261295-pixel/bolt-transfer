@@ -123,18 +123,19 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
   });
 
   const defaultRocketRule = { enabled: false, volume_ratio_threshold: 0.70, lot_multiplier: 2, target_multiplier: 3.0 };
+  const defaultHyperDriveRule = { enabled: false, entry_phase: 'MID', trade_grade: 'C', lot_multiplier: 3, target_multiplier: 2.5 };
 
   const defaultBuyConditionSets = [
-    { name: 'Option A', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 15, max: 100 }, adx: { min: 0, max: 28 }, ema_distance: { min: 3.0, max: 100 }, rocket_rule: { ...defaultRocketRule } },
-    { name: 'Option B', enabled: false, volume_ratio: { min: 0.45, max: 100 }, di_spread: { min: 20, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 1.2, max: 2.3 }, rocket_rule: { ...defaultRocketRule } },
-    { name: 'Option C', enabled: false, volume_ratio: { min: 0.30, max: 100 }, di_spread: { min: 10, max: 100 }, adx: { min: 35.1, max: 100 }, ema_distance: { min: 1.5, max: 4.0 }, rocket_rule: { ...defaultRocketRule } }
+    { name: 'Option A', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 15, max: 100 }, adx: { min: 0, max: 28 }, ema_distance: { min: 3.0, max: 100 }, rocket_rule: { ...defaultRocketRule }, hyper_drive_rule: { ...defaultHyperDriveRule } },
+    { name: 'Option B', enabled: false, volume_ratio: { min: 0.45, max: 100 }, di_spread: { min: 20, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 1.2, max: 2.3 }, rocket_rule: { ...defaultRocketRule }, hyper_drive_rule: { ...defaultHyperDriveRule } },
+    { name: 'Option C', enabled: false, volume_ratio: { min: 0.30, max: 100 }, di_spread: { min: 10, max: 100 }, adx: { min: 35.1, max: 100 }, ema_distance: { min: 1.5, max: 4.0 }, rocket_rule: { ...defaultRocketRule }, hyper_drive_rule: { ...defaultHyperDriveRule } }
   ];
 
   const defaultSellConditionSets = [
-    { name: 'Option D', enabled: false, volume_ratio: { min: 0.39, max: 100 }, di_spread: { min: 16.5, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 1.2, max: 2.3 }, rocket_rule: { ...defaultRocketRule } },
-    { name: 'Option E', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 18, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 3.0, max: 100 }, rocket_rule: { ...defaultRocketRule } },
-    { name: 'Option F', enabled: false, volume_ratio: { min: 0.20, max: 100 }, di_spread: { min: 20, max: 100 }, adx: { min: 0, max: 25 }, ema_distance: { min: 1.5, max: 100 }, rocket_rule: { ...defaultRocketRule } },
-    { name: 'Option G', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 10, max: 100 }, adx: { min: 0, max: 30 }, ema_distance: { min: 1.2, max: 2.3 }, rocket_rule: { ...defaultRocketRule } }
+    { name: 'Option D', enabled: false, volume_ratio: { min: 0.39, max: 100 }, di_spread: { min: 16.5, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 1.2, max: 2.3 }, rocket_rule: { ...defaultRocketRule }, hyper_drive_rule: { ...defaultHyperDriveRule } },
+    { name: 'Option E', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 18, max: 100 }, adx: { min: 0, max: 35 }, ema_distance: { min: 3.0, max: 100 }, rocket_rule: { ...defaultRocketRule }, hyper_drive_rule: { ...defaultHyperDriveRule } },
+    { name: 'Option F', enabled: false, volume_ratio: { min: 0.20, max: 100 }, di_spread: { min: 20, max: 100 }, adx: { min: 0, max: 25 }, ema_distance: { min: 1.5, max: 100 }, rocket_rule: { ...defaultRocketRule }, hyper_drive_rule: { ...defaultHyperDriveRule } },
+    { name: 'Option G', enabled: false, volume_ratio: { min: 0.40, max: 100 }, di_spread: { min: 10, max: 100 }, adx: { min: 0, max: 30 }, ema_distance: { min: 1.2, max: 2.3 }, rocket_rule: { ...defaultRocketRule }, hyper_drive_rule: { ...defaultHyperDriveRule } }
   ];
 
   const defaultDirectionFilters = {
@@ -182,7 +183,8 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
       const migrateConditionSets = (sets: any[], oldRocketRule: any) =>
         sets.map((cs: any) => ({
           ...cs,
-          rocket_rule: cs.rocket_rule ?? (oldRocketRule ? { ...oldRocketRule } : { ...defaultRocketRule })
+          rocket_rule: cs.rocket_rule ?? (oldRocketRule ? { ...oldRocketRule } : { ...defaultRocketRule }),
+          hyper_drive_rule: cs.hyper_drive_rule ?? { ...defaultHyperDriveRule }
         }));
 
       buyFilters.condition_sets = migrateConditionSets(buyFilters.condition_sets, buyFilters.rocket_rule);
@@ -917,6 +919,67 @@ export function SignalFiltersModal({ broker, onClose, onSave }: SignalFiltersMod
                           value={conditionSet.rocket_rule?.target_multiplier ?? 3.0}
                           onChange={(e) => updateConditionSet(direction, index, 'rocket_rule', { ...conditionSet.rocket_rule, target_multiplier: parseFloat(e.target.value) })}
                           className="w-full px-2 py-1 text-xs border border-amber-300 rounded"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mt-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-semibold text-purple-900">Hyper Drive Rule</span>
+                    <label className="flex items-center gap-1.5 ml-auto">
+                      <span className="text-xs text-purple-700">Enabled</span>
+                      <input
+                        type="checkbox"
+                        checked={conditionSet.hyper_drive_rule?.enabled ?? false}
+                        onChange={(e) => updateConditionSet(direction, index, 'hyper_drive_rule', { ...(conditionSet.hyper_drive_rule ?? defaultHyperDriveRule), enabled: e.target.checked })}
+                        className="w-3.5 h-3.5 text-purple-600 rounded"
+                      />
+                    </label>
+                  </div>
+                  {conditionSet.hyper_drive_rule?.enabled && (
+                    <div className="grid grid-cols-4 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Entry Phase</label>
+                        <select
+                          value={conditionSet.hyper_drive_rule?.entry_phase ?? 'MID'}
+                          onChange={(e) => updateConditionSet(direction, index, 'hyper_drive_rule', { ...conditionSet.hyper_drive_rule, entry_phase: e.target.value })}
+                          className="w-full px-2 py-1 text-xs border border-purple-300 rounded"
+                        >
+                          <option value="EARLY">EARLY</option>
+                          <option value="MID">MID</option>
+                          <option value="OPTIMAL">OPTIMAL</option>
+                          <option value="LATE">LATE</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Trade Grade</label>
+                        <select
+                          value={conditionSet.hyper_drive_rule?.trade_grade ?? 'C'}
+                          onChange={(e) => updateConditionSet(direction, index, 'hyper_drive_rule', { ...conditionSet.hyper_drive_rule, trade_grade: e.target.value })}
+                          className="w-full px-2 py-1 text-xs border border-purple-300 rounded"
+                        >
+                          <option value="A">A</option>
+                          <option value="B">B</option>
+                          <option value="C">C</option>
+                          <option value="D">D</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Lot Multiplier</label>
+                        <input type="number" step="1" min="1"
+                          value={conditionSet.hyper_drive_rule?.lot_multiplier ?? 3}
+                          onChange={(e) => updateConditionSet(direction, index, 'hyper_drive_rule', { ...conditionSet.hyper_drive_rule, lot_multiplier: parseInt(e.target.value) })}
+                          className="w-full px-2 py-1 text-xs border border-purple-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Target Multiplier</label>
+                        <input type="number" step="0.1" min="0.1"
+                          value={conditionSet.hyper_drive_rule?.target_multiplier ?? 2.5}
+                          onChange={(e) => updateConditionSet(direction, index, 'hyper_drive_rule', { ...conditionSet.hyper_drive_rule, target_multiplier: parseFloat(e.target.value) })}
+                          className="w-full px-2 py-1 text-xs border border-purple-300 rounded"
                         />
                       </div>
                     </div>
