@@ -110,27 +110,35 @@ export function TradingViewLogs() {
       }
 
       if (dateFilter !== 'all') {
-        let startDate: Date;
-
-        switch (dateFilter) {
-          case 'today':
-            startDate = new Date();
-            startDate.setHours(0, 0, 0, 0);
-            break;
-          case 'week':
-            startDate = new Date();
-            startDate.setDate(startDate.getDate() - 7);
-            break;
-          case 'month':
-            startDate = new Date();
-            startDate.setMonth(startDate.getMonth() - 1);
-            break;
-          default:
-            startDate = new Date(0);
+        if (dateFilter === 'yesterday') {
+          const startOfYesterday = new Date();
+          startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+          startOfYesterday.setHours(0, 0, 0, 0);
+          const startOfToday = new Date();
+          startOfToday.setHours(0, 0, 0, 0);
+          query = query
+            .gte('received_at', startOfYesterday.toISOString())
+            .lt('received_at', startOfToday.toISOString());
+        } else {
+          let startDate: Date;
+          switch (dateFilter) {
+            case 'today':
+              startDate = new Date();
+              startDate.setHours(0, 0, 0, 0);
+              break;
+            case 'week':
+              startDate = new Date();
+              startDate.setDate(startDate.getDate() - 7);
+              break;
+            case 'month':
+              startDate = new Date();
+              startDate.setMonth(startDate.getMonth() - 1);
+              break;
+            default:
+              startDate = new Date(0);
+          }
+          query = query.gte('received_at', startDate.toISOString());
         }
-
-        console.log('Date filter:', dateFilter, 'Start date:', startDate.toISOString());
-        query = query.gte('received_at', startDate.toISOString());
       }
 
       query = query.limit(1000);
@@ -631,6 +639,7 @@ export function TradingViewLogs() {
             >
               <option value="all">All Time</option>
               <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
               <option value="week">Last 7 Days</option>
               <option value="month">Last 30 Days</option>
             </select>
