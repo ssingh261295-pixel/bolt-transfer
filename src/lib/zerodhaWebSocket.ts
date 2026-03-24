@@ -300,6 +300,30 @@ export class ZerodhaWebSocket {
       return tick;
     }
 
+    if (packetLength === 28 && segment === 9) {
+      tick.mode = 'quote';
+
+      tick.last_price = view.getUint32(offset, false) / 100;
+      offset += 4;
+
+      tick.high = view.getUint32(offset, false) / 100;
+      offset += 4;
+
+      tick.low = view.getUint32(offset, false) / 100;
+      offset += 4;
+
+      tick.open = view.getUint32(offset, false) / 100;
+      offset += 4;
+
+      tick.close = view.getUint32(offset, false) / 100;
+      offset += 4;
+
+      tick.change = view.getInt32(offset, false) / 100;
+      offset += 4;
+
+      return tick;
+    }
+
     if (packetLength === 28 || packetLength === 32) {
       tick.mode = 'quote';
 
@@ -339,10 +363,6 @@ export class ZerodhaWebSocket {
 
         tick.oi = view.getUint32(offset, false);
         offset += 4;
-      }
-
-      if (instrumentToken === 256265 || instrumentToken === 265) {
-        console.log('[Zerodha WS] Index QUOTE packet:', { token: instrumentToken, lp: tick.last_price, close: tick.close, mode: 'quote' });
       }
 
       return tick;

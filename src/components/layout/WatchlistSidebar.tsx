@@ -333,7 +333,9 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
               const isVix = item.instrument_token === 264969;
               const lastPrice = tick?.last_price || (isVix ? vixCachePrice : null) || 0;
               const previousClose = tick?.close || 0;
-              const change = previousClose > 0 ? (lastPrice - previousClose) : 0;
+              const change = tick?.change !== undefined && tick.change !== 0
+                ? tick.change
+                : (previousClose > 0 ? (lastPrice - previousClose) : 0);
               const changePercent = previousClose > 0 ? ((change / previousClose) * 100) : 0;
 
               return (
