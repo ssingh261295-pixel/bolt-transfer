@@ -164,7 +164,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
   };
 
   const searchInstruments = async (query: string) => {
-    if (!query || query.length < 2) { setSearchResults([]); return; }
+    if (!query || query.length < 3) { setSearchResults([]); return; }
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     try {
@@ -183,7 +183,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
       const nseInstruments = nseResult.success ? (nseResult.instruments || []).filter((i: any) =>
         i.instrument_type === 'EQ' || i.instrument_type === 'INDICES' || i.instrument_token === 264969
       ) : [];
-      setSearchResults([...nseInstruments.slice(0, 5), ...nfoInstruments.slice(0, 15)]);
+      setSearchResults([...nseInstruments.slice(0, 20), ...nfoInstruments.slice(0, 15)]);
     } catch (_) { /* ignore */ }
   };
 
@@ -204,6 +204,8 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
     const updated = [newSym, ...current];
     await supabase.from('watchlists').update({ symbols: updated }).eq('id', selectedWatchlist.id);
     setSelectedWatchlist({ ...selectedWatchlist, symbols: updated });
+    setSearchQuery('');
+    setSearchResults([]);
   };
 
   const removeInstrument = async (token: number) => {

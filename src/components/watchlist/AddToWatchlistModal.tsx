@@ -19,7 +19,7 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
 
   useEffect(() => {
     const delaySearch = setTimeout(() => {
-      if (search.trim() && search.length >= 2) {
+      if (search.trim() && search.length >= 3) {
         loadInstruments(search.trim());
       } else {
         setFilteredInstruments([]);
@@ -110,6 +110,8 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
           sort_order: 0,
         });
 
+        setSearch('');
+        setFilteredInstruments([]);
         if (onAdded) {
           onAdded();
         }
@@ -184,13 +186,13 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="text-center py-8 text-gray-500">Searching instruments...</div>
-          ) : filteredInstruments.length === 0 && search.length >= 2 ? (
+          ) : filteredInstruments.length === 0 && search.length >= 3 ? (
             <div className="text-center py-8 text-gray-500">
               No instruments found for "{search}"
             </div>
           ) : filteredInstruments.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              Start typing to search {exchange === 'NSE' ? 'NSE cash stocks' : 'NFO futures'} (minimum 2 characters)
+              Start typing to search {exchange === 'NSE' ? 'NSE cash stocks' : 'NFO futures'} (minimum 3 characters)
             </div>
           ) : (
             <div className="space-y-2">
