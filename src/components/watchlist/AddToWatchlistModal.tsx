@@ -48,11 +48,13 @@ export default function AddToWatchlistModal({ isOpen, onClose, onAdded }: AddToW
           let filteredResults;
 
           if (exchange === 'NSE') {
-            // Filter only EQ (equity/cash) instruments
+            // Filter only EQ (equity/cash) instruments and indices like INDIA VIX
             filteredResults = data.instruments.filter((inst: any) =>
               inst.instrument_type === 'EQ' ||
               inst.segment === 'NSE' ||
-              (!inst.instrument_type || inst.instrument_type === '')
+              (!inst.instrument_type || inst.instrument_type === '') ||
+              inst.instrument_token === 264969 ||
+              inst.instrument_type === 'INDICES'
             );
           } else {
             // Filter only FUT (futures) instruments, exclude CE/PE options
