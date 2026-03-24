@@ -151,8 +151,8 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // Limit to 50 results when searching
-      if (search && instruments.length >= 50) {
+      // Limit to 500 results when searching to avoid cutting off valid matches
+      if (search && instruments.length >= 500) {
         break;
       }
     }
