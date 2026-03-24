@@ -507,6 +507,27 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
       console.error('[GTTModal] Instrument search error:', err);
     }
 
+    // Fallback: search local nfo_instruments table
+    try {
+      const { data: localInstruments } = await supabase
+        .from('nfo_instruments')
+        .select('instrument_token, tradingsymbol, exchange, tick_size, lot_size')
+        .eq('tradingsymbol', searchTerm)
+        .limit(1);
+
+      if (localInstruments && localInstruments.length > 0) {
+        const instrument = localInstruments[0];
+        setSelectedInstrument(instrument);
+        const instrumentTickSize = parseFloat(instrument.tick_size);
+        if (!isNaN(instrumentTickSize) && instrumentTickSize > 0) {
+          setTickSize(instrumentTickSize);
+        }
+        return instrument;
+      }
+    } catch (err) {
+      console.error('[GTTModal] Local instrument search error:', err);
+    }
+
     return null;
   };
 
@@ -686,10 +707,22 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         const foundInstrument = await searchInstruments(symbol);
 
         if (!foundInstrument || !foundInstrument.instrument_token) {
-          throw new Error('Please select a valid instrument from the dropdown list');
-        }
+          // Fallback: search local nfo_instruments table
+          const { data: localInstruments } = await supabase
+            .from('nfo_instruments')
+            .select('instrument_token, tradingsymbol, exchange, tick_size, lot_size')
+            .eq('tradingsymbol', symbol)
+            .limit(1);
 
-        instrumentToUse = foundInstrument;
+          if (!localInstruments || localInstruments.length === 0) {
+            throw new Error('Please select a valid instrument from the dropdown list');
+          }
+
+          instrumentToUse = localInstruments[0];
+          setSelectedInstrument(instrumentToUse);
+        } else {
+          instrumentToUse = foundInstrument;
+        }
       }
 
       if (!editingGTT && selectedBrokerIds.length === 0) {
