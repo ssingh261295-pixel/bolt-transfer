@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, ArrowUpDown, Activity, RefreshCw, TrendingUp, MoreVertical } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Plus, CreditCard as Edit2, Trash2, ArrowUpDown, Activity, RefreshCw, TrendingUp, MoreVertical, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { GTTModal } from '../components/orders/GTTModal';
@@ -33,10 +33,18 @@ export function GTTOrders() {
   const { user, session } = useAuth();
   const [gttOrders, setGttOrders] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
+  const [expiredBrokerIds, setExpiredBrokerIds] = useState<Set<string>>(new Set());
   const [positions, setPositions] = useState<any[]>([]);
   const [selectedBrokerId, setSelectedBrokerId] = useState<string>('all');
   const [selectedInstruments, setSelectedInstruments] = useState<string[]>([]);
-  const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(selectedBrokerId !== 'all' ? selectedBrokerId : brokers[0]?.id);
+
+  const firstValidBrokerId = useMemo(() => {
+    if (selectedBrokerId !== 'all' && !expiredBrokerIds.has(selectedBrokerId)) return selectedBrokerId;
+    const valid = brokers.find(b => !expiredBrokerIds.has(b.id));
+    return valid?.id || brokers[0]?.id;
+  }, [selectedBrokerId, brokers, expiredBrokerIds]);
+
+  const { isConnected, connect, disconnect, subscribe, getLTP, ticks } = useZerodhaWebSocket(firstValidBrokerId);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingGTT, setEditingGTT] = useState<any>(null);
@@ -92,12 +100,9 @@ export function GTTOrders() {
   }, [selectedBrokerId, brokers]);
 
   useEffect(() => {
-    const brokerId = selectedBrokerId !== 'all' ? selectedBrokerId : brokers[0]?.id;
-    if (brokerId) {
-      connect();
-    }
+    if (firstValidBrokerId) { connect(); }
     return () => disconnect();
-  }, [selectedBrokerId, brokers, connect, disconnect]);
+  }, [firstValidBrokerId, connect, disconnect]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -156,37 +161,20 @@ export function GTTOrders() {
   const loadBrokers = async () => {
     const { data } = await supabase
       .from('broker_connections')
-      .select('*')
+      .select('id, account_name, account_holder_name, client_id, broker_name, is_active, token_expires_at')
       .eq('user_id', user?.id)
-      .eq('is_active', true)
       .eq('broker_name', 'zerodha');
 
     if (data && data.length > 0) {
-      // Filter out expired tokens
       const now = new Date();
-      const activeBrokers = data.filter(broker => {
-        if (!broker.token_expires_at) return true;
-        const expiryDate = new Date(broker.token_expires_at);
-        return expiryDate > now;
+      const expired = new Set<string>();
+      data.forEach(broker => {
+        if (broker.token_expires_at && new Date(broker.token_expires_at) <= now) {
+          expired.add(broker.id);
+        }
       });
-
-      // Mark expired brokers as inactive
-      const expiredBrokers = data.filter(broker => {
-        if (!broker.token_expires_at) return false;
-        const expiryDate = new Date(broker.token_expires_at);
-        return expiryDate <= now;
-      });
-
-      if (expiredBrokers.length > 0) {
-        expiredBrokers.forEach(async (broker) => {
-          await supabase
-            .from('broker_connections')
-            .update({ is_active: false })
-            .eq('id', broker.id);
-        });
-      }
-
-      setBrokers(activeBrokers);
+      setExpiredBrokerIds(expired);
+      setBrokers(data);
     }
   };
 
@@ -227,7 +215,7 @@ export function GTTOrders() {
         .from('gtt_orders')
         .select(`
           *,
-          broker_connections!inner(
+          broker_connections(
             id,
             account_name,
             account_holder_name,
@@ -946,6 +934,7 @@ export function GTTOrders() {
               {brokers.map((broker) => (
                 <option key={broker.id} value={broker.id}>
                   {(broker.account_holder_name || broker.account_name || 'Account')} ({broker.client_id || 'No ID'})
+                  {expiredBrokerIds.has(broker.id) ? ' ⚠ Token Expired' : ''}
                 </option>
               ))}
             </select>
@@ -973,6 +962,23 @@ export function GTTOrders() {
           </button>
         </div>
       </div>
+
+      {expiredBrokerIds.size > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-red-800">
+              Token expired for {brokers.filter(b => expiredBrokerIds.has(b.id)).map(b => b.account_holder_name || b.account_name || b.client_id).join(', ')}
+            </p>
+            <p className="text-xs text-red-600 mt-1">
+              GTT orders are shown but cannot be synced or modified for expired accounts. Please reconnect.
+            </p>
+          </div>
+          <a href="/brokers" className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium whitespace-nowrap flex-shrink-0">
+            Reconnect
+          </a>
+        </div>
+      )}
 
       {deleteMessage && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
