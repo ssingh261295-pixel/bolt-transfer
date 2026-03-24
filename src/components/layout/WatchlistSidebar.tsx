@@ -163,12 +163,22 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     try {
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NFO&search=${encodeURIComponent(query)}`,
-        { headers: { 'Authorization': `Bearer ${session.access_token}` } }
-      );
-      const result = await resp.json();
-      if (result.success) setSearchResults(result.instruments || []);
+      const [nfoResp, nseResp] = await Promise.all([
+        fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NFO&search=${encodeURIComponent(query)}`,
+          { headers: { 'Authorization': `Bearer ${session.access_token}` } }
+        ),
+        fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zerodha-instruments?exchange=NSE&search=${encodeURIComponent(query)}`,
+          { headers: { 'Authorization': `Bearer ${session.access_token}` } }
+        ),
+      ]);
+      const [nfoResult, nseResult] = await Promise.all([nfoResp.json(), nseResp.json()]);
+      const nfoInstruments = nfoResult.success ? (nfoResult.instruments || []).filter((i: any) => i.instrument_type === 'FUT') : [];
+      const nseInstruments = nseResult.success ? (nseResult.instruments || []).filter((i: any) =>
+        i.instrument_type === 'EQ' || i.instrument_type === 'INDICES' || i.instrument_token === 264969
+      ) : [];
+      setSearchResults([...nseInstruments.slice(0, 5), ...nfoInstruments.slice(0, 15)]);
     } catch (_) { /* ignore */ }
   };
 
@@ -276,7 +286,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); searchInstruments(e.target.value); }}
               className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 outline-none bg-gray-50"
-              placeholder="Search F&O instruments..."
+              placeholder="Search instruments (NSE / F&O)..."
             />
           </div>
           {searchResults.length > 0 && (
