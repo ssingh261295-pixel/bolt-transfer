@@ -97,13 +97,16 @@ Deno.serve(async (req: Request) => {
       console.log('Zerodha API parsed response:', JSON.stringify(data));
 
       if (data.status === 'success' && data.data?.access_token) {
-        // Calculate next midnight IST (5:30 AM UTC)
+        // Calculate next midnight IST (00:00 IST = 18:30 UTC)
+        // IST = UTC+5:30, so midnight IST = 18:30 UTC of the same calendar day in IST
         const now = new Date();
         const nextMidnightIST = new Date(now);
-        nextMidnightIST.setUTCHours(19, 30, 0, 0); // 12:00 AM IST = 7:30 PM UTC previous day
+        nextMidnightIST.setUTCHours(18, 30, 0, 0);
 
-        // If we're past 7:30 PM UTC today, set to tomorrow's 7:30 PM UTC
-        if (now.getUTCHours() >= 19 && now.getUTCMinutes() >= 30) {
+        // If we're already at or past 18:30 UTC today, advance to next day's 18:30 UTC
+        const nowUTCMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+        const expiryUTCMinutes = 18 * 60 + 30;
+        if (nowUTCMinutes >= expiryUTCMinutes) {
           nextMidnightIST.setUTCDate(nextMidnightIST.getUTCDate() + 1);
         }
 
