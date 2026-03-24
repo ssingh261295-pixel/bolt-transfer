@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { TrendingUp, TrendingDown, Plus, X, ChevronUp, Search } from 'lucide-react';
+import { TrendingUp, TrendingDown, Plus, X, ChevronUp, Search, ArrowUpDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useZerodhaWebSocket } from '../../hooks/useZerodhaWebSocket';
@@ -24,18 +24,23 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newWatchlistName, setNewWatchlistName] = useState('');
+  const [sortAZ, setSortAZ] = useState(false);
 
   const { isConnected, connect, subscribe, unsubscribe, getTick } = useZerodhaWebSocket(brokerId || undefined);
 
   const watchlistItems = useMemo(() => {
     if (!selectedWatchlist?.symbols) return [];
-    return selectedWatchlist.symbols.map((s: any) => ({
+    const items = selectedWatchlist.symbols.map((s: any) => ({
       id: s.instrument_token?.toString() || s.symbol,
       instrument_token: s.instrument_token,
       tradingsymbol: s.symbol,
       exchange: s.exchange,
     }));
-  }, [selectedWatchlist]);
+    if (sortAZ) {
+      return [...items].sort((a: any, b: any) => a.tradingsymbol.localeCompare(b.tradingsymbol));
+    }
+    return items;
+  }, [selectedWatchlist, sortAZ]);
 
   useEffect(() => {
     if (user) {
@@ -244,13 +249,22 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
               </div>
             )}
           </div>
-          <button
-            onClick={() => setIsCollapsed(true)}
-            className="p-1 hover:bg-gray-100 rounded"
-            aria-label="Collapse watchlist"
-          >
-            <ChevronUp className="w-4 h-4 rotate-90" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setSortAZ(v => !v)}
+              className={`p-1 rounded transition-colors ${sortAZ ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
+              title={sortAZ ? 'Sort: A to Z (click to reset)' : 'Sort A to Z'}
+            >
+              <ArrowUpDown className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setIsCollapsed(true)}
+              className="p-1 hover:bg-gray-100 rounded"
+              aria-label="Collapse watchlist"
+            >
+              <ChevronUp className="w-4 h-4 rotate-90" />
+            </button>
+          </div>
         </div>
       </div>
 
