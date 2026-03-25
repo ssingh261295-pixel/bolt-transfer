@@ -150,17 +150,47 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
           fetchLTP(instrumentToken, tradingsymbol, exchangeValue).catch(console.error);
 
           // Look up lot_size from DB for this instrument
+          // Try by instrument_token first, then by tradingsymbol, then by underlying name prefix
+          const applyInstrumentData = (data: { lot_size: any; tick_size: any }) => {
+            setSelectedInstrument((prev: any) => ({ ...prev, lot_size: data.lot_size, tick_size: data.tick_size }));
+            const instrumentTickSize = parseFloat(data.tick_size);
+            if (!isNaN(instrumentTickSize) && instrumentTickSize > 0) {
+              setTickSize(instrumentTickSize);
+            }
+          };
+
           supabase
             .from('nfo_instruments')
             .select('lot_size, tick_size')
             .eq('instrument_token', instrumentToken)
             .maybeSingle()
-            .then(({ data }) => {
+            .then(async ({ data }) => {
               if (data) {
-                setSelectedInstrument((prev: any) => ({ ...prev, lot_size: data.lot_size, tick_size: data.tick_size }));
-                const instrumentTickSize = parseFloat(data.tick_size);
-                if (!isNaN(instrumentTickSize) && instrumentTickSize > 0) {
-                  setTickSize(instrumentTickSize);
+                applyInstrumentData(data);
+              } else if (tradingsymbol) {
+                // Fallback: try exact tradingsymbol match
+                const { data: bySymbol } = await supabase
+                  .from('nfo_instruments')
+                  .select('lot_size, tick_size')
+                  .eq('tradingsymbol', tradingsymbol)
+                  .maybeSingle();
+                if (bySymbol) {
+                  applyInstrumentData(bySymbol);
+                } else {
+                  // Fallback: find lot_size by underlying name (strip expiry suffix)
+                  // e.g. TECHM26APRFUT -> search for tradingsymbols starting with TECHM
+                  const underlying = tradingsymbol.replace(/\d{2}[A-Z]{3}(FUT|CE|PE|\d+CE|\d+PE)$/, '');
+                  if (underlying && underlying !== tradingsymbol) {
+                    const { data: byUnderlying } = await supabase
+                      .from('nfo_instruments')
+                      .select('lot_size, tick_size')
+                      .ilike('tradingsymbol', `${underlying}%`)
+                      .limit(1)
+                      .maybeSingle();
+                    if (byUnderlying) {
+                      applyInstrumentData(byUnderlying);
+                    }
+                  }
                 }
               }
             });
