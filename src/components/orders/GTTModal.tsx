@@ -1462,13 +1462,12 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                 <input
                   type="number"
                   value={quantity1}
-                  onChange={(e) => {
+                  onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
+                  onBlur={(e) => {
                     const val = parseInt(e.target.value) || 1;
                     const lotSize = selectedInstrument?.lot_size ? parseInt(selectedInstrument.lot_size) : 1;
                     if (lotSize > 1) {
                       setQuantity1(Math.max(lotSize, Math.round(val / lotSize) * lotSize));
-                    } else {
-                      setQuantity1(val);
                     }
                   }}
                   className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -1662,13 +1661,12 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                   <input
                     type="number"
                     value={quantity2}
-                    onChange={(e) => {
+                    onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
+                    onBlur={(e) => {
                       const val = parseInt(e.target.value) || 1;
                       const lotSize = selectedInstrument?.lot_size ? parseInt(selectedInstrument.lot_size) : 1;
                       if (lotSize > 1) {
                         setQuantity2(Math.max(lotSize, Math.round(val / lotSize) * lotSize));
-                      } else {
-                        setQuantity2(val);
                       }
                     }}
                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
