@@ -12,12 +12,13 @@ interface PlaceOrderModalProps {
   initialSymbol?: string;
   initialExchange?: string;
   initialTransactionType?: 'BUY' | 'SELL';
+  initialLotSize?: number;
   brokerConnectionId?: string;
   prefilledSymbol?: string;
   prefilledExchange?: string;
 }
 
-export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, initialExchange, initialTransactionType, brokerConnectionId, prefilledSymbol, prefilledExchange }: PlaceOrderModalProps) {
+export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, initialExchange, initialTransactionType, initialLotSize, brokerConnectionId, prefilledSymbol, prefilledExchange }: PlaceOrderModalProps) {
   const { user, session } = useAuth();
   const { placeOrder, loading, error } = useZerodha();
   const [brokers, setBrokers] = useState<any[]>([]);
@@ -55,7 +56,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
         symbol: prefilledSymbol || initialSymbol || '',
         exchange: prefilledExchange || initialExchange || 'NFO',
         transaction_type: initialTransactionType || 'BUY',
-        quantity: 1,
+        quantity: initialLotSize || 1,
         order_type: 'MARKET',
         product: 'NRML',
         price: '',
@@ -68,7 +69,31 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
       setOrderErrors([]);
     }
     wasOpenRef.current = isOpen;
-  }, [isOpen, user, initialSymbol, initialExchange, initialTransactionType, prefilledSymbol, prefilledExchange, brokerConnectionId]);
+  }, [isOpen, user, initialSymbol, initialExchange, initialTransactionType, initialLotSize, prefilledSymbol, prefilledExchange, brokerConnectionId]);
+
+  useEffect(() => {
+    const lookupInstrument = async () => {
+      const sym = prefilledSymbol || initialSymbol;
+      if (!sym || !isOpen) return;
+      if (initialLotSize) return;
+      try {
+        const { data } = await supabase
+          .from('nfo_instruments')
+          .select('instrument_token, tradingsymbol, exchange, tick_size, lot_size')
+          .eq('tradingsymbol', sym.toUpperCase())
+          .limit(1)
+          .maybeSingle();
+        if (data) {
+          const lotSize = parseInt(data.lot_size) || 1;
+          setSelectedInstrument(data);
+          setFormData(prev => ({ ...prev, quantity: lotSize }));
+        }
+      } catch (err) {
+        console.error('[PlaceOrderModal] Instrument lookup failed:', err);
+      }
+    };
+    lookupInstrument();
+  }, [isOpen, prefilledSymbol, initialSymbol, initialLotSize]);
 
   // Don't load all instruments upfront - only load when user searches
   // useEffect(() => {
@@ -248,6 +273,14 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
 
     if (selectedBrokerIds.length === 0) {
       return;
+    }
+
+    if (selectedInstrument?.lot_size) {
+      const lotSize = parseInt(selectedInstrument.lot_size);
+      if (lotSize > 1 && formData.quantity % lotSize !== 0) {
+        setOrderErrors([`Quantity must be a multiple of lot size (${lotSize})`]);
+        return;
+      }
     }
 
     const baseOrderParams: any = {

@@ -14,6 +14,7 @@ interface GTTModalProps {
   quantity?: number;
   initialSymbol?: string;
   initialExchange?: string;
+  initialLotSize?: number;
   allBrokers?: any[];
   isHMTMode?: boolean;
   positionData?: {
@@ -24,7 +25,7 @@ interface GTTModalProps {
   };
 }
 
-export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editingGTT, initialSymbol, initialExchange, allBrokers, isHMTMode = false, positionData }: GTTModalProps) {
+export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editingGTT, initialSymbol, initialExchange, initialLotSize, allBrokers, isHMTMode = false, positionData }: GTTModalProps) {
   const { session } = useAuth();
   const initialPositionDataRef = useRef<typeof positionData | null>(null);
 
@@ -52,7 +53,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
   const [triggerPrice1, setTriggerPrice1] = useState('');
   const [triggerPercent1, setTriggerPercent1] = useState('');
   const [useTriggerPercent1, setUseTriggerPercent1] = useState(false);
-  const [quantity1, setQuantity1] = useState(200);
+  const [quantity1, setQuantity1] = useState(initialLotSize || 1);
   const [orderType1, setOrderType1] = useState('LIMIT');
   const [price1, setPrice1] = useState('');
   const [pricePercent1, setPricePercent1] = useState('');
@@ -63,7 +64,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
   const [triggerPrice2, setTriggerPrice2] = useState('');
   const [triggerPercent2, setTriggerPercent2] = useState('');
   const [useTriggerPercent2, setUseTriggerPercent2] = useState(false);
-  const [quantity2, setQuantity2] = useState(200);
+  const [quantity2, setQuantity2] = useState(initialLotSize || 1);
   const [orderType2, setOrderType2] = useState('LIMIT');
   const [price2, setPrice2] = useState('');
   const [pricePercent2, setPricePercent2] = useState('');
@@ -154,18 +155,18 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
           if (gttTypeValue === 'two-leg') {
             setTriggerPrice1(firstOrder.trigger_price_1 ? roundToTickSize(firstOrder.trigger_price_1) : '');
             setPrice1(firstOrder.order_price_1 ? roundToTickSize(firstOrder.order_price_1) : '');
-            setQuantity1(firstOrder.quantity_1 || 200);
+            setQuantity1(firstOrder.quantity_1 || initialLotSize || 1);
             setOrderType1('LIMIT');
             setProduct1(firstOrder.product_type_1 || 'NRML');
 
             setTriggerPrice2(firstOrder.trigger_price_2 ? roundToTickSize(firstOrder.trigger_price_2) : '');
             setPrice2(firstOrder.order_price_2 ? roundToTickSize(firstOrder.order_price_2) : '');
-            setQuantity2(firstOrder.quantity_2 || 200);
+            setQuantity2(firstOrder.quantity_2 || initialLotSize || 1);
             setOrderType2('LIMIT');
             setProduct2(firstOrder.product_type_2 || 'NRML');
           } else {
             setTriggerPrice1(firstOrder.trigger_price_1 ? roundToTickSize(firstOrder.trigger_price_1) : '');
-            setQuantity1(firstOrder.quantity_1 || 200);
+            setQuantity1(firstOrder.quantity_1 || initialLotSize || 1);
             setOrderType1('LIMIT');
             setPrice1(firstOrder.order_price_1 ? roundToTickSize(firstOrder.order_price_1) : '');
             setProduct1(firstOrder.product_type_1 || 'NRML');
@@ -179,31 +180,31 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
             if (transType === 'BUY') {
               setTriggerPrice1(trigger1 ? roundToTickSize(trigger1) : '');
               setPrice1(firstOrder.orders?.[1]?.price ? roundToTickSize(firstOrder.orders[1].price) : '');
-              setQuantity1(firstOrder.orders?.[1]?.quantity || 200);
+              setQuantity1(firstOrder.orders?.[1]?.quantity || initialLotSize || 1);
               setOrderType1(firstOrder.orders?.[1]?.order_type || 'LIMIT');
               setProduct1(firstOrder.orders?.[1]?.product || 'NRML');
 
               setTriggerPrice2(trigger0 ? roundToTickSize(trigger0) : '');
               setPrice2(firstOrder.orders?.[0]?.price ? roundToTickSize(firstOrder.orders[0].price) : '');
-              setQuantity2(firstOrder.orders?.[0]?.quantity || 200);
+              setQuantity2(firstOrder.orders?.[0]?.quantity || initialLotSize || 1);
               setOrderType2(firstOrder.orders?.[0]?.order_type || 'LIMIT');
               setProduct2(firstOrder.orders?.[0]?.product || 'NRML');
             } else {
               setTriggerPrice1(trigger0 ? roundToTickSize(trigger0) : '');
               setPrice1(firstOrder.orders?.[0]?.price ? roundToTickSize(firstOrder.orders[0].price) : '');
-              setQuantity1(firstOrder.orders?.[0]?.quantity || 200);
+              setQuantity1(firstOrder.orders?.[0]?.quantity || initialLotSize || 1);
               setOrderType1(firstOrder.orders?.[0]?.order_type || 'LIMIT');
               setProduct1(firstOrder.orders?.[0]?.product || 'NRML');
 
               setTriggerPrice2(trigger1 ? roundToTickSize(trigger1) : '');
               setPrice2(firstOrder.orders?.[1]?.price ? roundToTickSize(firstOrder.orders[1].price) : '');
-              setQuantity2(firstOrder.orders?.[1]?.quantity || 200);
+              setQuantity2(firstOrder.orders?.[1]?.quantity || initialLotSize || 1);
               setOrderType2(firstOrder.orders?.[1]?.order_type || 'LIMIT');
               setProduct2(firstOrder.orders?.[1]?.product || 'NRML');
             }
           } else {
             setTriggerPrice1(firstOrder.condition?.trigger_values?.[0] ? roundToTickSize(firstOrder.condition.trigger_values[0]) : '');
-            setQuantity1(firstOrder.orders?.[0]?.quantity || 200);
+            setQuantity1(firstOrder.orders?.[0]?.quantity || initialLotSize || 1);
             setOrderType1(firstOrder.orders?.[0]?.order_type || 'LIMIT');
             setPrice1(firstOrder.orders?.[0]?.price ? roundToTickSize(firstOrder.orders[0].price) : '');
             setProduct1(firstOrder.orders?.[0]?.product || 'NRML');
@@ -223,7 +224,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         setTriggerPrice1('');
         setTriggerPercent1('');
         setUseTriggerPercent1(false);
-        setQuantity1(200);
+        setQuantity1(initialLotSize || 1);
         setOrderType1('LIMIT');
         setPrice1('');
         setPricePercent1('');
@@ -232,7 +233,7 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
         setTriggerPrice2('');
         setTriggerPercent2('');
         setUseTriggerPercent2(false);
-        setQuantity2(200);
+        setQuantity2(initialLotSize || 1);
         setOrderType2('LIMIT');
         setPrice2('');
         setPricePercent2('');
@@ -318,6 +319,50 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
       }
     }
   }, [instruments, initialSymbol, initialExchange, isOpen, editingGTT, selectedInstrument, positionDataToUse]);
+
+  // Lookup lot_size from DB when opened with initialSymbol and no position data
+  useEffect(() => {
+    const lookupInstrument = async () => {
+      if (!isOpen || !initialSymbol || positionDataToUse || editingGTT) return;
+      if (selectedInstrument?.tradingsymbol === initialSymbol) return;
+
+      if (initialLotSize) {
+        setQuantity1(initialLotSize);
+        setQuantity2(initialLotSize);
+        return;
+      }
+
+      try {
+        const { data } = await supabase
+          .from('nfo_instruments')
+          .select('instrument_token, tradingsymbol, exchange, tick_size, lot_size')
+          .eq('tradingsymbol', initialSymbol.toUpperCase())
+          .limit(1)
+          .maybeSingle();
+
+        if (data) {
+          const lotSize = parseInt(data.lot_size) || 1;
+          setSelectedInstrument(data);
+          const instrumentTickSize = parseFloat(data.tick_size);
+          if (!isNaN(instrumentTickSize) && instrumentTickSize > 0) {
+            setTickSize(instrumentTickSize);
+          }
+          setQuantity1(lotSize);
+          setQuantity2(lotSize);
+
+          if (data.instrument_token) {
+            fetchLTP(data.instrument_token, data.tradingsymbol, data.exchange).then(ltp => {
+              if (ltp) prefillPricesBasedOnLTP(ltp);
+            }).catch(console.error);
+          }
+        }
+      } catch (err) {
+        console.error('[GTTModal] Instrument lookup failed:', err);
+      }
+    };
+
+    lookupInstrument();
+  }, [isOpen, initialSymbol, initialLotSize]);
 
   // Re-calculate prefilled values when GTT type or transaction type changes
   useEffect(() => {

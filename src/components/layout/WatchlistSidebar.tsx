@@ -5,10 +5,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useZerodhaWebSocket } from '../../hooks/useZerodhaWebSocket';
 
 interface WatchlistSidebarProps {
-  onBuyClick: (symbol: string, exchange: string, token: number) => void;
-  onSellClick: (symbol: string, exchange: string, token: number) => void;
-  onGTTClick: (symbol: string, exchange: string, token: number) => void;
-  onHMTGTTClick?: (symbol: string, exchange: string, token: number) => void;
+  onBuyClick: (symbol: string, exchange: string, token: number, lotSize?: number) => void;
+  onSellClick: (symbol: string, exchange: string, token: number, lotSize?: number) => void;
+  onGTTClick: (symbol: string, exchange: string, token: number, lotSize?: number) => void;
+  onHMTGTTClick?: (symbol: string, exchange: string, token: number, lotSize?: number) => void;
 }
 
 export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, onHMTGTTClick }: WatchlistSidebarProps) {
@@ -35,6 +35,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
       instrument_token: s.instrument_token,
       tradingsymbol: s.symbol,
       exchange: s.exchange,
+      lot_size: s.lot_size,
     }));
     if (sortAZ) {
       return [...items].sort((a: any, b: any) => a.tradingsymbol.localeCompare(b.tradingsymbol));
@@ -368,20 +369,20 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <button
-                          onClick={() => onBuyClick(item.tradingsymbol, item.exchange, item.instrument_token)}
+                          onClick={() => onBuyClick(item.tradingsymbol, item.exchange, item.instrument_token, item.lot_size)}
                           className="px-2.5 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-700 transition-colors"
                         >
                           B
                         </button>
                         <button
-                          onClick={() => onSellClick(item.tradingsymbol, item.exchange, item.instrument_token)}
+                          onClick={() => onSellClick(item.tradingsymbol, item.exchange, item.instrument_token, item.lot_size)}
                           className="px-2.5 py-1 bg-red-600 text-white text-xs font-semibold rounded hover:bg-red-700 transition-colors"
                         >
                           S
                         </button>
                         {onHMTGTTClick && (
                           <button
-                            onClick={() => onHMTGTTClick(item.tradingsymbol, item.exchange, item.instrument_token)}
+                            onClick={() => onHMTGTTClick(item.tradingsymbol, item.exchange, item.instrument_token, item.lot_size)}
                             className="px-2.5 py-1 bg-violet-600 text-white text-xs font-semibold rounded hover:bg-violet-700 transition-colors"
                             title="HMT GTT"
                           >
@@ -389,7 +390,7 @@ export default function WatchlistSidebar({ onBuyClick, onSellClick, onGTTClick, 
                           </button>
                         )}
                         <button
-                          onClick={() => onGTTClick(item.tradingsymbol, item.exchange, item.instrument_token)}
+                          onClick={() => onGTTClick(item.tradingsymbol, item.exchange, item.instrument_token, item.lot_size)}
                           className="px-2.5 py-1 bg-gray-600 text-white text-xs font-semibold rounded hover:bg-gray-700 transition-colors"
                           title="GTT"
                         >

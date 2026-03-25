@@ -72,40 +72,44 @@ function ProtectedLayout() {
     return <Navigate to="/auth" replace />;
   }
 
-  const handleBuyClick = (symbol: string, exchange: string, token: number) => {
+  const handleBuyClick = (symbol: string, exchange: string, token: number, lotSize?: number) => {
     setOrderDefaults({
       symbol,
       exchange,
       instrumentToken: token,
-      transactionType: 'BUY'
+      transactionType: 'BUY',
+      lotSize,
     });
     setShowOrderModal(true);
   };
 
-  const handleSellClick = (symbol: string, exchange: string, token: number) => {
+  const handleSellClick = (symbol: string, exchange: string, token: number, lotSize?: number) => {
     setOrderDefaults({
       symbol,
       exchange,
       instrumentToken: token,
-      transactionType: 'SELL'
+      transactionType: 'SELL',
+      lotSize,
     });
     setShowOrderModal(true);
   };
 
-  const handleGTTClick = (symbol: string, exchange: string, token: number) => {
+  const handleGTTClick = (symbol: string, exchange: string, token: number, lotSize?: number) => {
     setGttDefaults({
       symbol,
       exchange,
-      instrumentToken: token
+      instrumentToken: token,
+      lotSize,
     });
     setShowGTTModal(true);
   };
 
-  const handleHMTGTTClick = (symbol: string, exchange: string, token: number) => {
+  const handleHMTGTTClick = (symbol: string, exchange: string, token: number, lotSize?: number) => {
     setHmtGttDefaults({
       symbol,
       exchange,
-      instrumentToken: token
+      instrumentToken: token,
+      lotSize,
     });
     setShowHMTGTTModal(true);
   };
@@ -151,6 +155,7 @@ function ProtectedLayout() {
           initialSymbol={orderDefaults.symbol}
           initialExchange={orderDefaults.exchange}
           initialTransactionType={orderDefaults.transactionType}
+          initialLotSize={orderDefaults.lotSize}
         />
       )}
 
@@ -164,6 +169,7 @@ function ProtectedLayout() {
           brokerConnectionId={brokerId || 'all'}
           initialSymbol={gttDefaults.symbol}
           initialExchange={gttDefaults.exchange}
+          initialLotSize={gttDefaults.lotSize}
           allBrokers={brokers}
         />
       )}
@@ -178,6 +184,7 @@ function ProtectedLayout() {
           brokerConnectionId={brokerId || 'all'}
           initialSymbol={hmtGttDefaults.symbol}
           initialExchange={hmtGttDefaults.exchange}
+          initialLotSize={hmtGttDefaults.lotSize}
           allBrokers={brokers}
           isHMTMode={true}
         />
