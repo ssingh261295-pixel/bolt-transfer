@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Search, RefreshCw } from 'lucide-react';
+import { X, Search, RefreshCw, Plus, Minus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -1459,22 +1459,52 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
               {/* Quantity */}
               <div>
                 <label className="block text-xs text-gray-700 mb-1">Qty.</label>
-                <input
-                  type="number"
-                  value={quantity1}
-                  onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
-                  onBlur={(e) => {
-                    const val = parseInt(e.target.value) || 1;
-                    const lotSize = selectedInstrument?.lot_size ? parseInt(selectedInstrument.lot_size) : 1;
-                    if (lotSize > 1) {
-                      setQuantity1(Math.max(lotSize, Math.round(val / lotSize) * lotSize));
-                    }
-                  }}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  min={selectedInstrument?.lot_size || 1}
-                  step={selectedInstrument?.lot_size || 1}
-                  required
-                />
+                {selectedInstrument?.lot_size && parseInt(selectedInstrument.lot_size) > 1 ? (
+                  <div className="flex items-center border border-gray-300 rounded overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const lotSize = parseInt(selectedInstrument.lot_size);
+                        setQuantity1(prev => Math.max(lotSize, prev - lotSize));
+                      }}
+                      className="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-600 border-r border-gray-300 transition"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <input
+                      type="number"
+                      value={quantity1}
+                      onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
+                      onBlur={(e) => {
+                        const val = parseInt(e.target.value) || 1;
+                        const lotSize = parseInt(selectedInstrument.lot_size);
+                        setQuantity1(Math.max(lotSize, Math.round(val / lotSize) * lotSize));
+                      }}
+                      className="flex-1 px-2 py-1.5 text-sm text-center outline-none no-spinner"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const lotSize = parseInt(selectedInstrument.lot_size);
+                        setQuantity1(prev => prev + lotSize);
+                      }}
+                      className="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-600 border-l border-gray-300 transition"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="number"
+                    value={quantity1}
+                    onChange={(e) => setQuantity1(parseInt(e.target.value) || 1)}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    min="1"
+                    step="1"
+                    required
+                  />
+                )}
                 {selectedInstrument?.lot_size && parseInt(selectedInstrument.lot_size) > 1 && (
                   <p className="text-[10px] text-gray-500 mt-0.5">
                     {Math.round(quantity1 / parseInt(selectedInstrument.lot_size))} lot(s) × {selectedInstrument.lot_size}
@@ -1658,22 +1688,52 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                 {/* Quantity */}
                 <div>
                   <label className="block text-xs text-gray-700 mb-1">Qty.</label>
-                  <input
-                    type="number"
-                    value={quantity2}
-                    onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
-                    onBlur={(e) => {
-                      const val = parseInt(e.target.value) || 1;
-                      const lotSize = selectedInstrument?.lot_size ? parseInt(selectedInstrument.lot_size) : 1;
-                      if (lotSize > 1) {
-                        setQuantity2(Math.max(lotSize, Math.round(val / lotSize) * lotSize));
-                      }
-                    }}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    min={selectedInstrument?.lot_size || 1}
-                    step={selectedInstrument?.lot_size || 1}
-                    required
-                  />
+                  {selectedInstrument?.lot_size && parseInt(selectedInstrument.lot_size) > 1 ? (
+                    <div className="flex items-center border border-gray-300 rounded overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const lotSize = parseInt(selectedInstrument.lot_size);
+                          setQuantity2(prev => Math.max(lotSize, prev - lotSize));
+                        }}
+                        className="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-600 border-r border-gray-300 transition"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <input
+                        type="number"
+                        value={quantity2}
+                        onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
+                        onBlur={(e) => {
+                          const val = parseInt(e.target.value) || 1;
+                          const lotSize = parseInt(selectedInstrument.lot_size);
+                          setQuantity2(Math.max(lotSize, Math.round(val / lotSize) * lotSize));
+                        }}
+                        className="flex-1 px-2 py-1.5 text-sm text-center outline-none no-spinner"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const lotSize = parseInt(selectedInstrument.lot_size);
+                          setQuantity2(prev => prev + lotSize);
+                        }}
+                        className="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-600 border-l border-gray-300 transition"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      value={quantity2}
+                      onChange={(e) => setQuantity2(parseInt(e.target.value) || 1)}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      min="1"
+                      step="1"
+                      required
+                    />
+                  )}
                   {selectedInstrument?.lot_size && parseInt(selectedInstrument.lot_size) > 1 && (
                     <p className="text-[10px] text-gray-500 mt-0.5">
                       {Math.round(quantity2 / parseInt(selectedInstrument.lot_size))} lot(s) × {selectedInstrument.lot_size}
