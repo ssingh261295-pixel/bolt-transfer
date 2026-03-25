@@ -148,6 +148,22 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
 
           // Fetch LTP for the instrument (non-blocking)
           fetchLTP(instrumentToken, tradingsymbol, exchangeValue).catch(console.error);
+
+          // Look up lot_size from DB for this instrument
+          supabase
+            .from('nfo_instruments')
+            .select('lot_size, tick_size')
+            .eq('instrument_token', instrumentToken)
+            .maybeSingle()
+            .then(({ data }) => {
+              if (data) {
+                setSelectedInstrument((prev: any) => ({ ...prev, lot_size: data.lot_size, tick_size: data.tick_size }));
+                const instrumentTickSize = parseFloat(data.tick_size);
+                if (!isNaN(instrumentTickSize) && instrumentTickSize > 0) {
+                  setTickSize(instrumentTickSize);
+                }
+              }
+            });
         }
 
         if (isHMTMode) {
@@ -1452,6 +1468,11 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                   step={selectedInstrument?.lot_size || 1}
                   required
                 />
+                {selectedInstrument?.lot_size && parseInt(selectedInstrument.lot_size) > 1 && (
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    {Math.round(quantity1 / parseInt(selectedInstrument.lot_size))} lot(s) × {selectedInstrument.lot_size}
+                  </p>
+                )}
               </div>
 
               {/* Arrow */}
@@ -1639,6 +1660,11 @@ export function GTTModal({ isOpen, onClose, onSuccess, brokerConnectionId, editi
                     step={selectedInstrument?.lot_size || 1}
                     required
                   />
+                  {selectedInstrument?.lot_size && parseInt(selectedInstrument.lot_size) > 1 && (
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      {Math.round(quantity2 / parseInt(selectedInstrument.lot_size))} lot(s) × {selectedInstrument.lot_size}
+                    </p>
+                  )}
                 </div>
 
                 {/* Arrow */}

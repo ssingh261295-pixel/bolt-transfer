@@ -297,23 +297,23 @@ export function Watchlist() {
     }
   };
 
-  const handleBuyClick = (symbol: string, exchange: string, token: number) => {
-    setOrderDefaults({ symbol, exchange, instrumentToken: token, transactionType: 'BUY' });
+  const handleBuyClick = (symbol: string, exchange: string, token: number, lotSize?: number) => {
+    setOrderDefaults({ symbol, exchange, instrumentToken: token, transactionType: 'BUY', lotSize });
     setShowOrderModal(true);
   };
 
-  const handleSellClick = (symbol: string, exchange: string, token: number) => {
-    setOrderDefaults({ symbol, exchange, instrumentToken: token, transactionType: 'SELL' });
+  const handleSellClick = (symbol: string, exchange: string, token: number, lotSize?: number) => {
+    setOrderDefaults({ symbol, exchange, instrumentToken: token, transactionType: 'SELL', lotSize });
     setShowOrderModal(true);
   };
 
-  const handleGTTClick = (symbol: string, exchange: string, token: number) => {
-    setGttDefaults({ symbol, exchange, instrumentToken: token });
+  const handleGTTClick = (symbol: string, exchange: string, token: number, lotSize?: number) => {
+    setGttDefaults({ symbol, exchange, instrumentToken: token, lotSize });
     setShowGTTModal(true);
   };
 
-  const handleHMTGTTClick = (symbol: string, exchange: string, token: number) => {
-    setGttDefaults({ symbol, exchange, instrumentToken: token });
+  const handleHMTGTTClick = (symbol: string, exchange: string, token: number, lotSize?: number) => {
+    setGttDefaults({ symbol, exchange, instrumentToken: token, lotSize });
     setShowHMTGTTModal(true);
   };
 
@@ -508,28 +508,28 @@ export function Watchlist() {
                       {isHovered ? (
                         <div className="flex items-center gap-1 flex-shrink-0">
                           <button
-                            onClick={() => handleBuyClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
+                            onClick={() => handleBuyClick(symbol.symbol, symbol.exchange, symbol.instrument_token, symbol.lot_size)}
                             className="px-2 py-1 text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 rounded transition"
                             title="Buy"
                           >
                             B
                           </button>
                           <button
-                            onClick={() => handleSellClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
+                            onClick={() => handleSellClick(symbol.symbol, symbol.exchange, symbol.instrument_token, symbol.lot_size)}
                             className="px-2 py-1 text-xs font-semibold bg-red-100 text-red-700 hover:bg-red-200 rounded transition"
                             title="Sell"
                           >
                             S
                           </button>
                           <button
-                            onClick={() => handleHMTGTTClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
+                            onClick={() => handleHMTGTTClick(symbol.symbol, symbol.exchange, symbol.instrument_token, symbol.lot_size)}
                             className="px-2 py-1 text-xs font-semibold bg-violet-100 text-violet-700 hover:bg-violet-200 rounded transition"
                             title="HMT GTT"
                           >
                             H
                           </button>
                           <button
-                            onClick={() => handleGTTClick(symbol.symbol, symbol.exchange, symbol.instrument_token)}
+                            onClick={() => handleGTTClick(symbol.symbol, symbol.exchange, symbol.instrument_token, symbol.lot_size)}
                             className="px-2 py-1 text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 rounded transition"
                             title="GTT"
                           >
@@ -637,6 +637,7 @@ export function Watchlist() {
           initialSymbol={orderDefaults.symbol}
           initialExchange={orderDefaults.exchange}
           initialTransactionType={orderDefaults.transactionType}
+          initialLotSize={orderDefaults.lotSize}
         />
       )}
 
@@ -647,6 +648,7 @@ export function Watchlist() {
           brokerConnectionId={brokerId || 'all'}
           initialSymbol={gttDefaults.symbol}
           initialExchange={gttDefaults.exchange}
+          initialLotSize={gttDefaults.lotSize}
           allBrokers={brokers}
         />
       )}
@@ -658,6 +660,7 @@ export function Watchlist() {
           brokerConnectionId={brokerId || 'all'}
           initialSymbol={gttDefaults.symbol}
           initialExchange={gttDefaults.exchange}
+          initialLotSize={gttDefaults.lotSize}
           allBrokers={brokers}
           isHMTMode={true}
         />

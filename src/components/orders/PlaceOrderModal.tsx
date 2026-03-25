@@ -364,7 +364,7 @@ export function PlaceOrderModal({ isOpen, onClose, onSuccess, initialSymbol, ini
       setFormData({
         ...formData,
         symbol: '',
-        quantity: 1,
+        quantity: selectedInstrument?.lot_size ? parseInt(selectedInstrument.lot_size) : 1,
         price: '',
         trigger_price: '',
       });
