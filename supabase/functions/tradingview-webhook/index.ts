@@ -643,10 +643,12 @@ async function processWebhook(supabase: any, rawPayload: any, sourceIp: string) 
           }
         }
 
-        const { data: symbolSettings } = await supabase
+        const { data: symbolSettingsRows } = await supabase
           .from('nfo_symbol_settings').select('*').eq('user_id', keyData.user_id).eq('symbol', symbol)
-          .or(`broker_connection_id.eq.${account.id},broker_connection_id.is.null`)
-          .order('broker_connection_id', { ascending: false, nullsLast: true }).limit(1).maybeSingle();
+          .or(`broker_connection_id.eq.${account.id},broker_connection_id.is.null`);
+        const symbolSettings = symbolSettingsRows?.find((r: any) => r.broker_connection_id === account.id)
+          ?? symbolSettingsRows?.find((r: any) => r.broker_connection_id === null)
+          ?? null;
 
         const atrMultiplier = symbolSettings?.atr_multiplier ?? 1.5;
         const slMultiplier = symbolSettings?.sl_multiplier ?? (keyData.sl_multiplier || 1.0);
